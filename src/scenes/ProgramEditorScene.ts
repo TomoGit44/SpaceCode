@@ -112,11 +112,16 @@ export class ProgramEditorScene extends Phaser.Scene {
       })
       .setDepth(2);
     const hint = this.add
-      .text(this.cardLeft + 24, this.cardTop + 44, '編集中もゲームは進行します / REPEAT は階層表示でその場編集', {
-        fontFamily: FONT,
-        fontSize: '12px',
-        color: '#6b7da0',
-      })
+      .text(
+        this.cardLeft + 24,
+        this.cardTop + 44,
+        'ブロックを置いた順に実行 → 末尾まで来たら自動で先頭にループ。「繰り返し」は N 回だけ繰り返したい時に使用。',
+        {
+          fontFamily: FONT,
+          fontSize: '12px',
+          color: '#6b7da0',
+        }
+      )
       .setDepth(2);
     this.chrome.push(title, hint);
 

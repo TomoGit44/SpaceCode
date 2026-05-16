@@ -10,7 +10,7 @@ const BLOCK_LABEL: Record<BlockType, string> = {
   DEPOSIT: '納品',
   ATTACK_NEAREST: '攻撃',
   WAIT_UNTIL_FULL: '満タンまで待機',
-  REPEAT: '繰り返し',
+  REPEAT: '繰り返し (N 回)',
 };
 
 /** ボタンのアクセントカラー (種別ごと)。 */
@@ -45,6 +45,13 @@ export class BlockPalette {
     this.emitter = new Phaser.Events.EventEmitter();
 
     this.addText(x + width / 2, y, 'ブロック追加', '14px', COLORS.uiDim).setOrigin(0.5, 0);
+    this.addText(
+      x + width / 2,
+      y + 18,
+      '置いた順に上から実行 → 自動でループ',
+      '11px',
+      COLORS.uiDim
+    ).setOrigin(0.5, 0);
 
     const types: BlockType[] = [
       'MOVE_TO',
@@ -54,7 +61,7 @@ export class BlockPalette {
       'WAIT_UNTIL_FULL',
       'REPEAT',
     ];
-    let cy = y + 24;
+    let cy = y + 42;
     for (const t of types) {
       this.makeButton(x, cy, width, BLOCK_LABEL[t], BLOCK_COLOR[t], 32, () =>
         this.emitter.emit('addBlock', t)

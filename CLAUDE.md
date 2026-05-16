@@ -180,7 +180,8 @@ src/
 - **エネルギー**: 宇宙船のみ。移動中 2/s 消費 + 射撃 5/shot 消費。0 で停止 (stalled)。基地納品で全回復。
 - **Ship Program 永続化 (Phase 4)**: 編集のたびに `localStorage['spacecode.shipTemplate']` へ保存。新規 Ship 購入時に自動投入。リトライ時にも引き継ぎ。
 - **Wave 構成**: 1 Stage = 5 Phase。`config.ts` の `PHASES` を参照。
-- **ブロック (MVP 6 種)**: `MOVE_TO` / `MINE` / `DEPOSIT` / `ATTACK_NEAREST` / `WAIT_UNTIL_FULL` / `REPEAT`。REPEAT はネスト構造 (`{ times, children }`)、ATTACK_NEAREST は持続時間ブロック (`SHIP.attackDurationMs`)。
+- **ブロック (MVP 6 種)**: `MOVE_TO` / `MINE` / `DEPOSIT` / `ATTACK_NEAREST` / `WAIT_UNTIL_FULL` / `REPEAT`。REPEAT はネスト構造 (`{ times, children }`) で **特定の行動を N 回繰り返したい時に使う**、ATTACK_NEAREST は持続時間ブロック (`SHIP.attackDurationMs`)。
+- **自動ループ (Phase 5 後)**: Program は **置いただけで先頭 → 末尾 → 先頭 → … と無限にループ** する (Executor root frame が末尾でループバック)。プログラム全体を `REPEAT` で囲む必要はない。空 Program のみ idle。
 
 > ※「Phase」が二重に登場する: **Wave Phase** (敵編成の段階。1 Stage 中で進行) と **開発 Phase** (実装ロードマップ)。コード内では `Wave Phase` を指す。本ドキュメントでは「開発 Phase」と明示する。
 

@@ -27,6 +27,9 @@ export interface BlockExecContext {
  *   - root フレームは Program のブロック配列を参照
  *   - REPEAT に到達したら子ブロック配列を新フレームとして push、`remainingIterations = times`
  *   - 子末尾で remainingIterations を消費 (>1 ならカーソルを 0 に戻して継続、それ以外なら pop)
+ *   - **root 末尾は自動で先頭にループバック** (Phase 5 後の改善)。
+ *     プログラムを置いただけで上から下に無限ループする挙動が前提。
+ *     REPEAT は「特定の行動を N 回だけ繰り返したい」ときの専用ブロック。
  *
  * ブロックには「現在ブロックに留まっている時間 (elapsedMs)」と「入った最初の tick か (justEntered)」
  * を BlockExecContext で渡す。ATTACK_NEAREST のような持続時間ブロックがこれを使う。
@@ -69,9 +72,18 @@ export class Executor implements ShipBehavior {
           continue;
         }
         if (this.isRootFrame(top)) {
-          // root: 末尾停止。フレーム自体は残す (後から append されたブロックを拾うため)。
-          ship.stop();
-          return;
+          // root: 末尾まで実行したら **先頭に戻して無限ループ** する。
+          // 空 Program のみ停止 (無限ループ防止 + idle 表現)。
+          if (top.blocks.length === 0) {
+            ship.stop();
+            return;
+          }
+          top.cursor = 0;
+          this.program.reset();
+          this.blockElapsedMs = 0;
+          this.justEntered = true;
+          advances += 1;
+          continue;
         }
         this.stack.pop();
         this.blockElapsedMs = 0;

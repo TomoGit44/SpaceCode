@@ -73,10 +73,10 @@ export class ProgramList {
     this.height = height;
 
     this.header = scene.add
-      .text(x + width / 2, y, 'プログラム', {
+      .text(x + width / 2, y, 'プログラム (上から下へ → 末尾まで来たら自動で先頭へループ)', {
         fontFamily: FONT,
-        fontSize: '14px',
-        color: '#6b7da0',
+        fontSize: '13px',
+        color: '#8aa3c8',
       })
       .setOrigin(0.5, 0)
       .setDepth(3);
@@ -102,7 +102,7 @@ export class ProgramList {
 
     if (blocks.length === 0) {
       const t = this.scene.add
-        .text(this.x + this.width / 2, this.y + 60, '(ブロックがありません)', {
+        .text(this.x + this.width / 2, this.y + 60, '(ブロックがありません — 左から追加してください)', {
           fontFamily: FONT,
           fontSize: '14px',
           color: '#6b7da0',
@@ -113,14 +113,31 @@ export class ProgramList {
       return;
     }
 
+    // ─── 先頭マーカー: 「▼ ここから実行」 ─────────────────
+    const startY = this.y + 28;
+    const startMarker = this.scene.add
+      .text(this.x + this.width / 2, startY, '▼ ここから実行', {
+        fontFamily: FONT,
+        fontSize: '12px',
+        color: '#3ee0c5',
+        fontStyle: 'bold',
+      })
+      .setOrigin(0.5, 0)
+      .setDepth(3);
+    this.rowObjects.push(startMarker);
+
     const rows = this.expandRows(blocks, 0, [], null);
 
     // 各行を描画 + REPEAT スコープの top/bottom y を集計
     const scopeBounds = new Map<Row, { topY: number; bottomY: number }>();
+    // 先頭マーカー分のオフセット (16px) を加味
+    const rowsTopY = this.y + 48;
+    let lastRowBottomY = rowsTopY;
     rows.forEach((row, i) => {
-      const rowY = this.y + 28 + i * (ROW_HEIGHT + ROW_GAP);
-      if (rowY + ROW_HEIGHT > this.y + this.height) return; // 画面外省略
+      const rowY = rowsTopY + i * (ROW_HEIGHT + ROW_GAP);
+      if (rowY + ROW_HEIGHT > this.y + this.height - 24) return; // 末尾マーカー分の余白を確保
       this.makeRow(row, rowY, selectedPath, runningPath);
+      lastRowBottomY = rowY + ROW_HEIGHT;
 
       // この row が REPEAT なら、bounds を初期化 (topY だけ確定)
       if (row.block.type === 'REPEAT') {
@@ -140,6 +157,33 @@ export class ProgramList {
     for (const [repeatRow, bounds] of scopeBounds.entries()) {
       this.drawScopeBracket(repeatRow, bounds.topY, bounds.bottomY);
     }
+
+    // ─── 末尾マーカー: 「↻ 先頭に戻る」 ──────────────────
+    const endY = lastRowBottomY + 6;
+    const endMarker = this.scene.add
+      .text(this.x + this.width / 2, endY, '↻ 末尾まで来たら先頭に戻る (自動ループ)', {
+        fontFamily: FONT,
+        fontSize: '12px',
+        color: '#8aa3c8',
+        fontStyle: 'italic',
+      })
+      .setOrigin(0.5, 0)
+      .setDepth(3);
+    this.rowObjects.push(endMarker);
+
+    // ループを示す右側の細い縦線 + 弧 (末尾 → 先頭)
+    const g = this.bracketGfx;
+    g.lineStyle(1.5, COLORS.accent, 0.45);
+    const loopX = this.x + this.width - 10;
+    const topY2 = this.y + 44;
+    const bottomY2 = endY + 18;
+    g.beginPath();
+    g.moveTo(loopX, bottomY2);
+    g.lineTo(loopX, topY2);
+    g.strokePath();
+    // 上端の矢印 (▲)
+    g.fillStyle(COLORS.accent, 0.55);
+    g.fillTriangle(loopX - 4, topY2 + 6, loopX + 4, topY2 + 6, loopX, topY2);
   }
 
   /** ブロック列を再帰展開して Row[] にする。 */

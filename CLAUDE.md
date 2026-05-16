@@ -57,6 +57,58 @@ npm run preview      # ビルド後のプレビュー
 
 **作業ルーチン**: 変更後は最低限 `npm run typecheck` を通す。各 Phase 完了時は `npm run build` も通す。
 
+---
+
+## git ワークフロー (必読)
+
+リポジトリ: [`https://github.com/TomoGit44/SpaceCode`](https://github.com/TomoGit44/SpaceCode) / ブランチ: `main` / リモート: `origin`
+
+### コミット・プッシュのタイミング
+
+**1 つの作業単位が完了するごとに必ず commit + push する**。具体的には:
+
+- ユーザーから依頼された 1 つの指示 (例: 「Phase X に進んで」「このバグを直して」「ドキュメントを更新して」) を完了したら 1 コミット
+- 大きな Phase は Step 単位 (Step 1 完了 / Step 2 完了 …) でも構わない。**「動作確認できる粒度」** で区切る
+- typecheck / build を通してからコミット (壊れた状態を push しない)
+- コミット後は **必ず push** する (ローカルにコミットを溜めない。引き継ぎ時に消える)
+
+### コミットメッセージのスタイル
+
+- 1 行目: 何を変えたか (動詞 + 対象、50 字以内目安、日本語可)
+  - 良い例: `Phase 4 完了: 射撃エネルギー消費 + 敵 3 種 + Program 永続化 + 惑星リスポーン`
+  - 良い例: `編集後の Ship idle を自動検知して reset するよう修正`
+  - 悪い例: `更新`、`修正`
+- 2 行目: 空行
+- 3 行目以降: 必要なら「なぜ」を補足 (1〜3 文)
+- 末尾に Co-Authored-By を付ける:
+  ```
+  Co-Authored-By: Claude <noreply@anthropic.com>
+  ```
+
+### コマンド (Bash ツールで実行)
+
+```bash
+git add <変更したファイル>          # git add . は避ける (誤って秘匿ファイルを含めないため)
+git status                          # 含めるべきファイルを確認
+git commit -m "$(cat <<'EOF'
+コミットメッセージ 1 行目
+
+(必要なら) なぜこの変更が必要かの補足
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+EOF
+)"
+git push                            # 直後に必ず push
+```
+
+### やってはいけないこと
+
+- `git add .` / `git add -A` で全部添加 (秘匿ファイル混入リスク)
+- `git push --force` を main に対して
+- `--no-verify` / `--no-gpg-sign` 等のフック・署名スキップ (ユーザーが明示的に頼んだ場合のみ可)
+- commit を作らず変更を放置 (ローカル消失リスク)
+- pre-commit hook 失敗時の `--amend` (旧コミットを壊す。代わりに **新コミット** を作る)
+
 ### Preview MCP
 
 `.claude/launch.json` に dev サーバ定義済。`preview_start name='dev'` で起動できる。ただし **スクリーンショットは WebGL コンテキストでハングしがち** なので、起動確認は `preview_console_logs` (level: 'error') でランタイムエラーが無いことを見るのが安全。

@@ -136,10 +136,13 @@ export const ECONOMY = {
   phaseClearBonus: 30,     // Phase クリアボーナス
 } as const;
 
-/** フェーズ進行 (Phase 4 バランス調整) */
+/**
+ * フェーズ進行。
+ * Phase 5 後: 準備時間は「プレイヤーが開始ボタンを押すまでの手動待機」に変更。
+ *             intermissionMs は廃止 (時間制ではない)。
+ */
 export const STAGE = {
   totalPhases: 5,
-  intermissionMs: 7000,    // Phase 4: 6000 → 7000 (敵編成が複雑化するため準備時間を伸ばす)
 } as const;
 
 /**

@@ -87,7 +87,7 @@ export class GameScene extends Phaser.Scene {
     this.hud.setHp(this.base.hp);
     this.hud.setCredits(this.economy.credits);
     this.hud.setPhase(0, this.waves.getTotalPhases());
-    this.hud.setStatus('開戦準備中…');
+    this.hud.setStatus('準備時間');
 
     // ShopPanel (Phase D Step 4)
     this.shop = new ShopPanel(this, this.economy);
@@ -103,6 +103,7 @@ export class GameScene extends Phaser.Scene {
       this.hud.setPhase(n, this.waves.getTotalPhases());
       this.hud.setStatus('敵が接近中');
       this.hud.showBanner(`PHASE ${n}`);
+      this.hud.hideStartButton();
     });
 
     this.waves.on('phaseClear', (n) => {
@@ -112,18 +113,34 @@ export class GameScene extends Phaser.Scene {
       this.cameras.main.flash(220, 62, 224, 197, true);
     });
 
-    this.waves.on('state', (state, info) => {
-      if (state === 'intermission' && info.remainingMs !== undefined) {
-        // 状態テキストは update 側で常時更新するので、ここではプレースホルダ
+    // 準備時間 (preparing) に入ったら開始ボタンを出す。
+    this.waves.on('state', (state) => {
+      if (state === 'preparing') {
+        this.showStartButtonForCurrentPhase();
+      } else {
+        this.hud.hideStartButton();
       }
     });
 
     this.waves.on('victory', () => this.endGame('VictoryScene'));
 
+    // 初回 Phase 1 も準備時間からスタートするので、初期表示でボタンを出す。
+    this.showStartButtonForCurrentPhase();
+
     this.input.keyboard?.on('keydown-ESC', () => {
       if (this.terminating) return;
       if (this.editorOpen) return; // ESC は ProgramEditorScene 側が拾う
       this.transitionTo('MenuScene');
+    });
+
+    // SPACE / ENTER で開始ボタンを押す (準備時間中のみ HUD が受け付ける)
+    this.input.keyboard?.on('keydown-SPACE', () => {
+      if (this.terminating || this.editorOpen) return;
+      this.hud.triggerStartButton();
+    });
+    this.input.keyboard?.on('keydown-ENTER', () => {
+      if (this.terminating || this.editorOpen) return;
+      this.hud.triggerStartButton();
     });
 
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
@@ -135,6 +152,22 @@ export class GameScene extends Phaser.Scene {
       if (p.y >= GAME_HEIGHT - 60) return; // ShopPanel 帯
       const ship = this.findShipAt(p.worldX, p.worldY);
       if (ship) this.openProgramEditor(ship);
+    });
+  }
+
+  /**
+   * 準備時間中の開始ボタンを HUD に出す。
+   * waves.startNextPhase() を呼んで spawning に遷移する。
+   */
+  private showStartButtonForCurrentPhase(): void {
+    if (this.terminating) return;
+    if (!this.waves.isAwaitingStart()) return;
+    const upcoming = this.waves.getUpcomingPhaseNumber();
+    const total = this.waves.getTotalPhases();
+    this.hud.showStartButton(upcoming, total, () => {
+      if (this.terminating) return;
+      if (this.editorOpen) return; // 編集中は弾く (ボタン自体は editor バックドロップで隠れる)
+      this.waves.startNextPhase();
     });
   }
 
@@ -263,9 +296,11 @@ export class GameScene extends Phaser.Scene {
   private updateStatusText(): void {
     const state = this.waves.getState();
     switch (state) {
-      case 'preparing':
-        this.hud.setStatus(`開戦まで ${Math.ceil(this.waves.getRemainingMs() / 1000)}s`);
+      case 'preparing': {
+        const upcoming = this.waves.getUpcomingPhaseNumber();
+        this.hud.setStatus(`準備時間 — PHASE ${upcoming} 開始待ち`);
         break;
+      }
       case 'spawning': {
         const remaining = this.waves.getPhaseRemaining(
           this.enemies.filter((e) => !e.dead).length
@@ -275,11 +310,6 @@ export class GameScene extends Phaser.Scene {
       }
       case 'clearing':
         this.hud.setStatus(`残敵掃討中…`);
-        break;
-      case 'intermission':
-        this.hud.setStatus(
-          `次フェーズまで ${Math.ceil(this.waves.getRemainingMs() / 1000)}s`
-        );
         break;
       case 'victory':
         this.hud.setStatus('全フェーズ達成');

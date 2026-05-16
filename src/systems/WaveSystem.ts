@@ -1,13 +1,12 @@
 import Phaser from 'phaser';
-import { PHASES, STAGE, type EnemySpec } from '../config';
+import { PHASES, type EnemySpec } from '../config';
 import { Enemy } from '../entities/Enemy';
 import { SpawnSystem } from './SpawnSystem';
 
 export type WaveState =
-  | 'preparing'       // 開始直前 (intermission を経て spawning へ)
+  | 'preparing'       // 次 Phase 開始待ち (プレイヤーが startNextPhase() を呼ぶまで待機)
   | 'spawning'        // 当該 Phase の敵を出現中
   | 'clearing'        // 全敵出現済 / 残敵を片付け中
-  | 'intermission'    // 次 Phase 準備中
   | 'victory';        // 全 Phase クリア
 
 export type WaveEvents = {
@@ -18,7 +17,7 @@ export type WaveEvents = {
   /** 全 Phase クリア */
   victory: () => void;
   /** 状態遷移 (HUD用) */
-  state: (state: WaveState, info: { remainingMs?: number }) => void;
+  state: (state: WaveState) => void;
 };
 
 /**
@@ -43,7 +42,6 @@ export class WaveSystem {
   private state: WaveState = 'preparing';
   private phaseIndex: number = 0;          // 0-based 内部
   private runners: SpecRunner[] = [];      // Phase 4: 並行スポーンタイマー群
-  private intermissionTimerMs: number = 1500; // 開始前ディレイ
 
   constructor(spawner: SpawnSystem) {
     this.spawner = spawner;
@@ -62,12 +60,28 @@ export class WaveSystem {
     return this.phaseIndex + 1; // 表示用 1-based
   }
 
+  /** preparing 中、次に始まる Phase 番号 (1-based)。 */
+  public getUpcomingPhaseNumber(): number {
+    return this.phaseIndex + 1;
+  }
+
   public getTotalPhases(): number {
     return PHASES.length;
   }
 
-  public getRemainingMs(): number {
-    return Math.max(0, this.intermissionTimerMs);
+  /** 次 Phase 開始ボタン待ち状態か (UI からの表示判定用)。 */
+  public isAwaitingStart(): boolean {
+    return this.state === 'preparing';
+  }
+
+  /**
+   * 「開始」ボタン / キーから呼ばれる。preparing 状態のときのみ受け付け、
+   * spawning に遷移する。それ以外の状態では何もしない (false 返す)。
+   */
+  public startNextPhase(): boolean {
+    if (this.state !== 'preparing') return false;
+    this.startPhase();
+    return true;
   }
 
   /** Phase の進捗 (残スポーン合計 + 生存敵) */
@@ -79,18 +93,13 @@ export class WaveSystem {
   /**
    * 毎フレーム呼ぶ。enemies はシーン側で管理している配列を渡す。
    * 新規スポーン時はここから push する。
+   *
+   * preparing 中はタイマー進行せず、startNextPhase() の呼び出しを待つ。
    */
   public update(delta: number, enemies: Enemy[]): void {
     switch (this.state) {
       case 'preparing':
-      case 'intermission':
-        this.intermissionTimerMs -= delta;
-        this.emitter.emit('state', this.state, {
-          remainingMs: this.intermissionTimerMs,
-        });
-        if (this.intermissionTimerMs <= 0) {
-          this.startPhase();
-        }
+        // ユーザーの startNextPhase() を待つ。タイマー無し。
         break;
 
       case 'spawning': {
@@ -107,7 +116,7 @@ export class WaveSystem {
         }
         if (!anyPending) {
           this.state = 'clearing';
-          this.emitter.emit('state', this.state, {});
+          this.emitter.emit('state', this.state);
         }
         break;
       }
@@ -124,6 +133,7 @@ export class WaveSystem {
         // 何もしない
         break;
     }
+    void delta;
   }
 
   private startPhase(): void {
@@ -136,7 +146,7 @@ export class WaveSystem {
     }));
     this.state = 'spawning';
     this.emitter.emit('phaseStart', this.phaseIndex + 1);
-    this.emitter.emit('state', this.state, {});
+    this.emitter.emit('state', this.state);
   }
 
   private completePhase(): void {
@@ -144,15 +154,13 @@ export class WaveSystem {
     this.phaseIndex += 1;
     if (this.phaseIndex >= PHASES.length) {
       this.state = 'victory';
-      this.emitter.emit('state', this.state, {});
+      this.emitter.emit('state', this.state);
       this.emitter.emit('victory');
       return;
     }
-    this.intermissionTimerMs = STAGE.intermissionMs;
-    this.state = 'intermission';
-    this.emitter.emit('state', this.state, {
-      remainingMs: this.intermissionTimerMs,
-    });
+    // 次 Phase 準備中。プレイヤーが startNextPhase() を呼ぶまで待機。
+    this.state = 'preparing';
+    this.emitter.emit('state', this.state);
   }
 
   public destroy(): void {

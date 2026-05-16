@@ -315,6 +315,41 @@ Phase 5 完了直後にユーザーから UI 仕様変更の指示:
 
 ---
 
+## 補追改修: 準備時間を「手動開始」制に変更 (2026-05-17)
+
+### 経緯
+ユーザー要望: 「フェーズ開始前に準備時間を作る。準備時間中は宇宙船の購入やプログラム編集ができる」。
+従来は `STAGE.intermissionMs` (7s) のタイマーカウントダウン + 最初の `preparing` (1.5s) で自動進行していたが、ブロックを組む時間としては短く、プレイヤー側に主導権が無かった。
+
+### 確定済み設計判断 (ユーザー確認 2026-05-17)
+- 終了タイミング: **「開始」ボタンで手動開始** (タイマー無し)
+- 最初の Phase 1 開始前にも準備時間を入れる
+- 前 Phase クリア後に準備時間に入る (現状の流れ通り、敵スポーン中は準備時間にしない)
+
+### 成果物
+- `src/systems/WaveSystem.ts` — `intermission` 状態を削除し `preparing` に統合。`intermissionTimerMs` を撤去。新規 API: `startNextPhase()` (preparing → spawning 遷移) / `isAwaitingStart()` / `getUpcomingPhaseNumber()`。`update()` の `preparing` 分岐はタイマー無しで開始待ち
+- `src/ui/HUD.ts` — 開始ボタン (中央下、ShopPanel 上) を追加。`showStartButton(phaseNumber, totalPhases, onClick)` / `hideStartButton()` / `triggerStartButton()`。注意を引くスケールパルス (`Sine.easeInOut`, yoyo, -1 repeat)。下にヒント「宇宙船を購入・船をクリックしてプログラム編集ができます」
+- `src/scenes/GameScene.ts` — `waves.on('state')` で `preparing` 時にボタン表示 / それ以外で hide。初期表示でも (Phase 1 開始前) ボタン提示。SPACE / ENTER でボタン押下と同等動作。`updateStatusText` の `preparing` 分岐を「準備時間 — PHASE X 開始待ち」に変更、`intermission` 分岐を削除
+- `src/config.ts` — `STAGE.intermissionMs` を削除 (`STAGE.totalPhases` のみ残置)
+
+### 設計判断
+- **`intermission` を撤廃して `preparing` に統合**: 「Phase 開始前の待機」という意味で本質的に同一だったため。状態数が減り `updateStatusText` も単純化
+- **編集オーバーレイ中はボタン無効**: 編集中に SPACE で誤って開始しないよう、`editorOpen` ガード。ProgramEditorScene のフルスクリーンバックドロップで pointer も拾えない
+- **ボタン位置**: ShopPanel と重ねず上に配置 (Y = GAME_HEIGHT - 60 - 28 - 24)。準備時間中だけ表示することで通常プレイ時のクラッタを増やさない
+- **「PHASE 1 開始」と「次の PHASE N 開始」のラベル分岐**: 初回は新規開始の高揚感を出し、2 周目以降は連続性を示す文言にした
+
+### 検証
+- `npm run typecheck`: PASS
+- `npm run build`: PASS (gzip 355→ほぼ変化なし)
+- `preview_console_logs level='error'`: エラーなし
+- 実プレイ確認はユーザーに依頼 (WebGL ページは preview ヘッドレスで操作テスト困難)
+
+### 既知の制限
+- 準備時間に「最大時間」が無いため、放置すると永久に Phase が始まらない。MVP のシングルプレイでは問題なし
+- 開始ボタンと SPACE 同時押しでも 2 重発火しない (`startNextPhase()` 内で state チェック)
+
+---
+
 ## バランス調整メモ (実プレイ後に追記する場所)
 
 > 各 Phase の体感難易度・経済感をプレイ後にここに残す。`config.ts` の数値を触る前に参照。
@@ -334,7 +369,7 @@ Phase 5 完了直後にユーザーから UI 仕様変更の指示:
 | `SHIP.energyPerShot` | 5 | 20 発 / energy フル |
 | `SHIP.attackDurationMs` | 500 | Phase 3 600 から短縮 (DPS 微増) |
 | `ECONOMY.startCredits` | 120 | $70 Ship + $50 タワー が即購入可能 |
-| `STAGE.intermissionMs` | 7000 | 編成準備時間を +1s |
+| `STAGE.intermissionMs` | 削除 (2026-05-17) | Phase 5 後の補追改修で「手動開始」制に変更 |
 | `PLANET.respawnMs` | 60000 | 60s |
 | ENEMY_TYPES.fast | HP 12 / 速度 95 / ダメ 8 / $7 | Phase 3 から登場 |
 | ENEMY_TYPES.tank | HP 55 / 速度 38 / ダメ 15 / $14 | Phase 5 のみ |

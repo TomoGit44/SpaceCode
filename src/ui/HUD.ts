@@ -1,5 +1,9 @@
 import Phaser from 'phaser';
-import { GAME_WIDTH, COLORS } from '../config';
+import { GAME_WIDTH, GAME_HEIGHT, COLORS } from '../config';
+
+const START_BUTTON_WIDTH = 280;
+const START_BUTTON_HEIGHT = 56;
+const SHOP_PANEL_HEIGHT = 60; // ShopPanel と一致 (HUD はその上に乗る)
 
 /**
  * 画面上部の HUD。基地 HP / 所持クレジット / Phase 進行 / 状態テキストを表示。
@@ -23,6 +27,14 @@ export class HUD {
   private statusText: Phaser.GameObjects.Text;
   private bannerText: Phaser.GameObjects.Text;
   private bannerTween?: Phaser.Tweens.Tween;
+
+  // 準備時間中の「開始」ボタン (Phase 5 後)
+  private startBtnBg: Phaser.GameObjects.Rectangle;
+  private startBtnLabel: Phaser.GameObjects.Text;
+  private startBtnHint: Phaser.GameObjects.Text;
+  private startBtnEnabled: boolean = false;
+  private startBtnHandler?: () => void;
+  private startBtnPulse?: Phaser.Tweens.Tween;
 
   constructor(scene: Phaser.Scene, hpMax: number) {
     this.scene = scene;
@@ -101,7 +113,44 @@ export class HUD {
       .setOrigin(0.5)
       .setAlpha(0);
 
-    void COLORS;
+    // 開始ボタン (Phase 5 後): ShopPanel の上に配置。準備時間中のみ表示。
+    const btnY = GAME_HEIGHT - SHOP_PANEL_HEIGHT - START_BUTTON_HEIGHT / 2 - 24;
+    this.startBtnBg = scene.add
+      .rectangle(cx, btnY, START_BUTTON_WIDTH, START_BUTTON_HEIGHT, COLORS.panelBg, 0.95)
+      .setStrokeStyle(2, COLORS.accent, 1)
+      .setDepth(20)
+      .setVisible(false);
+    this.startBtnLabel = scene.add
+      .text(cx, btnY, '', {
+        fontFamily: 'system-ui, "Segoe UI", sans-serif',
+        fontSize: '20px',
+        color: '#cfd6e6',
+        fontStyle: 'bold',
+      })
+      .setOrigin(0.5)
+      .setDepth(21)
+      .setVisible(false);
+    this.startBtnHint = scene.add
+      .text(cx, btnY + START_BUTTON_HEIGHT / 2 + 8, '宇宙船を購入・船をクリックしてプログラム編集ができます', {
+        fontFamily: 'system-ui, "Segoe UI", sans-serif',
+        fontSize: '12px',
+        color: '#6b7da0',
+      })
+      .setOrigin(0.5, 0)
+      .setDepth(21)
+      .setVisible(false);
+
+    this.startBtnBg.on('pointerover', () => {
+      if (this.startBtnEnabled) this.startBtnBg.setFillStyle(COLORS.panelHover, 0.95);
+    });
+    this.startBtnBg.on('pointerout', () => {
+      if (this.startBtnEnabled) this.startBtnBg.setFillStyle(COLORS.panelBg, 0.95);
+    });
+    this.startBtnBg.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      if (!this.startBtnEnabled) return;
+      if (pointer.rightButtonDown()) return;
+      this.startBtnHandler?.();
+    });
   }
 
   public setHp(hp: number): void {
@@ -150,6 +199,63 @@ export class HUD {
 
   public setStatus(text: string): void {
     this.statusText.setText(text);
+  }
+
+  /**
+   * 準備時間中の「開始」ボタンを表示する。
+   * onClick はクリック or キー入力 (GameScene 側) から呼ばれる handler を統一するため、
+   * GameScene が SPACE/ENTER をハンドルしたいときは getStartHandler() で取得して使う。
+   */
+  public showStartButton(phaseNumber: number, totalPhases: number, onClick: () => void): void {
+    this.startBtnHandler = onClick;
+    this.startBtnEnabled = true;
+    const isFirst = phaseNumber === 1;
+    const label = isFirst
+      ? `▶ PHASE ${phaseNumber} / ${totalPhases} 開始`
+      : `▶ 次の PHASE ${phaseNumber} / ${totalPhases} を開始`;
+    this.startBtnLabel.setText(label);
+    this.startBtnBg.setFillStyle(COLORS.panelBg, 0.95);
+    this.startBtnBg.setStrokeStyle(2, COLORS.accent, 1);
+    this.startBtnBg.setInteractive({ useHandCursor: true });
+    this.startBtnBg.setVisible(true);
+    this.startBtnLabel.setVisible(true);
+    this.startBtnHint.setVisible(true);
+
+    // 注意を引くパルス
+    this.stopStartButtonPulse();
+    this.startBtnPulse = this.scene.tweens.add({
+      targets: this.startBtnBg,
+      scaleX: { from: 1.0, to: 1.04 },
+      scaleY: { from: 1.0, to: 1.04 },
+      duration: 720,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
+  }
+
+  public hideStartButton(): void {
+    this.startBtnEnabled = false;
+    this.startBtnHandler = undefined;
+    this.startBtnBg.disableInteractive();
+    this.startBtnBg.setVisible(false);
+    this.startBtnLabel.setVisible(false);
+    this.startBtnHint.setVisible(false);
+    this.stopStartButtonPulse();
+    this.startBtnBg.setScale(1, 1);
+  }
+
+  /** SPACE/ENTER 等のキー入力から押下と同じ動作をさせるための API。 */
+  public triggerStartButton(): void {
+    if (!this.startBtnEnabled) return;
+    this.startBtnHandler?.();
+  }
+
+  private stopStartButtonPulse(): void {
+    if (this.startBtnPulse) {
+      this.startBtnPulse.stop();
+      this.startBtnPulse = undefined;
+    }
   }
 
   /** 中央に大きく一瞬表示 (Phase 開始/クリア時など)。Phase 5 でイージング強化。 */

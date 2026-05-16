@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell($PSVersionTable.PSVersion; node --version; npm --version; \\(Get-Command pnpm -ErrorAction SilentlyContinue\\) | Select-Object -ExpandProperty Source)",
+      "Bash(npm run *)",
+      "mcp__Claude_Preview__preview_start"
+    ]
+  }
+}

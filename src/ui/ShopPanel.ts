@@ -1,8 +1,8 @@
 import Phaser from 'phaser';
-import { GAME_WIDTH, GAME_HEIGHT, COLORS, SHIP, TOWER } from '../config';
+import { GAME_WIDTH, GAME_HEIGHT, COLORS, SHIP } from '../config';
 import type { EconomySystem } from '../systems/EconomySystem';
 
-export type ShopAction = 'buyShip' | 'placeTower';
+export type ShopAction = 'buyShip';
 
 export interface ShopPanelEvents {
   request: (action: ShopAction) => void;
@@ -47,7 +47,6 @@ export class ShopPanel {
     // ボタン作成
     const items: Array<{ action: ShopAction; cost: number; label: string }> = [
       { action: 'buyShip', cost: SHIP.cost, label: `宇宙船  $${SHIP.cost}` },
-      { action: 'placeTower', cost: TOWER.cost, label: `タワー  $${TOWER.cost}` },
     ];
     const totalWidth = items.length * BUTTON_WIDTH + (items.length - 1) * BUTTON_GAP;
     const startX = GAME_WIDTH / 2 - totalWidth / 2 + BUTTON_WIDTH / 2;

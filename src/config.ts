@@ -47,13 +47,15 @@ export const BASE = {
   ringRadius: 36,
 } as const;
 
-/** タワー */
-export const TOWER = {
-  range: 200,
-  damagePerShot: 10,
-  fireIntervalMs: 1000, // 1 shot/sec → 10 DPS
-  cost: 50,
-  bulletSpeed: 420, // px/s
+/**
+ * 基地砲塔 (Phase 5 後): タワーを廃止し、基地自体が固定砲塔として機能する。
+ * 射程は基地中心から計算し、範囲リングは常時可視化される。
+ */
+export const BASE_TURRET = {
+  range: 260,           // タワー単独 (200) より広く: 唯一の自動防衛になるため
+  damagePerShot: 12,    // タワー (10) より少し強い
+  fireIntervalMs: 800,  // 1.25 shot/sec → 15 DPS
+  bulletSpeed: 420,
 } as const;
 
 /** 宇宙船 (Phase 4 バランス調整) */

@@ -1,8 +1,7 @@
 import Phaser from 'phaser';
-import { GAME_WIDTH, GAME_HEIGHT, ECONOMY, PLANETS, SHIP, TOWER, BASE } from '../config';
+import { GAME_WIDTH, GAME_HEIGHT, ECONOMY, PLANETS, SHIP } from '../config';
 import { drawStarfield } from '../utils/starfield';
 import { Base } from '../entities/Base';
-import { Tower } from '../entities/Tower';
 import { Enemy } from '../entities/Enemy';
 import { Bullet } from '../entities/Bullet';
 import { Planet } from '../entities/Planet';
@@ -27,7 +26,6 @@ import { ShopPanel, type ShopAction } from '../ui/ShopPanel';
  */
 export class GameScene extends Phaser.Scene {
   private base!: Base;
-  private towers: Tower[] = [];
   private enemies: Enemy[] = [];
   private bullets: Bullet[] = [];
   private planets: Planet[] = [];
@@ -41,10 +39,6 @@ export class GameScene extends Phaser.Scene {
 
   private terminating: boolean = false; // GameOver / Victory 遷移中
 
-  // タワー設置モード (Phase D Step 4)
-  private placingTower: boolean = false;
-  private placeGhost?: Phaser.GameObjects.Graphics;
-
   // ブロック編集オーバーレイ展開中フラグ (Phase 2)
   private editorOpen: boolean = false;
 
@@ -56,7 +50,6 @@ export class GameScene extends Phaser.Scene {
     this.cameras.main.fadeIn(280, 5, 7, 13);
 
     // 状態リセット (Phaser はインスタンスを再利用するため明示リセット)
-    this.towers = [];
     this.enemies = [];
     this.bullets = [];
     this.planets = [];
@@ -67,14 +60,10 @@ export class GameScene extends Phaser.Scene {
     // 背景
     drawStarfield(this, GAME_WIDTH, GAME_HEIGHT);
 
-    // 基地
+    // 基地 (Phase 5 後: 砲塔機能内蔵 / 射程リング常時表示)
     const cx = GAME_WIDTH / 2;
     const cy = GAME_HEIGHT / 2;
     this.base = new Base(this, cx, cy);
-
-    // タワー × 2 (Phase B と同じ固定配置)
-    this.towers.push(new Tower(this, cx - 150, cy));
-    this.towers.push(new Tower(this, cx + 150, cy));
 
     // 惑星 (Phase D Step 1: 固定 2 個)
     for (const p of PLANETS) {
@@ -134,37 +123,14 @@ export class GameScene extends Phaser.Scene {
     this.input.keyboard?.on('keydown-ESC', () => {
       if (this.terminating) return;
       if (this.editorOpen) return; // ESC は ProgramEditorScene 側が拾う
-      if (this.placingTower) {
-        this.cancelPlacement();
-        return;
-      }
       this.transitionTo('MenuScene');
     });
 
-    // タワー設置モードのマウス処理 (Phase D Step 4)
-    this.placeGhost = this.add.graphics();
-    this.placeGhost.setDepth(9);
-    this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
-      if (this.editorOpen) return;
-      if (!this.placingTower) return;
-      this.drawPlaceGhost(p.worldX, p.worldY);
-    });
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
       if (this.terminating) return;
       if (this.editorOpen) return; // バックドロップが届けても scene-level は止まらないので明示ガード
 
-      if (this.placingTower) {
-        if (p.rightButtonDown()) {
-          this.cancelPlacement();
-          return;
-        }
-        // ShopPanel 領域 (下端) は除外: ボタン押下と衝突しないようにする
-        if (p.y >= GAME_HEIGHT - 60) return;
-        this.tryPlaceTower(p.worldX, p.worldY);
-        return;
-      }
-
-      // 通常モード: Ship クリックでプログラム編集を開く
+      // Ship クリックでプログラム編集を開く
       if (p.rightButtonDown()) return;
       if (p.y >= GAME_HEIGHT - 60) return; // ShopPanel 帯
       const ship = this.findShipAt(p.worldX, p.worldY);
@@ -177,14 +143,6 @@ export class GameScene extends Phaser.Scene {
     switch (action) {
       case 'buyShip':
         this.tryBuyShip();
-        break;
-      case 'placeTower':
-        if (this.economy.credits < TOWER.cost) {
-          this.hud.showBanner('クレジット不足', 700);
-          return;
-        }
-        this.placingTower = true;
-        this.shop.showHint('クリックで設置 / 右クリックでキャンセル');
         break;
     }
   }
@@ -211,12 +169,6 @@ export class GameScene extends Phaser.Scene {
     this.hud.showBanner(msg, 1100);
   }
 
-  private cancelPlacement(): void {
-    this.placingTower = false;
-    this.placeGhost?.clear();
-    this.shop.showHint(null);
-  }
-
   /** ワールド座標 (x,y) にいる生存中の Ship を返す (なければ null)。SHIP.radius+4px の円判定。 */
   private findShipAt(x: number, y: number): Ship | null {
     for (const s of this.ships) {
@@ -240,59 +192,11 @@ export class GameScene extends Phaser.Scene {
     this.scene.bringToTop('ProgramEditorScene');
   }
 
-  /** 配置可否を判定。OK なら null、NG なら理由文字列。 */
-  private placementBlocker(x: number, y: number): string | null {
-    if (x < 20 || x > GAME_WIDTH - 20) return '画面外';
-    if (y < 60 || y > GAME_HEIGHT - 70) return '画面外';
-    if (Math.hypot(x - this.base.x, y - this.base.y) < BASE.radius + 30) {
-      return '基地に近すぎ';
-    }
-    for (const p of this.planets) {
-      if (Math.hypot(x - p.x, y - p.y) < p.radius + 30) return '惑星に近すぎ';
-    }
-    for (const t of this.towers) {
-      if (Math.hypot(x - t.x, y - t.y) < 24) return 'タワーが重複';
-    }
-    return null;
-  }
-
-  private drawPlaceGhost(x: number, y: number): void {
-    if (!this.placeGhost) return;
-    const g = this.placeGhost;
-    g.clear();
-    const blocker = this.placementBlocker(x, y);
-    const ok = blocker === null;
-    const color = ok ? 0x4ea1ff : 0xff4d5a;
-    // 射程リング
-    g.lineStyle(1, color, 0.4);
-    g.strokeCircle(x, y, TOWER.range);
-    // 本体プレビュー
-    g.fillStyle(color, 0.35);
-    g.fillCircle(x, y, 14);
-    g.lineStyle(2, color, 0.9);
-    g.strokeCircle(x, y, 14);
-  }
-
-  private tryPlaceTower(x: number, y: number): void {
-    const blocker = this.placementBlocker(x, y);
-    if (blocker !== null) {
-      this.hud.showBanner(blocker, 600);
-      return;
-    }
-    if (!this.economy.spend(TOWER.cost, 'buyTower')) {
-      this.hud.showBanner('クレジット不足', 700);
-      this.cancelPlacement();
-      return;
-    }
-    this.towers.push(new Tower(this, x, y));
-    this.cancelPlacement();
-  }
-
   update(_time: number, delta: number): void {
     if (this.terminating) return;
 
-    // 基地脈動
-    this.base.update(delta);
+    // 基地: 脈動 + 砲塔発射 (Phase 5 後: タワーを撤廃して基地内蔵)
+    this.base.update(delta, this.enemies, this.bullets);
 
     // 惑星 (脈動・残量バー)
     for (const p of this.planets) p.update(delta);
@@ -310,11 +214,6 @@ export class GameScene extends Phaser.Scene {
         e.consumeOnBaseHit();
         this.cameras.main.shake(120, 0.005);
       }
-    }
-
-    // タワー
-    for (const t of this.towers) {
-      t.update(delta, this.enemies, this.bullets);
     }
 
     // 宇宙船 (Phase D)
@@ -422,17 +321,13 @@ export class GameScene extends Phaser.Scene {
 
     for (const e of this.enemies) e.destroy();
     for (const b of this.bullets) b.destroy();
-    for (const t of this.towers) t.destroy();
     for (const p of this.planets) p.destroy();
     for (const s of this.ships) s.destroy();
+    this.base?.destroy();
     this.enemies = [];
     this.bullets = [];
-    this.towers = [];
     this.planets = [];
     this.ships = [];
-    this.placeGhost?.destroy();
-    this.placeGhost = undefined;
-    this.placingTower = false;
     this.shop?.destroy();
     this.waves?.destroy();
     this.economy?.destroy();

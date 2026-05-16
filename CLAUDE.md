@@ -120,19 +120,18 @@ git push                            # 直後に必ず push
 ```
 src/
 ├── main.ts                 # Phaser 起動・シーン登録
-├── config.ts               # 全定数 (GAME_*, COLORS, BASE, TOWER, SHIP, ENEMY/ENEMY_TYPES, ENEMY_VS_SHIP, ECONOMY, STAGE, PHASES (enemySpecs), SPAWN, PLANETS, PLANET)
+├── config.ts               # 全定数 (GAME_*, COLORS, BASE, BASE_TURRET, SHIP, ENEMY/ENEMY_TYPES, ENEMY_VS_SHIP, ECONOMY, STAGE, PHASES (enemySpecs), SPAWN, PLANETS, PLANET)
 ├── scenes/                 # Phaser シーン (薄く保つ。ロジックは entities/systems へ)
 │   ├── BootScene.ts        # 即 Menu へ
 │   ├── MenuScene.ts        # タイトル + クリック/SPACE で開始
-│   ├── GameScene.ts        # メインループ。enemies/bullets/towers/planets/ships 配列を所有
+│   ├── GameScene.ts        # メインループ。enemies/bullets/planets/ships 配列を所有
 │   ├── GameOverScene.ts    # R リトライ / ESC メニュー
 │   ├── VictoryScene.ts     # STAGE CLEAR
 │   └── ProgramEditorScene.ts  # 並行 active オーバーレイ。Ship クリックで起動、Program をライブ編集
 ├── entities/               # ゲーム内オブジェクト (描画+状態を自分で持つ)
-│   ├── Base.ts             # 基地 HP, takeDamage, 脈動 + 回転リング
-│   ├── Tower.ts            # 自動迎撃 (射程内最寄り敵 → Bullet)
+│   ├── Base.ts             # 基地 HP, takeDamage, 脈動 + 回転リング + 内蔵砲塔 (射程リング表示 + 射撃)
 │   ├── Enemy.ts            # 基地へ直進, dead/reachedBase フラグ
-│   ├── Bullet.ts           # 対象ホーミング (Tower/Ship 共用)
+│   ├── Bullet.ts           # 対象ホーミング (基地砲塔/Ship 共用)
 │   ├── Planet.ts           # 資源源。extract API + 残量リング/バー
 │   └── Ship.ts             # 命令的 API (moveTo/mineAt/depositAt/attackNearest/stop) + setBehavior
 ├── program/                # ブロック実行系 (Phase 1+2+3 完了。6 種揃った)
@@ -148,7 +147,7 @@ src/
 │   └── EconomySystem.ts    # credits + depositResource + EventEmitter (change イベント)
 ├── ui/
 │   ├── HUD.ts              # HP/クレジット/Phase + 中央バナー + クレジット増減ポップ
-│   ├── ShopPanel.ts        # 画面下端 [宇宙船 $70] [タワー $50]
+│   ├── ShopPanel.ts        # 画面下端 [宇宙船 $70] (タワーは Phase 5 後に廃止)
 │   ├── BlockPalette.ts     # 編集 UI 左カラム: ブロック追加 + サンプル読み込み + 閉じる
 │   ├── ProgramList.ts      # 編集 UI 中央: ブロック行 + ▲▼✕ + 走行中マーカー
 │   └── BlockParamEditor.ts # 編集 UI 右: LocationId/PlanetId チップ選択
@@ -172,8 +171,8 @@ src/
 ## ゲームデザイン要点
 
 - **コア体験**: ブロックを組んで Ship をプログラム → 敵 Wave に対抗。プログラム未割り当ての Ship は何もしない。
-- **基地 (Base)**: 中央固定。HP=100。0 でゲームオーバー。資源納品先。
-- **タワー**: 自動迎撃 (ブロック化しない)。射程 200 / 10 ダメ × 1Hz / コスト $50。初期 2 基は基地左右固定、ShopPanel から 3 基目以降を自由配置。
+- **基地 (Base)**: 中央固定。HP=100。0 でゲームオーバー。資源納品先。**Phase 5 後: 固定砲塔を内蔵** — 射程 260 / 12 ダメ × 1.25Hz、`BASE_TURRET` で集約。射程リングが常時可視化される。
+- **タワー (廃止)**: Phase 5 後にタワーは撤廃され、自動迎撃は基地砲塔に統合された。`Tower` クラス・ShopPanel の「タワー」ボタン・設置モードは無い。
 - **宇宙船**: 命令的 API (`moveTo/mineAt/depositAt/attackNearest/fireAt/stop`) + `ShipBehavior` 差し替え。HP 30 / エネ 100 / コスト $70 / インベントリ 20。Phase 3 で cooldown 自動発射を撤廃 (連射は `REPEAT { ATTACK_NEAREST }` で表現)。Phase 4 で射撃エネルギー消費を追加 (5/shot)。
 - **敵 3 種 (Phase 4)**: `basic` (HP 20 / 速度 60 / $5) / `fast` (HP 12 / 速度 95 / $7、オレンジ) / `tank` (HP 55 / 速度 38 / $14、濃赤)。Phase 1-2 basic、Phase 3-4 basic+fast、Phase 5 全種混在。
 - **資源**: 惑星 2 個 (220,200)/(1060,540) から採掘 → 基地納品で資源 1:お金 2 変換。**枯渇 60s でリスポーン**。
@@ -189,7 +188,7 @@ src/
 
 ## 既知の制限・注意点
 
-- **初期タワー 2 基** (基地左右 x±150): 上下から来る敵は素抜け。ShopPanel から 3 基目以降を自由配置可。初期 2 基の完全自由化は今後の継続課題。
+- **基地砲塔のみで防衛**: Phase 5 後にタワーを廃止し、自動迎撃は基地中心の砲塔 1 基のみ (射程 260)。射程外から来る敵は宇宙船で迎撃する設計。
 - **惑星リソース 60s リスポーン** (Phase 4): 枯渇中は `MINE` ブロックが `blocked` で停止、リスポーン後に再開。
 - **Phaser バンドル 1.5MB** (gzip 354KB): Phase 5 後の継続課題で dynamic import を検討。
 - **PowerShell 5.1 環境**: `&&` 使えない / `2>&1` で native exe が NativeCommandError 化。Bash ツール併用 or PowerShell ネイティブ構文。

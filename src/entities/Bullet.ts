@@ -1,9 +1,9 @@
 import Phaser from 'phaser';
-import { COLORS, TOWER } from '../config';
+import { COLORS, BASE_TURRET } from '../config';
 import { Enemy } from './Enemy';
 
 /**
- * タワーが発射する弾。指定 Enemy をホーミングする。
+ * 基地砲塔・宇宙船が共用する弾。指定 Enemy をホーミングする。
  * 対象が消滅したら自壊。
  */
 export class Bullet {
@@ -22,8 +22,8 @@ export class Bullet {
     x: number,
     y: number,
     target: Enemy,
-    damage: number = TOWER.damagePerShot,
-    speed: number = TOWER.bulletSpeed
+    damage: number = BASE_TURRET.damagePerShot,
+    speed: number = BASE_TURRET.bulletSpeed
   ) {
     this.x = x;
     this.y = y;

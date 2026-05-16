@@ -1,11 +1,14 @@
 import Phaser from 'phaser';
-import { BASE, COLORS } from '../config';
+import { BASE, BASE_TURRET, COLORS } from '../config';
+import { Enemy } from './Enemy';
+import { Bullet } from './Bullet';
 
 /**
  * 基地 (Base)。プレイヤーが守る防衛対象。
- * MVP では HP のみ持ち、後フェーズで敵衝突 / 資源納品先 / 回復ロジックが乗る。
+ * Phase 5 後: タワーを廃止して基地自体が固定砲塔を内蔵 (range/damage/fireInterval は
+ * `BASE_TURRET` で集約)。常時表示の射程リングで攻撃範囲を可視化する。
  *
- * 描画: 内側の塗りつぶし円 + 外周リング + 中央十字。すべて Graphics で生成。
+ * 描画: 内側の塗りつぶし円 + 外周リング + 中央十字 + 射程リング + 砲身 (回転)。
  */
 export class Base {
   public hp: number = BASE.hp;
@@ -18,12 +21,23 @@ export class Base {
 
   private bodyGfx: Phaser.GameObjects.Graphics;
   private ring: Phaser.GameObjects.Graphics;
+  private rangeRing: Phaser.GameObjects.Graphics;
+  private barrel: Phaser.GameObjects.Graphics;
   private pulse: number = 0;
+
+  // 砲塔状態
+  private cooldownMs: number = 0;
+  private currentTarget: Enemy | null = null;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     this.scene = scene;
     this.x = x;
     this.y = y;
+
+    // 射程リング (常時表示で攻撃範囲を可視化)
+    this.rangeRing = scene.add.graphics();
+    this.drawRangeRing();
+    this.rangeRing.setPosition(x, y);
 
     // 外周リング (回転する)
     this.ring = scene.add.graphics();
@@ -34,6 +48,11 @@ export class Base {
     this.bodyGfx = scene.add.graphics();
     this.drawBody();
     this.bodyGfx.setPosition(x, y);
+
+    // 砲身 (敵方向に回転)
+    this.barrel = scene.add.graphics();
+    this.drawBarrel();
+    this.barrel.setPosition(x, y);
 
     // 緩やかな回転 tween (リングのみ)
     scene.tweens.add({
@@ -86,6 +105,34 @@ export class Base {
     }
   }
 
+  /** 射程リング: 攻撃範囲を常時表示する (ダッシュ風の点線で目立たせる)。 */
+  private drawRangeRing(): void {
+    const g = this.rangeRing;
+    g.clear();
+    // 薄い外周
+    g.lineStyle(1, COLORS.accent, 0.18);
+    g.strokeCircle(0, 0, BASE_TURRET.range);
+    // 内側に少し濃いダッシュ風 (32 分割で短い arc を描く)
+    g.lineStyle(2, COLORS.accent, 0.32);
+    const segments = 48;
+    for (let i = 0; i < segments; i += 2) {
+      const a0 = (i / segments) * Math.PI * 2;
+      const a1 = ((i + 1) / segments) * Math.PI * 2;
+      g.beginPath();
+      g.arc(0, 0, BASE_TURRET.range, a0, a1, false);
+      g.strokePath();
+    }
+  }
+
+  private drawBarrel(): void {
+    const g = this.barrel;
+    g.clear();
+    g.fillStyle(COLORS.highlight, 0.95);
+    g.fillRect(0, -3, 22, 6);
+    g.fillStyle(COLORS.accent, 1);
+    g.fillRect(20, -4, 4, 8);
+  }
+
   /** ダメージ。後フェーズで敵衝突から呼ばれる。 */
   public takeDamage(amount: number): void {
     this.hp = Math.max(0, this.hp - amount);
@@ -95,17 +142,80 @@ export class Base {
     return this.hp <= 0;
   }
 
-  /** 緩やかなコア脈動。delta は ms。 */
-  public update(delta: number): void {
+  /** 緩やかなコア脈動 + 砲塔のターゲット選定・発射。delta は ms。 */
+  public update(delta: number, enemies: Enemy[], bullets: Bullet[]): void {
     this.pulse += delta / 600;
     const s = 1 + Math.sin(this.pulse) * 0.04;
     this.bodyGfx.setScale(s);
+
+    // ─── 砲塔ロジック ───
+    this.cooldownMs = Math.max(0, this.cooldownMs - delta);
+
+    if (this.currentTarget && (this.currentTarget.dead || !this.inRange(this.currentTarget))) {
+      this.currentTarget = null;
+    }
+    if (!this.currentTarget) {
+      this.currentTarget = this.findNearestEnemy(enemies);
+    }
+
+    if (this.currentTarget) {
+      const dx = this.currentTarget.x - this.x;
+      const dy = this.currentTarget.y - this.y;
+      this.barrel.setRotation(Math.atan2(dy, dx));
+
+      if (this.cooldownMs <= 0) {
+        bullets.push(new Bullet(this.scene, this.x, this.y, this.currentTarget));
+        this.cooldownMs = BASE_TURRET.fireIntervalMs;
+        this.muzzleFlash();
+      }
+    }
+  }
+
+  private inRange(e: Enemy): boolean {
+    const dx = e.x - this.x;
+    const dy = e.y - this.y;
+    return dx * dx + dy * dy <= BASE_TURRET.range * BASE_TURRET.range;
+  }
+
+  private findNearestEnemy(enemies: Enemy[]): Enemy | null {
+    let best: Enemy | null = null;
+    let bestDist = BASE_TURRET.range * BASE_TURRET.range;
+    for (const e of enemies) {
+      if (e.dead) continue;
+      const dx = e.x - this.x;
+      const dy = e.y - this.y;
+      const d = dx * dx + dy * dy;
+      if (d <= bestDist) {
+        bestDist = d;
+        best = e;
+      }
+    }
+    return best;
+  }
+
+  private muzzleFlash(): void {
+    const angle = this.barrel.rotation;
+    const fx = this.x + Math.cos(angle) * 26;
+    const fy = this.y + Math.sin(angle) * 26;
+    const flash = this.scene.add.graphics();
+    flash.fillStyle(COLORS.accent, 1);
+    flash.fillCircle(0, 0, 5);
+    flash.setPosition(fx, fy);
+    this.scene.tweens.add({
+      targets: flash,
+      alpha: 0,
+      scale: 0.3,
+      duration: 110,
+      onComplete: () => flash.destroy(),
+    });
   }
 
   /** シーン破棄時に呼ぶ。 */
   public destroy(): void {
     this.bodyGfx.destroy();
     this.ring.destroy();
+    this.rangeRing.destroy();
+    this.barrel.destroy();
   }
 
   /** Scene への参照露出が必要な場合用。 */

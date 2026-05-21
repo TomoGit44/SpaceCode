@@ -5,6 +5,7 @@ import type { Planet } from './Planet';
 import type { Enemy } from './Enemy';
 import { Bullet } from './Bullet';
 import type { EconomySystem } from '../systems/EconomySystem';
+import type { EffectSystem } from '../items/effects';
 import type { Program } from '../program/Program';
 
 export type ShipState =
@@ -24,6 +25,7 @@ export interface ShipWorld {
   readonly enemies: ReadonlyArray<Enemy>;
   readonly bullets: Bullet[]; // attackNearest 時に push
   readonly economy: EconomySystem;
+  readonly effects: EffectSystem; // Phase 6: 装着アイテムによる stat 補正
 }
 
 /**
@@ -44,6 +46,8 @@ export interface ShipBehavior {
  * これを Behavior (コード実行系の Executor) が呼び出す。
  */
 export class Ship {
+  /** ランタイム一意 ID (Phase 6: Inventory.shipModules のキー等に使う)。 */
+  public readonly id: string = crypto.randomUUID();
   public x: number;
   public y: number;
   public readonly maxHp: number = SHIP.hp;

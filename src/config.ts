@@ -38,6 +38,12 @@ export const COLORS = {
   // 惑星 (Phase 5: ハードコード色を昇格)
   planetBody: 0x8a6f1f,
   planetMark: 0x6b551a,
+
+  // アイテムレア度 (Phase 6)
+  rarityN: 0x9aa4ba,     // ノーマル: グレー
+  rarityR: 0x4ea1ff,     // レア: 青 (ally 流用)
+  raritySR: 0xc66cff,    // スーパーレア: 紫
+  rarityL: 0xffd24a,     // レジェンド: 金 (resource 流用)
 } as const;
 
 /** 基地: HP=100, ゲームオーバー判定の中心 */

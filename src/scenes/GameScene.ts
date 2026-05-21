@@ -8,7 +8,8 @@ import { Planet } from '../entities/Planet';
 import { Ship } from '../entities/Ship';
 import { Executor } from '../program/Executor';
 import { Program } from '../program/Program';
-import { loadShipTemplate } from '../utils/save';
+import { Inventory } from '../items/Inventory';
+import { EffectSystem } from '../items/effects';
 import { SpawnSystem } from '../systems/SpawnSystem';
 import { WaveSystem } from '../systems/WaveSystem';
 import { EconomySystem } from '../systems/EconomySystem';
@@ -36,6 +37,11 @@ export class GameScene extends Phaser.Scene {
   private economy!: EconomySystem;
   private hud!: HUD;
   private shop!: ShopPanel;
+
+  // Phase 6: アイテムシステム。Inventory は Run 毎にここで作り直す = リセット
+  // (localStorage 非永続、仕様 §8.5)。
+  private inventory!: Inventory;
+  private effects!: EffectSystem;
 
   private terminating: boolean = false; // GameOver / Victory 遷移中
 
@@ -81,6 +87,10 @@ export class GameScene extends Phaser.Scene {
     this.spawner = new SpawnSystem(this, cx, cy);
     this.waves = new WaveSystem(this.spawner);
     this.economy = new EconomySystem();
+
+    // Phase 6: アイテムシステム (新しい Run = 空のインベントリから開始)
+    this.inventory = new Inventory();
+    this.effects = new EffectSystem(this.inventory);
 
     // HUD
     this.hud = new HUD(this, this.base.maxHp);
@@ -190,16 +200,12 @@ export class GameScene extends Phaser.Scene {
     const sx = this.base.x + offset * (this.base.radius + 24);
     const sy = this.base.y;
     const ship = new Ship(this, sx, sy);
-    // Phase 4: localStorage にテンプレがあればロード、なければ空 Program。
-    // 空テンプレの場合はコア原則どおり「組まなければ動かない」状態で生成される。
-    const saved = loadShipTemplate();
-    const program = saved ?? new Program([]);
+    // Phase 6: プログラム永続化を廃止。新規 Ship は常に空 Program で生成され、
+    // コア原則どおり「組まなければ動かない」状態から始まる。
+    const program = new Program([]);
     ship.setProgram(program, new Executor(program));
     this.ships.push(ship);
-    const msg = saved && program.length > 0
-      ? 'テンプレを読み込みました (クリックで編集)'
-      : '船をクリックしてプログラムを編集';
-    this.hud.showBanner(msg, 1100);
+    this.hud.showBanner('船をクリックしてプログラムを編集', 1100);
   }
 
   /** ワールド座標 (x,y) にいる生存中の Ship を返す (なければ null)。SHIP.radius+4px の円判定。 */
@@ -237,6 +243,9 @@ export class GameScene extends Phaser.Scene {
     // Wave 進行
     this.waves.update(delta, this.enemies);
 
+    // Phase 6: 装着アイテム効果の時間管理 (時限バフ等。Step 1 は no-op)
+    this.effects.tick(delta);
+
     // 敵更新
     for (const e of this.enemies) {
       const wasAlive = !e.dead;
@@ -257,6 +266,7 @@ export class GameScene extends Phaser.Scene {
         enemies: this.enemies,
         bullets: this.bullets,
         economy: this.economy,
+        effects: this.effects,
       };
       for (const s of this.ships) s.update(delta, world);
     }

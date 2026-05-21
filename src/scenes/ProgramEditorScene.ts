@@ -9,7 +9,6 @@ import { sampleCodes } from '../program/samples';
 import { CodePalette } from '../ui/CodePalette';
 import { ProgramList } from '../ui/ProgramList';
 import { CodeParamEditor } from '../ui/CodeParamEditor';
-import { saveShipTemplate } from '../utils/save';
 
 const FONT = 'system-ui, "Segoe UI", sans-serif';
 
@@ -195,7 +194,6 @@ export class ProgramEditorScene extends Phaser.Scene {
         this.selectedPath = [...parentPath, insertIdx];
       }
     }
-    this.persist();
     this.ensureRunning();
     this.refresh();
   }
@@ -205,7 +203,6 @@ export class ProgramEditorScene extends Phaser.Scene {
     while (this.program.length > 0) this.program.removeAt(0);
     for (const c of sampleCodes()) this.program.append(c);
     this.selectedPath = null;
-    this.persist();
     this.ensureRunning();
     this.refresh();
   }
@@ -217,7 +214,6 @@ export class ProgramEditorScene extends Phaser.Scene {
       const newPath = [...path.slice(0, -1), last - 1];
       this.selectedPath = pathEquals(this.selectedPath, path) ? newPath : this.selectedPath;
     }
-    this.persist();
     this.ensureRunning();
     this.refresh();
   }
@@ -231,7 +227,6 @@ export class ProgramEditorScene extends Phaser.Scene {
       const newPath = [...path.slice(0, -1), last + 1];
       this.selectedPath = pathEquals(this.selectedPath, path) ? newPath : this.selectedPath;
     }
-    this.persist();
     this.ensureRunning();
     this.refresh();
   }
@@ -259,7 +254,6 @@ export class ProgramEditorScene extends Phaser.Scene {
         this.selectedPath = np;
       }
     }
-    this.persist();
     this.ensureRunning();
     this.refresh();
   }
@@ -267,13 +261,8 @@ export class ProgramEditorScene extends Phaser.Scene {
   private handleParamChange(code: Code): void {
     if (this.selectedPath === null) return;
     this.program.replaceCodeAtPath(this.selectedPath, code);
-    this.persist();
     this.ensureRunning();
     this.refresh();
-  }
-
-  private persist(): void {
-    saveShipTemplate(this.program);
   }
 
   /**

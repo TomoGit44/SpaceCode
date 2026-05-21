@@ -19,7 +19,7 @@ export function tickAttackNearest(
   if (ctx.justEntered) {
     ship.attackNearest(world.enemies);
     const target = ship.getAttackTarget();
-    if (target) ship.fireAt(target, world.bullets);
+    if (target) ship.fireAt(target, world);
   }
   return ctx.elapsedMs >= SHIP.attackDurationMs
     ? { status: 'done' }

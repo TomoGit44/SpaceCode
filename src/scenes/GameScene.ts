@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { GAME_WIDTH, GAME_HEIGHT, ECONOMY, PLANETS, SHIP } from '../config';
+import { GAME_WIDTH, GAME_HEIGHT, COLORS, ECONOMY, PLANETS, SHIP } from '../config';
 import { drawStarfield } from '../utils/starfield';
 import { Base } from '../entities/Base';
 import { Enemy } from '../entities/Enemy';
@@ -15,6 +15,8 @@ import { WaveSystem } from '../systems/WaveSystem';
 import { EconomySystem } from '../systems/EconomySystem';
 import { HUD } from '../ui/HUD';
 import { ShopPanel, type ShopAction } from '../ui/ShopPanel';
+
+const FONT = 'system-ui, "Segoe UI", sans-serif';
 
 /**
  * メインゲームシーン。
@@ -45,8 +47,12 @@ export class GameScene extends Phaser.Scene {
 
   private terminating: boolean = false; // GameOver / Victory 遷移中
 
-  // コード編集オーバーレイ展開中フラグ (Phase 2)
-  private editorOpen: boolean = false;
+  // 並行 active オーバーレイ (ProgramEditor / ItemInventory / Gacha) の開いている数。
+  // > 0 のとき GameScene の入力を抑止する (Phase 6: editorOpen から一般化)。
+  private overlayDepth: number = 0;
+
+  // 右端「アイテム」ボタンのラベル (所持総数バッジ更新用)
+  private itemBtnLabel?: Phaser.GameObjects.Text;
 
   constructor() {
     super({ key: 'GameScene' });
@@ -61,7 +67,8 @@ export class GameScene extends Phaser.Scene {
     this.planets = [];
     this.ships = [];
     this.terminating = false;
-    this.editorOpen = false;
+    this.overlayDepth = 0;
+    this.itemBtnLabel = undefined;
 
     // 背景
     drawStarfield(this, GAME_WIDTH, GAME_HEIGHT);
@@ -103,6 +110,9 @@ export class GameScene extends Phaser.Scene {
     this.shop = new ShopPanel(this, this.economy);
     this.shop.on('request', (action) => this.handleShopRequest(action));
 
+    // Phase 6: 右端「アイテム」ボタン
+    this.createItemButton();
+
     // イベント配線
     this.economy.on('change', (credits, delta) => {
       this.hud.setCredits(credits);
@@ -139,23 +149,23 @@ export class GameScene extends Phaser.Scene {
 
     this.input.keyboard?.on('keydown-ESC', () => {
       if (this.terminating) return;
-      if (this.editorOpen) return; // ESC は ProgramEditorScene 側が拾う
+      if (this.overlayDepth > 0) return; // ESC はオーバーレイ側が拾う
       this.transitionTo('MenuScene');
     });
 
     // SPACE / ENTER で開始ボタンを押す (準備時間中のみ HUD が受け付ける)
     this.input.keyboard?.on('keydown-SPACE', () => {
-      if (this.terminating || this.editorOpen) return;
+      if (this.terminating || this.overlayDepth > 0) return;
       this.hud.triggerStartButton();
     });
     this.input.keyboard?.on('keydown-ENTER', () => {
-      if (this.terminating || this.editorOpen) return;
+      if (this.terminating || this.overlayDepth > 0) return;
       this.hud.triggerStartButton();
     });
 
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
       if (this.terminating) return;
-      if (this.editorOpen) return; // バックドロップが届けても scene-level は止まらないので明示ガード
+      if (this.overlayDepth > 0) return; // バックドロップが届けても scene-level は止まらないので明示ガード
 
       // Ship クリックでプログラム編集を開く
       if (p.rightButtonDown()) return;
@@ -176,7 +186,7 @@ export class GameScene extends Phaser.Scene {
     const total = this.waves.getTotalPhases();
     this.hud.showStartButton(upcoming, total, () => {
       if (this.terminating) return;
-      if (this.editorOpen) return; // 編集中は弾く (ボタン自体は editor バックドロップで隠れる)
+      if (this.overlayDepth > 0) return; // オーバーレイ中は弾く (ボタンはバックドロップで隠れる)
       this.waves.startNextPhase();
     });
   }
@@ -219,23 +229,77 @@ export class GameScene extends Phaser.Scene {
 
   /** プログラム編集オーバーレイを開く。GameScene は active のまま並行更新される。 */
   private openProgramEditor(ship: Ship): void {
-    if (this.editorOpen) return;
+    if (this.overlayDepth > 0) return;
     const program = ship.getProgram();
     if (!program) return;
-    this.editorOpen = true;
+    this.overlayDepth += 1;
     this.scene.launch('ProgramEditorScene', { ship });
     const editor = this.scene.get('ProgramEditorScene');
     editor.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
-      this.editorOpen = false;
+      this.overlayDepth -= 1;
     });
     this.scene.bringToTop('ProgramEditorScene');
+  }
+
+  /** アイテム一覧オーバーレイを開く (ProgramEditor とは排他)。 */
+  private openItemInventory(): void {
+    if (this.overlayDepth > 0) return;
+    this.overlayDepth += 1;
+    this.scene.launch('ItemInventoryScene', {
+      inventory: this.inventory,
+      effects: this.effects,
+      waveState: this.waves.getState(),
+    });
+    const ov = this.scene.get('ItemInventoryScene');
+    ov.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.overlayDepth -= 1;
+      this.refreshItemButton();
+    });
+    this.scene.bringToTop('ItemInventoryScene');
+  }
+
+  /** 右端「アイテム」ボタンを作る。 */
+  private createItemButton(): void {
+    const w = 130;
+    const h = 34;
+    const cx = GAME_WIDTH - 12 - w / 2;
+    const cy = 96;
+    const bg = this.add
+      .rectangle(cx, cy, w, h, COLORS.panelBg, 0.92)
+      .setStrokeStyle(1, COLORS.accent, 0.7)
+      .setDepth(20)
+      .setInteractive({ useHandCursor: true });
+    this.itemBtnLabel = this.add
+      .text(cx, cy, '', {
+        fontFamily: FONT,
+        fontSize: '14px',
+        color: '#cfd6e6',
+        fontStyle: 'bold',
+      })
+      .setOrigin(0.5)
+      .setDepth(21);
+    this.refreshItemButton();
+    bg.on('pointerover', () => bg.setFillStyle(COLORS.panelHover, 1));
+    bg.on('pointerout', () => bg.setFillStyle(COLORS.panelBg, 0.92));
+    bg.on('pointerdown', (p: Phaser.Input.Pointer) => {
+      if (p.rightButtonDown()) return;
+      if (this.terminating || this.overlayDepth > 0) return;
+      this.openItemInventory();
+    });
+  }
+
+  /** アイテムボタンの所持総数バッジを更新する。 */
+  private refreshItemButton(): void {
+    if (!this.itemBtnLabel) return;
+    const n = this.inventory.items.length + this.inventory.codes.length;
+    this.itemBtnLabel.setText(`📦 アイテム (${n})`);
   }
 
   update(_time: number, delta: number): void {
     if (this.terminating) return;
 
     // 基地: 脈動 + 砲塔発射 (Phase 5 後: タワーを撤廃して基地内蔵)
-    this.base.update(delta, this.enemies, this.bullets);
+    this.base.update(delta, this.enemies, this.bullets, this.effects);
 
     // 惑星 (脈動・残量バー)
     for (const p of this.planets) p.update(delta);
@@ -286,7 +350,11 @@ export class GameScene extends Phaser.Scene {
       }
     }
     if (creditsThisFrame > 0) {
-      this.economy.add(creditsThisFrame, 'kill');
+      // Phase 6: 撃破報酬は賞金コア (オムニ・コア) で倍率がかかる
+      const credits = Math.round(
+        this.effects.economyStat('creditsPerKill', creditsThisFrame)
+      );
+      this.economy.add(credits, 'kill');
     }
 
     // 廃棄
@@ -353,11 +421,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   private cleanup(): void {
-    // 編集オーバーレイを閉じてから GameScene を終了する
-    if (this.editorOpen || this.scene.isActive('ProgramEditorScene')) {
-      this.scene.stop('ProgramEditorScene');
+    // オーバーレイを閉じてから GameScene を終了する
+    for (const key of ['ProgramEditorScene', 'ItemInventoryScene']) {
+      if (this.scene.isActive(key)) this.scene.stop(key);
     }
-    this.editorOpen = false;
+    this.overlayDepth = 0;
 
     for (const e of this.enemies) e.destroy();
     for (const b of this.bullets) b.destroy();

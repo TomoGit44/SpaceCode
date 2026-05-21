@@ -4,6 +4,7 @@ import { BootScene } from './scenes/BootScene';
 import { MenuScene } from './scenes/MenuScene';
 import { GameScene } from './scenes/GameScene';
 import { ProgramEditorScene } from './scenes/ProgramEditorScene';
+import { ItemInventoryScene } from './scenes/ItemInventoryScene';
 import { GameOverScene } from './scenes/GameOverScene';
 import { VictoryScene } from './scenes/VictoryScene';
 
@@ -25,8 +26,17 @@ const config: Phaser.Types.Core.GameConfig = {
     pixelArt: false,
     antialias: true,
   },
-  // ProgramEditorScene は GameScene の後ろに登録 (並行 active 時に入力レイヤが上に乗る)
-  scene: [BootScene, MenuScene, GameScene, ProgramEditorScene, GameOverScene, VictoryScene],
+  // オーバーレイ系 (ProgramEditor / ItemInventory) は GameScene の後ろに登録
+  // (並行 active 時に入力レイヤが上に乗る)
+  scene: [
+    BootScene,
+    MenuScene,
+    GameScene,
+    ProgramEditorScene,
+    ItemInventoryScene,
+    GameOverScene,
+    VictoryScene,
+  ],
 };
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars

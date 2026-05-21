@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { BASE, BASE_TURRET, COLORS } from '../config';
 import { Enemy } from './Enemy';
 import { Bullet } from './Bullet';
+import type { EffectSystem } from '../items/effects';
 
 /**
  * 基地 (Base)。プレイヤーが守る防衛対象。
@@ -143,7 +144,7 @@ export class Base {
   }
 
   /** 緩やかなコア脈動 + 砲塔のターゲット選定・発射。delta は ms。 */
-  public update(delta: number, enemies: Enemy[], bullets: Bullet[]): void {
+  public update(delta: number, enemies: Enemy[], bullets: Bullet[], effects: EffectSystem): void {
     this.pulse += delta / 600;
     const s = 1 + Math.sin(this.pulse) * 0.04;
     this.bodyGfx.setScale(s);
@@ -164,7 +165,11 @@ export class Base {
       this.barrel.setRotation(Math.atan2(dy, dx));
 
       if (this.cooldownMs <= 0) {
-        bullets.push(new Bullet(this.scene, this.x, this.y, this.currentTarget));
+        // Phase 6: 砲塔火力はオムニ・コアで強化されうる (EffectSystem 経由)
+        const turretDamage = effects.baseStat('turretDamage', BASE_TURRET.damagePerShot);
+        bullets.push(
+          new Bullet(this.scene, this.x, this.y, this.currentTarget, turretDamage)
+        );
         this.cooldownMs = BASE_TURRET.fireIntervalMs;
         this.muzzleFlash();
       }

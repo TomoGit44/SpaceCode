@@ -164,13 +164,15 @@ export class Ship {
    * 射程外 / dead 敵 / エネルギー不足 (Phase 4) には何もしない。
    * 連射ペースは ATTACK_NEAREST コードの持続時間と REPEAT で囲む構造で表現する。
    */
-  public fireAt(enemy: Enemy, bullets: Bullet[]): boolean {
+  public fireAt(enemy: Enemy, world: ShipWorld): boolean {
     if (enemy.dead) return false;
     if (this.energy < SHIP.energyPerShot) return false;  // Phase 4: 射撃エネルギー判定
     const d = Math.hypot(enemy.x - this.x, enemy.y - this.y);
     if (d > SHIP.attackRange) return false;
-    bullets.push(
-      new Bullet(this.scene, this.x, this.y, enemy, SHIP.damagePerShot, SHIP.bulletSpeed)
+    // Phase 6: 攻撃力はオムニ・コア/モジュールで強化されうる (EffectSystem 経由)
+    const damage = world.effects.shipStat(this, 'damagePerShot', SHIP.damagePerShot);
+    world.bullets.push(
+      new Bullet(this.scene, this.x, this.y, enemy, damage, SHIP.bulletSpeed)
     );
     this.energy -= SHIP.energyPerShot;  // Phase 4: 射撃でエネルギー消費
     // Phase 5: マズルフラッシュ (短い円が拡大して消える)
@@ -266,7 +268,8 @@ export class Ship {
       const dx = this.moveTarget.x - this.x;
       const dy = this.moveTarget.y - this.y;
       const dist = Math.hypot(dx, dy);
-      const step = (SHIP.moveSpeed * delta) / 1000;
+      const speed = world.effects.shipStat(this, 'moveSpeed', SHIP.moveSpeed);
+      const step = (speed * delta) / 1000;
       if (dist <= step) {
         this.x = this.moveTarget.x;
         this.y = this.moveTarget.y;
@@ -287,7 +290,7 @@ export class Ship {
     if (this.mineTarget) {
       const p = this.mineTarget;
       if (this.isAt(p, p.mineRadius) && this.inventory < this.inventoryCap) {
-        const got = p.extract(delta, SHIP.mineRate);
+        const got = p.extract(delta, world.effects.shipStat(this, 'mineRate', SHIP.mineRate));
         this.inventory = Math.min(this.inventoryCap, this.inventory + got);
         this.state = 'mining';
       }

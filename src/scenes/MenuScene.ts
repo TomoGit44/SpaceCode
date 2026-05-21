@@ -44,7 +44,7 @@ export class MenuScene extends Phaser.Scene {
       .text(
         GAME_WIDTH / 2,
         GAME_HEIGHT * 0.32 + 70,
-        '— 宇宙タワーディフェンス × ブロックプログラミング —',
+        '— 宇宙タワーディフェンス × コードプログラミング —',
         {
           fontFamily: 'system-ui, "Segoe UI", sans-serif',
           fontSize: '20px',

@@ -1,6 +1,6 @@
 # SpaceCode
 
-**プレイヤーがブロックで宇宙船をプログラミングし、襲来する敵から基地を守る、宇宙テーマのタワーディフェンス**。一人プレイのブラウザゲーム MVP。
+**プレイヤーがコードで宇宙船をプログラミングし、襲来する敵から基地を守る、宇宙テーマのタワーディフェンス**。一人プレイのブラウザゲーム MVP。
 
 > Claude Code で開発。
 > - 設計思想・用語: [`docs/DESIGN.md`](./docs/DESIGN.md)
@@ -50,11 +50,11 @@ npm run preview    # ビルド後のプレビュー
 
 | 入力 | 動作 |
 |---|---|
-| 左カラム `[移動]/[採掘]/...` | 選択中ブロックの後ろにそのブロックを追加 |
+| 左カラム `[移動]/[採掘]/...` | 選択中コードの後ろにそのコードを追加 |
 | 左カラム `[サンプル読み込み]` | テンプレ Program を一括投入 (root スコープのみ) |
-| 中央のブロック行クリック | 選択 (右の「パラメータ」欄に反映) |
-| 行右端 `▲`/`▼` | ブロックを上/下に移動 |
-| 行右端 `✕` | ブロックを削除 |
+| 中央のコード行クリック | 選択 (右の「パラメータ」欄に反映) |
+| 行右端 `▲`/`▼` | コードを上/下に移動 |
+| 行右端 `✕` | コードを削除 |
 | 右カラムのチップ | パラメータ (移動先・採掘先) を変更 |
 | `REPEAT` 行 → `中身を編集 →` | ネスト内に drill-in (`›` 区切りのパンくずから親へ戻る) |
 | バックドロップ / `ESC` / `✕ 閉じる` | オーバーレイを閉じる |
@@ -67,20 +67,20 @@ npm run preview    # ビルド後のプレビュー
 
 ### 1. コア原則
 
-**プログラムを組まないと Ship は動かない。** Ship を買っても、最初は基地横で待機するだけ。Ship をクリックして編集オーバーレイを開き、ブロックを並べると Ship が動き出す。
+**プログラムを組まないと Ship は動かない。** Ship を買っても、最初は基地横で待機するだけ。Ship をクリックして編集オーバーレイを開き、コードを並べると Ship が動き出す。
 
 基地中央には **固定砲塔** が内蔵され、射程内 (260px) の敵を自動で迎撃する (常時表示のリングが攻撃範囲)。射程外の敵は Ship で対処する設計。
 
-### 2. ブロック 6 種
+### 2. コード 6 種
 
-| ブロック | 説明 |
+| コード | 説明 |
 |---|---|
 | **移動** (`MOVE_TO`) | 指定地点 (基地 / 惑星A / 惑星B) へ移動 |
 | **採掘** (`MINE`) | 指定惑星で資源を採取。インベントリ満タンで完了。**枯渇中はリスポーン待ち** (60s) |
 | **納品** (`DEPOSIT`) | 基地で資源を渡してクレジット化 (資源 1 → $2)。エネルギーも全回復 |
 | **攻撃** (`ATTACK_NEAREST`) | 射程内最寄りの敵に 1 発撃つ。500ms 持続 |
 | **満タンまで待機** (`WAIT_UNTIL_FULL`) | インベントリ満タンになるまで停止 |
-| **繰り返し** (`REPEAT`) | 子ブロック列を N 回ループ (ネスト可) |
+| **繰り返し** (`REPEAT`) | 子コード列を N 回ループ (ネスト可) |
 
 ### 3. 推奨初手プログラム
 
@@ -111,7 +111,7 @@ npm run preview    # ビルド後のプレビュー
               └→ エネルギー全回復 (Ship)
 ```
 
-惑星 2 個ともリソースが尽きると 60 秒間採掘不可。MINE ブロックは枯渇中 `blocked` で次へ進まず、リスポーンで自動再開する。
+惑星 2 個ともリソースが尽きると 60 秒間採掘不可。MINE コードは枯渇中 `blocked` で次へ進まず、リスポーンで自動再開する。
 
 ### 5. エネルギー (Ship のみ)
 
@@ -147,15 +147,15 @@ src/
 ├── config.ts              # 全定数 (COLORS, SHIP, ENEMY_TYPES, PHASES, ...)
 ├── scenes/                # Boot / Menu / Game / GameOver / Victory / ProgramEditor
 ├── entities/              # Base (砲塔内蔵) / Enemy / Bullet / Planet / Ship
-├── program/               # ブロック実行系
-│   ├── Block.ts           #   discriminated union (6 種)
-│   ├── Program.ts         #   ブロック配列 + カーソル
+├── program/               # コード実行系
+│   ├── Code.ts            #   discriminated union (6 種)
+│   ├── Program.ts         #   コード配列 + カーソル
 │   ├── Executor.ts        #   ShipBehavior 実装 (スタック式)
 │   ├── locations.ts       #   LocationId / PlanetId + resolver
 │   ├── samples.ts         #   サンプル Program
-│   └── blocks/            #   1 ファイル 1 種の評価関数
+│   └── codes/             #   1 ファイル 1 種の評価関数
 ├── systems/               # SpawnSystem / WaveSystem / EconomySystem
-├── ui/                    # HUD / ShopPanel / BlockPalette / ProgramList / BlockParamEditor
+├── ui/                    # HUD / ShopPanel / CodePalette / ProgramList / CodeParamEditor
 └── utils/                 # starfield (背景描画) / save (localStorage)
 ```
 

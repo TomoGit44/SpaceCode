@@ -2,11 +2,11 @@ import type { ShipWorld } from '../entities/Ship';
 import type { Planet } from '../entities/Planet';
 
 /**
- * ブロックが参照する名前付き地点。
+ * コードが参照する名前付き地点。
  *
  * Phase 1 は MOVE_TO が任意座標 / MINE が planetIndex:number だったが、
  * Phase 2 で編集 UI を導入する際にプレイヤーに「惑星A / 惑星B / 基地」を
- * 直接選ばせる方式へ変更したため、ブロック側のターゲットもこの記号 ID に統一する。
+ * 直接選ばせる方式へ変更したため、コード側のターゲットもこの記号 ID に統一する。
  *
  * MVP では惑星 2 個固定 (config.PLANETS) のため `planet0` / `planet1` のみ。
  * 追加するときは LocationId に variant を 1 つ + ALL_* 配列に 1 行 + planetIndexOf に分岐 1 つ。

@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { COLORS } from '../config';
-import type { Block } from '../program/Block';
+import type { Code } from '../program/Code';
 import {
   ALL_LOCATION_IDS,
   ALL_PLANET_IDS,
@@ -15,19 +15,19 @@ const FONT = 'system-ui, "Segoe UI", sans-serif';
 const REPEAT_TIMES_MIN = 1;
 const REPEAT_TIMES_MAX = 20;
 
-export interface BlockParamEditorEvents {
-  /** 新しい block オブジェクトを emit (元の block は変更しない)。
+export interface CodeParamEditorEvents {
+  /** 新しい code オブジェクトを emit (元の code は変更しない)。
    *  REPEAT のときは `children` は同じ配列参照を保つ (エディタが直接編集中の参照を切らない)。 */
-  change: (block: Block) => void;
+  change: (code: Code) => void;
 }
 
 /**
- * 編集オーバーレイ右カラム: 選択中ブロックのパラメータを編集する。
+ * 編集オーバーレイ右カラム: 選択中コードのパラメータを編集する。
  *  - MOVE_TO / MINE: LocationId / PlanetId のチップ選択
  *  - DEPOSIT / ATTACK_NEAREST / WAIT_UNTIL_FULL: 「設定なし」
  *  - REPEAT: 回数スピナーのみ (Phase 5 後: 中身はリストでインライン編集するためボタン不要)
  */
-export class BlockParamEditor {
+export class CodeParamEditor {
   private scene: Phaser.Scene;
   private emitter: Phaser.Events.EventEmitter;
   private x: number;
@@ -52,13 +52,13 @@ export class BlockParamEditor {
       .setDepth(3);
   }
 
-  public render(block: Block | null): void {
+  public render(code: Code | null): void {
     this.clear();
-    if (!block) {
-      this.addNote('ブロックを選択してください');
+    if (!code) {
+      this.addNote('コードを選択してください');
       return;
     }
-    switch (block.type) {
+    switch (code.type) {
       case 'DEPOSIT':
         this.addNote('納品 — 設定なし');
         return;
@@ -70,18 +70,18 @@ export class BlockParamEditor {
         return;
       case 'MOVE_TO':
         this.addTitle('移動先');
-        this.renderLocationChips(ALL_LOCATION_IDS, block.target, (id) =>
-          this.emitter.emit('change', { type: 'MOVE_TO', target: id } as Block)
+        this.renderLocationChips(ALL_LOCATION_IDS, code.target, (id) =>
+          this.emitter.emit('change', { type: 'MOVE_TO', target: id } as Code)
         );
         return;
       case 'MINE':
         this.addTitle('採掘先');
-        this.renderLocationChips(ALL_PLANET_IDS, block.target, (id) =>
-          this.emitter.emit('change', { type: 'MINE', target: id as PlanetId } as Block)
+        this.renderLocationChips(ALL_PLANET_IDS, code.target, (id) =>
+          this.emitter.emit('change', { type: 'MINE', target: id as PlanetId } as Code)
         );
         return;
       case 'REPEAT':
-        this.renderRepeat(block);
+        this.renderRepeat(code);
         return;
     }
   }
@@ -149,22 +149,22 @@ export class BlockParamEditor {
     }
   }
 
-  private renderRepeat(block: Extract<Block, { type: 'REPEAT' }>): void {
+  private renderRepeat(code: Extract<Code, { type: 'REPEAT' }>): void {
     this.addTitle('繰り返し回数');
     const cy = this.y + 56;
 
     // ▼ N ▲ スピナー
     const minus = this.makeStepButton(this.x + 4, cy, '−', () => {
-      const next = Math.max(REPEAT_TIMES_MIN, block.times - 1);
-      if (next === block.times) return;
+      const next = Math.max(REPEAT_TIMES_MIN, code.times - 1);
+      if (next === code.times) return;
       this.emitter.emit('change', {
         type: 'REPEAT',
         times: next,
-        children: block.children,
-      } as Block);
+        children: code.children,
+      } as Code);
     });
     const value = this.scene.add
-      .text(this.x + this.width / 2, cy + 16, `${block.times}`, {
+      .text(this.x + this.width / 2, cy + 16, `${code.times}`, {
         fontFamily: FONT,
         fontSize: '20px',
         color: '#cfd6e6',
@@ -173,13 +173,13 @@ export class BlockParamEditor {
       .setOrigin(0.5)
       .setDepth(3);
     const plus = this.makeStepButton(this.x + this.width - 36, cy, '+', () => {
-      const next = Math.min(REPEAT_TIMES_MAX, block.times + 1);
-      if (next === block.times) return;
+      const next = Math.min(REPEAT_TIMES_MAX, code.times + 1);
+      if (next === code.times) return;
       this.emitter.emit('change', {
         type: 'REPEAT',
         times: next,
-        children: block.children,
-      } as Block);
+        children: code.children,
+      } as Code);
     });
     this.controls.push(value, ...minus, ...plus);
 
@@ -201,7 +201,7 @@ export class BlockParamEditor {
       .text(
         this.x + this.width / 2,
         cy + 74,
-        `子ブロック: ${block.children.length}`,
+        `子コード: ${code.children.length}`,
         {
           fontFamily: FONT,
           fontSize: '12px',
@@ -249,9 +249,9 @@ export class BlockParamEditor {
     this.controls = [];
   }
 
-  public on<K extends keyof BlockParamEditorEvents>(
+  public on<K extends keyof CodeParamEditorEvents>(
     event: K,
-    fn: BlockParamEditorEvents[K]
+    fn: CodeParamEditorEvents[K]
   ): void {
     this.emitter.on(event, fn as (...args: unknown[]) => void);
   }

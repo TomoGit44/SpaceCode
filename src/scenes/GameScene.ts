@@ -39,7 +39,7 @@ export class GameScene extends Phaser.Scene {
 
   private terminating: boolean = false; // GameOver / Victory 遷移中
 
-  // ブロック編集オーバーレイ展開中フラグ (Phase 2)
+  // コード編集オーバーレイ展開中フラグ (Phase 2)
   private editorOpen: boolean = false;
 
   constructor() {

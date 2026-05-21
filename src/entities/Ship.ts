@@ -16,7 +16,7 @@ export type ShipState =
 
 /**
  * Ship が 1 フレームの判断時に参照するワールド情報。
- * ブロック実行系の Executor も同じ World を受け取る。
+ * コード実行系の Executor も同じ World を受け取る。
  */
 export interface ShipWorld {
   readonly base: Base;
@@ -28,7 +28,7 @@ export interface ShipWorld {
 
 /**
  * Behavior 抽象。
- * ブロック実行系の Executor (`src/program/Executor.ts`) がこれを実装し、
+ * コード実行系の Executor (`src/program/Executor.ts`) がこれを実装し、
  * `ship.setBehavior()` で差し込まれる。
  */
 export interface ShipBehavior {
@@ -41,7 +41,7 @@ export interface ShipBehavior {
  *
  * 低レベル命令 API (moveTo / mineAt / depositAt / attackNearest / stop) は
  * 「目標を設定するだけ」で、実際の進行は update() 内で行う。
- * これを Behavior (ブロック実行系の Executor) が呼び出す。
+ * これを Behavior (コード実行系の Executor) が呼び出す。
  */
 export class Ship {
   public x: number;
@@ -158,7 +158,7 @@ export class Ship {
   /**
    * Phase 3: 指定した敵に対して即 1 発発射する (cooldown は無し)。
    * 射程外 / dead 敵 / エネルギー不足 (Phase 4) には何もしない。
-   * 連射ペースは ATTACK_NEAREST ブロックの持続時間と REPEAT で囲む構造で表現する。
+   * 連射ペースは ATTACK_NEAREST コードの持続時間と REPEAT で囲む構造で表現する。
    */
   public fireAt(enemy: Enemy, bullets: Bullet[]): boolean {
     if (enemy.dead) return false;
@@ -250,7 +250,7 @@ export class Ship {
       this.behavior.tick(delta, this, world);
     }
 
-    // Phase 3: cooldown 駆動の自動発射は撤廃。発射は ATTACK_NEAREST ブロックが ship.fireAt を直接呼ぶ。
+    // Phase 3: cooldown 駆動の自動発射は撤廃。発射は ATTACK_NEAREST コードが ship.fireAt を直接呼ぶ。
     // 死亡したターゲット参照だけここで掃除する。
     if (this.attackTarget && this.attackTarget.dead) {
       this.attackTarget = null;

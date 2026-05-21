@@ -1,4 +1,4 @@
-import type { Block, BlockStepResult } from '../Block';
+import type { Code, CodeStepResult } from '../Code';
 import type { Ship, ShipWorld } from '../../entities/Ship';
 import { LOCATION_LABELS, resolveLocation } from '../locations';
 
@@ -13,13 +13,13 @@ const ARRIVE_THRESHOLD = 4;
  * 座標解決は `resolveLocation` で行う。Phase 2 でこの方式に変更。
  */
 export function tickMoveTo(
-  block: Extract<Block, { type: 'MOVE_TO' }>,
+  code: Extract<Code, { type: 'MOVE_TO' }>,
   ship: Ship,
   world: ShipWorld
-): BlockStepResult {
-  const pos = resolveLocation(block.target, world);
+): CodeStepResult {
+  const pos = resolveLocation(code.target, world);
   if (!pos) {
-    return { status: 'blocked', reason: `${LOCATION_LABELS[block.target]} が解決できない` };
+    return { status: 'blocked', reason: `${LOCATION_LABELS[code.target]} が解決できない` };
   }
   if (ship.isAt(pos, ARRIVE_THRESHOLD)) {
     return { status: 'done' };

@@ -8,9 +8,9 @@
 
 ## 1. このゲームの一行説明
 
-**プレイヤーがブロックを組んで宇宙船をプログラミングし、襲来する敵から基地を守る、宇宙テーマのタワーディフェンス。**
+**プレイヤーがコードを組んで宇宙船をプログラミングし、襲来する敵から基地を守る、宇宙テーマのタワーディフェンス。**
 
-ジャンルとしては TD だが、**プレイヤー体験のコアは「ブロックを組む」こと**。タワーで自動迎撃しているだけでは惑星から資源は採れず、宇宙船は動かず、難易度上昇に対応できない。
+ジャンルとしては TD だが、**プレイヤー体験のコアは「コードを組む」こと**。タワーで自動迎撃しているだけでは惑星から資源は採れず、宇宙船は動かず、難易度上昇に対応できない。
 
 ---
 
@@ -20,27 +20,27 @@
 
 これが本作の中核。
 
-- Ship は購入しても `Program` (ブロック列) が割り当てられなければ **何もしない**。基地横で待機するだけ。
-- 移動 (`MOVE_TO`)、採掘 (`MINE`)、納品 (`DEPOSIT`)、攻撃 (`ATTACK_NEAREST`)、すべて **ブロックが明示的に呼ばないと発動しない**。
+- Ship は購入しても `Program` (コード列) が割り当てられなければ **何もしない**。基地横で待機するだけ。
+- 移動 (`MOVE_TO`)、採掘 (`MINE`)、納品 (`DEPOSIT`)、攻撃 (`ATTACK_NEAREST`)、すべて **コードが明示的に呼ばないと発動しない**。
 - 「とりあえず採掘ループに入る」ような **内蔵 AI は存在しない**。
-- プレイヤーが「ブロックを組んで動かす」というアクションを能動的に取ることが、ゲーム成立の必須条件。
+- プレイヤーが「コードを組んで動かす」というアクションを能動的に取ることが、ゲーム成立の必須条件。
 
 この原則を曲げる実装は禁止 (例: 「未プログラム Ship のためのデフォルト挙動」のフォールバック等)。
 
-### 2.2 TD レイヤは「**背景**」、ブロックレイヤは「**前景**」
+### 2.2 TD レイヤは「**背景**」、コードレイヤは「**前景**」
 
 | レイヤ | 内容 | プレイヤー操作 |
 |---|---|---|
 | 背景 (TD) | 敵 Wave / タワー自動迎撃 / 基地 HP / クレジット経済 | 受動的 (時間経過で進行) |
-| **前景 (ブロック)** | **Ship のプログラム作成・編集・実行** | **能動的 (これが遊びの中心)** |
+| **前景 (コード)** | **Ship のプログラム作成・編集・実行** | **能動的 (これが遊びの中心)** |
 
-プレイヤーが何もしないと、TD は進行するが Ship は動かず、いずれ基地が落ちる。**ブロックを組むことが攻略**。
+プレイヤーが何もしないと、TD は進行するが Ship は動かず、いずれ基地が落ちる。**コードを組むことが攻略**。
 
 ### 2.3 自動迎撃は基地砲塔のみ (Phase 5 後の判断)
 
 - かつてはタワーが自動迎撃を担っていたが、Phase 5 後にタワーを廃止し **基地そのものに固定砲塔を内蔵** (§6.16)。射程リングは常時表示。
 - 基地砲塔は **「基地の自動防衛装置」**、Ship は **「プレイヤーがプログラムする働き手」** という役割分離は維持。
-- ブロックで組まない自動装置は基地砲塔 1 つだけに集約され、それ以外の能動的攻撃はすべてブロックで組む。
+- コードで組まない自動装置は基地砲塔 1 つだけに集約され、それ以外の能動的攻撃はすべてコードで組む。
 
 ---
 
@@ -48,21 +48,21 @@
 
 | 用語 | 意味 | 実装上の対応 |
 |---|---|---|
-| **Block** | プログラムの 1 ステップ。`MOVE_TO` / `MINE` / `DEPOSIT` / `ATTACK_NEAREST` / `WAIT_UNTIL_FULL` / `REPEAT` の 6 種 | `src/program/Block.ts` の discriminated union |
-| **Program** | Block の配列 + 実行カーソル状態 | `src/program/Program.ts` |
+| **Code** | プログラムの 1 ステップ。`MOVE_TO` / `MINE` / `DEPOSIT` / `ATTACK_NEAREST` / `WAIT_UNTIL_FULL` / `REPEAT` の 6 種 (旧称「ブロック」、Phase 6 で改称) | `src/program/Code.ts` の discriminated union |
+| **Program** | Code の配列 + 実行カーソル状態 | `src/program/Program.ts` |
 | **Executor** | Program を 1 ティックごとに解釈し、Ship の命令的 API を呼ぶ実行器 | `src/program/Executor.ts` (`ShipBehavior` を実装) |
 | **Behavior** | Ship を動かす意思決定主体の抽象。`tick(delta, ship, world)` を持つ | `src/entities/Ship.ts` の `ShipBehavior` interface |
 | **Ship 命令的 API** | `moveTo` / `mineAt` / `depositAt` / `attackNearest` / `stop` — 低レベルの「目標設定」メソッド。誰がいつ呼んでもよい | `src/entities/Ship.ts` の public メソッド |
 | **World** | Behavior / Executor がワールド状態を見るためのインタフェース (`base/planets/enemies/bullets/economy`) | `ShipWorld` interface |
 
-**重要**: `Behavior` は Ship の挙動を担う抽象クラス、`Executor` はその具象実装の 1 つ。「ブロックを解釈する Behavior」が Executor。
+**重要**: `Behavior` は Ship の挙動を担う抽象クラス、`Executor` はその具象実装の 1 つ。「コードを解釈する Behavior」が Executor。
 
 ---
 
 ## 4. アーキテクチャの要点 (詳細はコードを読む前提)
 
 ```
-[Block] (データ)
+[Code] (データ)
    ↓ 並べる
 [Program]  (実行カーソル付き配列)
    ↓ tick で解釈
@@ -72,12 +72,12 @@
    ↑ tick ごとに 1 ステップ進行 / 命令 API 呼び出しでターゲットを更新
 ```
 
-- Ship は **「目標 (`moveTarget`/`mineTarget` 等) を持ち、毎フレーム 1 ステップ進める」** 設計。命令的 API は「目標を設定するだけ」で同期的に完了しない。これにより Executor 側の「ブロック完了判定」が必要になる (例: `MOVE_TO` ブロックは Ship が到達するまで `done = false` を返し続ける)。
+- Ship は **「目標 (`moveTarget`/`mineTarget` 等) を持ち、毎フレーム 1 ステップ進める」** 設計。命令的 API は「目標を設定するだけ」で同期的に完了しない。これにより Executor 側の「コード完了判定」が必要になる (例: `MOVE_TO` コードは Ship が到達するまで `done = false` を返し続ける)。
 - Bullet は Tower と Ship で共用 (`src/entities/Bullet.ts`)。
 
 ### 拡張ポイント (1 ファイル 1 種の原則)
 
-**ブロックは 1 ファイル 1 種**で `src/program/blocks/` 配下に置く。新しいブロックを追加するときは新規ファイルを 1 つ作るだけで完結する設計を維持する。Executor 本体や Block 型を毎回触るような構造にはしない (discriminated union は中央の Block.ts に、各 block の評価ロジックは blocks/<name>.ts に分散させる)。
+**コードは 1 ファイル 1 種**で `src/program/codes/` 配下に置く。新しいコードを追加するときは新規ファイルを 1 つ作るだけで完結する設計を維持する。Executor 本体や Code 型を毎回触るような構造にはしない (discriminated union は中央の Code.ts に、各 code の評価ロジックは codes/<name>.ts に分散させる)。
 
 ---
 
@@ -86,9 +86,9 @@
 | Phase | 内容 | 状態 |
 |---|---|---|
 | **基盤層** | Boot/Menu/Game/GameOver/Victory + Base/Tower/Enemy/Bullet/Planet/Ship + Wave/Spawn/Economy + HUD/ShopPanel | ✅ 完了 (旧 A-D) |
-| **Phase 1** | ブロック実行系 (UI なし): `Block`/`Program`/`Executor` + 3 種 (`MOVE_TO`/`MINE`/`DEPOSIT`)。`AutoMineBehavior` 削除 | ✅ 完了 |
-| **Phase 2** | ブロック編集 UI (`ProgramEditorScene` + `BlockPalette` / `ProgramList` / `BlockParamEditor`)。並行オーバーレイでライブ編集 | ✅ 完了 |
-| **Phase 3** | 残り 3 ブロック (`ATTACK_NEAREST` / `WAIT_UNTIL_FULL` / `REPEAT`)。Executor をスタック実行モデルに刷新、Ship cooldown 撤廃 | ✅ 完了 |
+| **Phase 1** | コード実行系 (UI なし): `Code`/`Program`/`Executor` + 3 種 (`MOVE_TO`/`MINE`/`DEPOSIT`)。`AutoMineBehavior` 削除 | ✅ 完了 |
+| **Phase 2** | コード編集 UI (`ProgramEditorScene` + `CodePalette` / `ProgramList` / `CodeParamEditor`)。並行オーバーレイでライブ編集 | ✅ 完了 |
+| **Phase 3** | 残り 3 コード (`ATTACK_NEAREST` / `WAIT_UNTIL_FULL` / `REPEAT`)。Executor をスタック実行モデルに刷新、Ship cooldown 撤廃 | ✅ 完了 |
 | **Phase 4** | 統合と難易度調整: 射撃エネルギー消費、敵 3 種化、Program 永続化、惑星リスポーン、バランス調整 | ✅ 完了 |
 | **Phase 5** | 仕上げ: 演出強化 (シーン遷移・フラッシュ・バナー)、配色統一 (COLORS 拡張)、README 整備 | ✅ 完了 (**MVP 達成**) |
 

@@ -1,4 +1,4 @@
-import type { BlockStepResult } from '../Block';
+import type { CodeStepResult } from '../Code';
 import type { Ship, ShipWorld } from '../../entities/Ship';
 
 /**
@@ -10,7 +10,7 @@ import type { Ship, ShipWorld } from '../../entities/Ship';
  * 前提: 呼び出し前に MOVE_TO で基地へ到達していること。範囲外なら Ship 側が
  * 納品しないため running のまま留まる。
  */
-export function tickDeposit(ship: Ship, world: ShipWorld): BlockStepResult {
+export function tickDeposit(ship: Ship, world: ShipWorld): CodeStepResult {
   if (ship.inventory === 0) {
     return { status: 'done' };
   }

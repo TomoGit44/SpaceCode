@@ -72,7 +72,7 @@ export const SHIP = {
   depositRadius: 12,         // base.radius + これで納品判定
   damagePerShot: 8,          // attackNearest 時の弾威力
   energyPerShot: 5,          // Phase 4: 射撃 1 発あたりエネルギー消費 (energy 100 で 20 発)
-  attackDurationMs: 500,     // Phase 4: ATTACK_NEAREST ブロック 1 回ぶんの持続時間 (Phase 3 の 600 から短縮)
+  attackDurationMs: 500,     // Phase 4: ATTACK_NEAREST コード 1 回ぶんの持続時間 (Phase 3 の 600 から短縮)
   bulletSpeed: 380,          // 攻撃弾速 (タワーより遅め)
   attackRange: 220,          // attackNearest の射程
   refuelOnDeposit: true,     // 納品時に energy 全回復するか

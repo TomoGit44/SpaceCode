@@ -1,4 +1,4 @@
-import type { BlockStepResult } from '../Block';
+import type { CodeStepResult } from '../Code';
 import type { Ship } from '../../entities/Ship';
 
 /**
@@ -9,6 +9,6 @@ import type { Ship } from '../../entities/Ship';
  *
  * 副作用なし: 状態確認のみ。
  */
-export function tickWaitUntilFull(ship: Ship): BlockStepResult {
+export function tickWaitUntilFull(ship: Ship): CodeStepResult {
   return ship.isInventoryFull() ? { status: 'done' } : { status: 'running' };
 }

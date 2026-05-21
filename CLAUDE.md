@@ -8,7 +8,7 @@
 
 ## プロジェクト概要
 
-**SpaceCode** — **プレイヤーがブロックで宇宙船をプログラミングし、襲来する敵から基地を守る、宇宙テーマのタワーディフェンス**。一人プレイのブラウザゲーム MVP。
+**SpaceCode** — **プレイヤーがコードで宇宙船をプログラミングし、襲来する敵から基地を守る、宇宙テーマのタワーディフェンス**。一人プレイのブラウザゲーム MVP。
 
 - **ユーザー**: 日本語ネイティブのゲーム企画者。**日本語で応答すること**。
 - **技術スタック**: TypeScript 5.5 (strict) + Phaser 3.90 + Vite 5.4
@@ -19,7 +19,7 @@
 
 ## コア原則 (絶対に守る)
 
-**プログラムを組まないと Ship は動かない。** これが本作の中核。移動・採掘・攻撃すべてブロックが明示的に呼ばないと発動しない。内蔵 AI / フォールバック挙動は禁止。詳細は [`docs/DESIGN.md`](docs/DESIGN.md) §2。
+**プログラムを組まないと Ship は動かない。** これが本作の中核。移動・採掘・攻撃すべてコードが明示的に呼ばないと発動しない。内蔵 AI / フォールバック挙動は禁止。詳細は [`docs/DESIGN.md`](docs/DESIGN.md) §2。
 
 ---
 
@@ -28,9 +28,9 @@
 | Phase | 内容 | 状態 |
 |---|---|---|
 | 基盤層 | Boot/Menu/Game/GameOver/Victory + Base/Tower/Enemy/Bullet/Planet/Ship + Wave/Spawn/Economy + HUD/ShopPanel | ✅ 完了 (旧 Phase A-D) |
-| **Phase 1** | **ブロック実行系**: `Block`/`Program`/`Executor` + 3 種 (`MOVE_TO`/`MINE`/`DEPOSIT`) | ✅ 完了 |
-| **Phase 2** | **ブロック編集 UI**: `ProgramEditorScene` (並行 active オーバーレイ) + 3 UI コンポーネント。Ship クリック → ライブ編集 | ✅ 完了 |
-| **Phase 3** | **残り 3 ブロック + 制御フロー**: `ATTACK_NEAREST` / `WAIT_UNTIL_FULL` / `REPEAT` (ネスト構造)。Executor スタック化、Ship cooldown 撤廃 | ✅ 完了 |
+| **Phase 1** | **コード実行系**: `Code`/`Program`/`Executor` + 3 種 (`MOVE_TO`/`MINE`/`DEPOSIT`) | ✅ 完了 |
+| **Phase 2** | **コード編集 UI**: `ProgramEditorScene` (並行 active オーバーレイ) + 3 UI コンポーネント。Ship クリック → ライブ編集 | ✅ 完了 |
+| **Phase 3** | **残り 3 コード + 制御フロー**: `ATTACK_NEAREST` / `WAIT_UNTIL_FULL` / `REPEAT` (ネスト構造)。Executor スタック化、Ship cooldown 撤廃 | ✅ 完了 |
 | **Phase 4** | **統合と難易度調整 / ローカルセーブ**: 射撃エネルギー消費、敵 3 種化 (basic/fast/tank)、Ship Program 永続化 (localStorage)、惑星 60s リスポーン、Wave/経済バランス調整 | ✅ 完了 |
 | **Phase 5** | **仕上げ**: 演出強化 (シーン遷移・フラッシュ・バナーイージング)、配色 hardcoded → `COLORS` 統一、README 整備 | ✅ 完了 |
 
@@ -134,13 +134,13 @@ src/
 │   ├── Bullet.ts           # 対象ホーミング (基地砲塔/Ship 共用)
 │   ├── Planet.ts           # 資源源。extract API + 残量リング/バー
 │   └── Ship.ts             # 命令的 API (moveTo/mineAt/depositAt/attackNearest/stop) + setBehavior
-├── program/                # ブロック実行系 (Phase 1+2+3 完了。6 種揃った)
-│   ├── Block.ts            # Discriminated union (6 種、名前付き地点 + REPEAT ネスト) + BlockType + createBlock + BlockStepResult
-│   ├── Program.ts          # 配列 + カーソル。append/insert/removeAt/replaceBlock/moveUp/moveDown (root scope カーソル追従)
-│   ├── Executor.ts         # implements ShipBehavior。スタック実行モデル + BlockExecContext + REPEAT ハンドリング
+├── program/                # コード実行系 (Phase 1+2+3 完了。6 種揃った)
+│   ├── Code.ts             # Discriminated union (6 種、名前付き地点 + REPEAT ネスト) + CodeType + createCode + CodeStepResult
+│   ├── Program.ts          # 配列 + カーソル。append/insert/removeAt/replaceCode/moveUp/moveDown (root scope カーソル追従)
+│   ├── Executor.ts         # implements ShipBehavior。スタック実行モデル + CodeExecContext + REPEAT ハンドリング
 │   ├── locations.ts        # LocationId / PlanetId 型 + ラベル + resolver (ShipWorld を type-only import)
-│   ├── samples.ts          # sampleBlocks() (BlockPalette「サンプル読み込み」が使う。REPEAT 入り)
-│   └── blocks/             # 1 ファイル 1 種 (MoveTo / Mine / Deposit / AttackNearest / WaitUntilFull / Repeat)
+│   ├── samples.ts          # sampleCodes() (CodePalette「サンプル読み込み」が使う。REPEAT 入り)
+│   └── codes/              # 1 ファイル 1 種 (MoveTo / Mine / Deposit / AttackNearest / WaitUntilFull / Repeat)
 ├── systems/                # 横断的なロジック
 │   ├── SpawnSystem.ts      # `spawnAtRandomEdge()` で 1 体生成 (時間管理はしない)
 │   ├── WaveSystem.ts       # Phase 状態機械 (preparing/spawning/clearing/intermission/victory)
@@ -148,9 +148,9 @@ src/
 ├── ui/
 │   ├── HUD.ts              # HP/クレジット/Phase + 中央バナー + クレジット増減ポップ
 │   ├── ShopPanel.ts        # 画面下端 [宇宙船 $70] (タワーは Phase 5 後に廃止)
-│   ├── BlockPalette.ts     # 編集 UI 左カラム: ブロック追加 + サンプル読み込み + 閉じる
-│   ├── ProgramList.ts      # 編集 UI 中央: ブロック行 + ▲▼✕ + 走行中マーカー
-│   └── BlockParamEditor.ts # 編集 UI 右: LocationId/PlanetId チップ選択
+│   ├── CodePalette.ts      # 編集 UI 左カラム: コード追加 + サンプル読み込み + 閉じる
+│   ├── ProgramList.ts      # 編集 UI 中央: コード行 + ▲▼✕ + 走行中マーカー
+│   └── CodeParamEditor.ts  # 編集 UI 右: LocationId/PlanetId チップ選択
 └── utils/
     ├── starfield.ts        # 星空背景描画ヘルパ
     └── save.ts             # Ship Program の localStorage 永続化 (Phase 4)
@@ -158,7 +158,7 @@ src/
 
 ### 設計原則 (重要)
 
-1. **ブロックは 1 ファイル 1 種 (本作のコア)**: `src/program/blocks/<NAME>.ts` を新規追加するだけで新ブロックを足せる構造を維持。Executor / Block 型を毎回触る作りにはしない。
+1. **コードは 1 ファイル 1 種 (本作のコア)**: `src/program/codes/<NAME>.ts` を新規追加するだけで新コードを足せる構造を維持。Executor / Code 型を毎回触る作りにはしない。
 2. **`Ship` は命令的 API のみ持つ**: 「目標設定するだけ」のメソッド (`moveTo` 等)。意思決定は `ShipBehavior` (= Executor) に任せる。
 3. **systems は責務単位**: 経済・Wave・スポーン・ダメージを混ぜない。
 4. **scenes は薄く**: 大きなロジックは entities / systems / program に委譲。
@@ -170,7 +170,7 @@ src/
 
 ## ゲームデザイン要点
 
-- **コア体験**: ブロックを組んで Ship をプログラム → 敵 Wave に対抗。プログラム未割り当ての Ship は何もしない。
+- **コア体験**: コードを組んで Ship をプログラム → 敵 Wave に対抗。プログラム未割り当ての Ship は何もしない。
 - **基地 (Base)**: 中央固定。HP=100。0 でゲームオーバー。資源納品先。**Phase 5 後: 固定砲塔を内蔵** — 射程 260 / 12 ダメ × 1.25Hz、`BASE_TURRET` で集約。射程リングが常時可視化される。
 - **タワー (廃止)**: Phase 5 後にタワーは撤廃され、自動迎撃は基地砲塔に統合された。`Tower` クラス・ShopPanel の「タワー」ボタン・設置モードは無い。
 - **宇宙船**: 命令的 API (`moveTo/mineAt/depositAt/attackNearest/fireAt/stop`) + `ShipBehavior` 差し替え。HP 30 / エネ 100 / コスト $70 / インベントリ 20。Phase 3 で cooldown 自動発射を撤廃 (連射は `REPEAT { ATTACK_NEAREST }` で表現)。Phase 4 で射撃エネルギー消費を追加 (5/shot)。
@@ -179,7 +179,7 @@ src/
 - **エネルギー**: 宇宙船のみ。移動中 2/s 消費 + 射撃 5/shot 消費。0 で停止 (stalled)。基地納品で全回復。
 - **Ship Program 永続化 (Phase 4)**: 編集のたびに `localStorage['spacecode.shipTemplate']` へ保存。新規 Ship 購入時に自動投入。リトライ時にも引き継ぎ。
 - **Wave 構成**: 1 Stage = 5 Phase。`config.ts` の `PHASES` を参照。
-- **ブロック (MVP 6 種)**: `MOVE_TO` / `MINE` / `DEPOSIT` / `ATTACK_NEAREST` / `WAIT_UNTIL_FULL` / `REPEAT`。REPEAT はネスト構造 (`{ times, children }`) で **特定の行動を N 回繰り返したい時に使う**、ATTACK_NEAREST は持続時間ブロック (`SHIP.attackDurationMs`)。
+- **コード (MVP 6 種)**: `MOVE_TO` / `MINE` / `DEPOSIT` / `ATTACK_NEAREST` / `WAIT_UNTIL_FULL` / `REPEAT`。REPEAT はネスト構造 (`{ times, children }`) で **特定の行動を N 回繰り返したい時に使う**、ATTACK_NEAREST は持続時間コード (`SHIP.attackDurationMs`)。
 - **自動ループ (Phase 5 後)**: Program は **置いただけで先頭 → 末尾 → 先頭 → … と無限にループ** する (Executor root frame が末尾でループバック)。プログラム全体を `REPEAT` で囲む必要はない。空 Program のみ idle。
 
 > ※「Phase」が二重に登場する: **Wave Phase** (敵編成の段階。1 Stage 中で進行) と **開発 Phase** (実装ロードマップ)。コード内では `Wave Phase` を指す。本ドキュメントでは「開発 Phase」と明示する。
@@ -189,7 +189,7 @@ src/
 ## 既知の制限・注意点
 
 - **基地砲塔のみで防衛**: Phase 5 後にタワーを廃止し、自動迎撃は基地中心の砲塔 1 基のみ (射程 260)。射程外から来る敵は宇宙船で迎撃する設計。
-- **惑星リソース 60s リスポーン** (Phase 4): 枯渇中は `MINE` ブロックが `blocked` で停止、リスポーン後に再開。
+- **惑星リソース 60s リスポーン** (Phase 4): 枯渇中は `MINE` コードが `blocked` で停止、リスポーン後に再開。
 - **Phaser バンドル 1.5MB** (gzip 354KB): Phase 5 後の継続課題で dynamic import を検討。
 - **PowerShell 5.1 環境**: `&&` 使えない / `2>&1` で native exe が NativeCommandError 化。Bash ツール併用 or PowerShell ネイティブ構文。
 - **Preview MCP の screenshot** は WebGL ページでハングする。`preview_console_logs` で確認する。
@@ -201,7 +201,7 @@ src/
 - **日本語で応答**
 - 選択肢がある場合は `AskUserQuestion` で提示
 - 各 Phase 完了時は: 作成/変更ファイル一覧、検証結果 (typecheck/build)、設計書からの逸脱、次フェーズへの確認 を簡潔に提示
-- **コア体験 (ブロックがゲームの中心) を優先する判断は歓迎**。Phase 計画はガイドであり、コア体験の遅延に気付いたら順序を組み替える判断を取って構わない (ただしユーザー承認を取る)
+- **コア体験 (コードがゲームの中心) を優先する判断は歓迎**。Phase 計画はガイドであり、コア体験の遅延に気付いたら順序を組み替える判断を取って構わない (ただしユーザー承認を取る)
 - 大きな方針転換 (Phase 構成変更等) は `docs/DESIGN.md` を更新して履歴として残す
 
 ---

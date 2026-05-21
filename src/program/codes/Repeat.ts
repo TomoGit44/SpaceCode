@@ -2,8 +2,8 @@
  * REPEAT の評価ロジックは Executor のスタック制御が直接担当するため、
  * このファイルには tick 関数を置かない (Executor の switch から呼ばれることはない設計)。
  *
- * 1 ファイル 1 種の慣習を保つため、ブロック種別ごとの仕様をここに集約する:
- *  - `{ type: 'REPEAT'; times: number; children: Block[] }`
+ * 1 ファイル 1 種の慣習を保つため、コード種別ごとの仕様をここに集約する:
+ *  - `{ type: 'REPEAT'; times: number; children: Code[] }`
  *  - `times === 0` または `children.length === 0` のとき即スキップ (push せず通過)
  *  - children は Executor のスタック上で別フレームとして実行される
  *  - children 自体に REPEAT を含めて入れ子可能 (スタックが深くなる)

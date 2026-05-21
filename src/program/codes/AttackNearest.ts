@@ -1,10 +1,10 @@
 import { SHIP } from '../../config';
-import type { BlockStepResult } from '../Block';
+import type { CodeStepResult } from '../Code';
 import type { Ship, ShipWorld } from '../../entities/Ship';
-import type { BlockExecContext } from '../Executor';
+import type { CodeExecContext } from '../Executor';
 
 /**
- * ATTACK_NEAREST — 最寄りの敵を 1 発撃って、ブロック持続時間 (SHIP.attackDurationMs)
+ * ATTACK_NEAREST — 最寄りの敵を 1 発撃って、コード持続時間 (SHIP.attackDurationMs)
  * が経過するまで `running` で留まる。連射は REPEAT で囲んで実現する。
  *
  * - 入った最初の tick (`justEntered`) で `attackNearest` してターゲット設定 + `fireAt` で 1 発発射
@@ -14,8 +14,8 @@ import type { BlockExecContext } from '../Executor';
 export function tickAttackNearest(
   ship: Ship,
   world: ShipWorld,
-  ctx: BlockExecContext
-): BlockStepResult {
+  ctx: CodeExecContext
+): CodeStepResult {
   if (ctx.justEntered) {
     ship.attackNearest(world.enemies);
     const target = ship.getAttackTarget();

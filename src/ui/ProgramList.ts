@@ -1,13 +1,13 @@
 import Phaser from 'phaser';
 import { COLORS } from '../config';
-import type { Block } from '../program/Block';
+import type { Code } from '../program/Code';
 import { LOCATION_LABELS } from '../program/locations';
 
 const FONT = 'system-ui, "Segoe UI", sans-serif';
 const ROW_HEIGHT = 36;
 const ROW_GAP = 4;
 const INDENT_PX = 18;        // ネスト 1 段あたりの左インデント
-const BRACKET_GAP = 4;       // 罫線とブロック本体の間隔
+const BRACKET_GAP = 4;       // 罫線とコード本体の間隔
 
 export interface ProgramListEvents {
   select: (path: number[]) => void;
@@ -16,12 +16,12 @@ export interface ProgramListEvents {
   remove: (path: number[]) => void;
 }
 
-function blockLabel(block: Block): string {
-  switch (block.type) {
+function codeLabel(code: Code): string {
+  switch (code.type) {
     case 'MOVE_TO':
-      return `移動 → ${LOCATION_LABELS[block.target]}`;
+      return `移動 → ${LOCATION_LABELS[code.target]}`;
     case 'MINE':
-      return `採掘: ${LOCATION_LABELS[block.target]}`;
+      return `採掘: ${LOCATION_LABELS[code.target]}`;
     case 'DEPOSIT':
       return '納品';
     case 'ATTACK_NEAREST':
@@ -29,20 +29,20 @@ function blockLabel(block: Block): string {
     case 'WAIT_UNTIL_FULL':
       return '満タンまで待機';
     case 'REPEAT':
-      return `繰り返し × ${block.times}`;
+      return `繰り返し × ${code.times}`;
   }
 }
 
-/** Row 展開時の各エントリ。1 ブロック = 1 row として表現。 */
+/** Row 展開時の各エントリ。1 コード = 1 row として表現。 */
 interface Row {
-  block: Block;
+  code: Code;
   path: number[];
   depth: number;          // ネスト深さ (0 = root)
   parentRow: Row | null;  // 親 REPEAT 行への参照 (罫線描画用)
 }
 
 /**
- * 編集オーバーレイ中央: ブロック一覧を **階層構造で** 縦に並べる。
+ * 編集オーバーレイ中央: コード一覧を **階層構造で** 縦に並べる。
  *
  * Phase 5 後 (インライン階層編集):
  * REPEAT のネストを drill-in せず、その場でインデント + 罫線で囲んで表現する。
@@ -51,7 +51,7 @@ interface Row {
  *   │  [移動 → 基地]    ▲ ▼ ✕
  *   └────────────────────
  *
- * 罫線 (縦線 + 閉じ線) は Graphics で描画。ブロック本体は Rectangle + Text。
+ * 罫線 (縦線 + 閉じ線) は Graphics で描画。コード本体は Rectangle + Text。
  */
 export class ProgramList {
   private scene: Phaser.Scene;
@@ -86,23 +86,23 @@ export class ProgramList {
   }
 
   /**
-   * 描画。ブロック列を再帰展開し、行を順次レイアウトする。
+   * 描画。コード列を再帰展開し、行を順次レイアウトする。
    *
-   * @param blocks root の Block[]
-   * @param selectedPath 選択中ブロックの path (null = 未選択)
-   * @param runningPath 走行中ブロックの path (null = idle / 末尾停止)
+   * @param codes root の Code[]
+   * @param selectedPath 選択中コードの path (null = 未選択)
+   * @param runningPath 走行中コードの path (null = idle / 末尾停止)
    */
   public render(
-    blocks: ReadonlyArray<Block>,
+    codes: ReadonlyArray<Code>,
     selectedPath: number[] | null,
     runningPath: number[] | null
   ): void {
     this.clearRows();
     this.bracketGfx.clear();
 
-    if (blocks.length === 0) {
+    if (codes.length === 0) {
       const t = this.scene.add
-        .text(this.x + this.width / 2, this.y + 60, '(ブロックがありません — 左から追加してください)', {
+        .text(this.x + this.width / 2, this.y + 60, '(コードがありません — 左から追加してください)', {
           fontFamily: FONT,
           fontSize: '14px',
           color: '#6b7da0',
@@ -126,7 +126,7 @@ export class ProgramList {
       .setDepth(3);
     this.rowObjects.push(startMarker);
 
-    const rows = this.expandRows(blocks, 0, [], null);
+    const rows = this.expandRows(codes, 0, [], null);
 
     // 各行を描画 + REPEAT スコープの top/bottom y を集計
     const scopeBounds = new Map<Row, { topY: number; bottomY: number }>();
@@ -140,7 +140,7 @@ export class ProgramList {
       lastRowBottomY = rowY + ROW_HEIGHT;
 
       // この row が REPEAT なら、bounds を初期化 (topY だけ確定)
-      if (row.block.type === 'REPEAT') {
+      if (row.code.type === 'REPEAT') {
         scopeBounds.set(row, { topY: rowY, bottomY: rowY + ROW_HEIGHT });
       }
 
@@ -186,20 +186,20 @@ export class ProgramList {
     g.fillTriangle(loopX - 4, topY2 + 6, loopX + 4, topY2 + 6, loopX, topY2);
   }
 
-  /** ブロック列を再帰展開して Row[] にする。 */
+  /** コード列を再帰展開して Row[] にする。 */
   private expandRows(
-    blocks: ReadonlyArray<Block>,
+    codes: ReadonlyArray<Code>,
     depth: number,
     parentPath: number[],
     parentRow: Row | null
   ): Row[] {
     const out: Row[] = [];
-    blocks.forEach((b, i) => {
+    codes.forEach((c, i) => {
       const path = [...parentPath, i];
-      const row: Row = { block: b, path, depth, parentRow };
+      const row: Row = { code: c, path, depth, parentRow };
       out.push(row);
-      if (b.type === 'REPEAT' && b.children.length > 0) {
-        out.push(...this.expandRows(b.children, depth + 1, path, row));
+      if (c.type === 'REPEAT' && c.children.length > 0) {
+        out.push(...this.expandRows(c.children, depth + 1, path, row));
       }
     });
     return out;
@@ -226,13 +226,13 @@ export class ProgramList {
   ): void {
     const selected = this.pathEq(row.path, selectedPath);
     const onCursor = this.pathEq(row.path, runningPath);
-    const isRepeat = row.block.type === 'REPEAT';
+    const isRepeat = row.code.type === 'REPEAT';
 
-    // ブロック本体の x 範囲
+    // コード本体の x 範囲
     const leftPad = row.depth * INDENT_PX + (row.depth > 0 ? BRACKET_GAP + 6 : 0);
     const rightBtnSpace = 26 * 3 + 6 * 2 + 8; // ▲ ▼ ✕ のスペース
-    const blockX = this.x + leftPad;
-    const blockW = this.width - leftPad - rightBtnSpace;
+    const codeX = this.x + leftPad;
+    const codeW = this.width - leftPad - rightBtnSpace;
 
     const bgColor = selected
       ? COLORS.ally
@@ -244,7 +244,7 @@ export class ProgramList {
     const bgAlpha = selected ? 0.22 : onCursor ? 0.16 : isRepeat ? 0.08 : 0.6;
 
     const bg = this.scene.add
-      .rectangle(blockX + blockW / 2, rowY + ROW_HEIGHT / 2, blockW, ROW_HEIGHT, bgColor, bgAlpha)
+      .rectangle(codeX + codeW / 2, rowY + ROW_HEIGHT / 2, codeW, ROW_HEIGHT, bgColor, bgAlpha)
       .setStrokeStyle(
         1,
         selected ? COLORS.ally : isRepeat ? COLORS.accent : COLORS.panelBorder,
@@ -260,7 +260,7 @@ export class ProgramList {
     // 走行中マーカー
     if (onCursor) {
       const m = this.scene.add
-        .text(blockX + 6, rowY + ROW_HEIGHT / 2, '▶', {
+        .text(codeX + 6, rowY + ROW_HEIGHT / 2, '▶', {
           fontFamily: FONT,
           fontSize: '14px',
           color: '#3ee0c5',
@@ -271,9 +271,9 @@ export class ProgramList {
       this.rowObjects.push(m);
     }
 
-    const labelX = blockX + (onCursor ? 22 : 10);
+    const labelX = codeX + (onCursor ? 22 : 10);
     const label = this.scene.add
-      .text(labelX, rowY + ROW_HEIGHT / 2, blockLabel(row.block), {
+      .text(labelX, rowY + ROW_HEIGHT / 2, codeLabel(row.code), {
         fontFamily: FONT,
         fontSize: '14px',
         color: '#cfd6e6',
@@ -305,13 +305,14 @@ export class ProgramList {
     );
   }
 
-  /** 親 scope のブロック総数 (▼ の有効/無効判定用) — Row.parentRow から計算。 */
+  /** 親 scope のコード総数 (▼ の有効/無効判定用) — Row.parentRow から計算。 */
   private parentLength(path: number[]): number {
-    // ProgramList は blocks を保持していないので、親の長さを直接求められない。
+    // ProgramList は codes を保持していないので、親の長さを直接求められない。
     // 代わりに「現在描画中の rows から path を比較して同じ scope に居る兄弟を数える」のが正攻法だが、
     // expandRows の戻り値を再走査するコストを避けるため、ここでは ▼ ボタンを常に有効化し
     // ProgramEditorScene 側で範囲外チェック (`moveDownAtPath`) する設計にする。
     // → 常に有効として「とりあえず ▼ を出す」。実際の no-op は scene 側で吸収。
+    void path;
     return Number.MAX_SAFE_INTEGER;
   }
 

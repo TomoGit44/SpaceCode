@@ -1,4 +1,4 @@
-import type { Block, BlockType } from '../program/Block';
+import type { Code, CodeType } from '../program/Code';
 import type { LocationId, PlanetId } from '../program/locations';
 import { Program } from '../program/Program';
 
@@ -7,7 +7,7 @@ import { Program } from '../program/Program';
  *
  * - 単一テンプレスロット (`spacecode.shipTemplate`) に最後に編集された Program を保存。
  * - 新規 Ship 購入時にロードして自動投入。リトライ時にも引き継がれる。
- * - Block 型は純粋データ (string / number / discriminated union のみ) なので
+ * - Code 型は純粋データ (string / number / discriminated union のみ) なので
  *   JSON 往復だけで足りる。REPEAT.children も再帰的にシリアライズされる。
  *
  * 安全側に倒した実装:
@@ -21,7 +21,7 @@ const SCHEMA_VERSION = 1;
 
 interface Saved {
   readonly version: number;
-  readonly blocks: Block[];
+  readonly codes: Code[];
 }
 
 /** localStorage に保存。失敗しても例外を投げない (静かに諦める)。 */
@@ -29,7 +29,7 @@ export function saveShipTemplate(program: Program): void {
   try {
     const payload: Saved = {
       version: SCHEMA_VERSION,
-      blocks: program.getBlocks().map(cloneBlock),  // 内部参照を切る
+      codes: program.getCodes().map(cloneCode),  // 内部参照を切る
     };
     window.localStorage.setItem(KEY, JSON.stringify(payload));
   } catch {
@@ -49,8 +49,8 @@ export function loadShipTemplate(): Program | null {
     const parsed = JSON.parse(raw) as Partial<Saved>;
     if (!parsed || typeof parsed !== 'object') return null;
     if (parsed.version !== SCHEMA_VERSION) return null;
-    if (!Array.isArray(parsed.blocks)) return null;
-    const safe = sanitizeBlocks(parsed.blocks as unknown[]);
+    if (!Array.isArray(parsed.codes)) return null;
+    const safe = sanitizeCodes(parsed.codes as unknown[]);
     return new Program(safe);
   } catch {
     return null;
@@ -68,7 +68,7 @@ export function clearShipTemplate(): void {
 
 // ─── 内部ヘルパ ────────────────────────────────────────────────
 
-const VALID_BLOCK_TYPES: ReadonlyArray<BlockType> = [
+const VALID_CODE_TYPES: ReadonlyArray<CodeType> = [
   'MOVE_TO', 'MINE', 'DEPOSIT', 'ATTACK_NEAREST', 'WAIT_UNTIL_FULL', 'REPEAT',
 ];
 const VALID_LOCATIONS: ReadonlyArray<LocationId> = ['base', 'planet0', 'planet1'];
@@ -78,16 +78,16 @@ function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null;
 }
 
-/** Block 配列を信頼境界を越えて来た JSON から型安全に拾い直す。 */
-function sanitizeBlocks(raw: unknown[]): Block[] {
-  const out: Block[] = [];
+/** Code 配列を信頼境界を越えて来た JSON から型安全に拾い直す。 */
+function sanitizeCodes(raw: unknown[]): Code[] {
+  const out: Code[] = [];
   for (const item of raw) {
     if (!isObject(item)) continue;
     const t = item.type;
     if (typeof t !== 'string') continue;
-    if (!VALID_BLOCK_TYPES.includes(t as BlockType)) continue;
+    if (!VALID_CODE_TYPES.includes(t as CodeType)) continue;
 
-    switch (t as BlockType) {
+    switch (t as CodeType) {
       case 'MOVE_TO': {
         const target = item.target;
         if (typeof target === 'string' && VALID_LOCATIONS.includes(target as LocationId)) {
@@ -118,7 +118,7 @@ function sanitizeBlocks(raw: unknown[]): Block[] {
           out.push({
             type: 'REPEAT',
             times: Math.max(1, Math.floor(times)),
-            children: sanitizeBlocks(children),
+            children: sanitizeCodes(children),
           });
         }
         break;
@@ -128,12 +128,12 @@ function sanitizeBlocks(raw: unknown[]): Block[] {
   return out;
 }
 
-/** Block を再帰的にディープコピー (保存時にライブ参照を切る)。 */
-function cloneBlock(b: Block): Block {
-  switch (b.type) {
+/** Code を再帰的にディープコピー (保存時にライブ参照を切る)。 */
+function cloneCode(c: Code): Code {
+  switch (c.type) {
     case 'REPEAT':
-      return { type: 'REPEAT', times: b.times, children: b.children.map(cloneBlock) };
+      return { type: 'REPEAT', times: c.times, children: c.children.map(cloneCode) };
     default:
-      return { ...b };
+      return { ...c };
   }
 }

@@ -2,13 +2,13 @@ import Phaser from 'phaser';
 import { GAME_WIDTH, GAME_HEIGHT, COLORS } from '../config';
 import type { Ship } from '../entities/Ship';
 import type { Program } from '../program/Program';
-import type { Block, BlockType } from '../program/Block';
-import { createBlock } from '../program/Block';
+import type { Code, CodeType } from '../program/Code';
+import { createCode } from '../program/Code';
 import { Executor } from '../program/Executor';
-import { sampleBlocks } from '../program/samples';
-import { BlockPalette } from '../ui/BlockPalette';
+import { sampleCodes } from '../program/samples';
+import { CodePalette } from '../ui/CodePalette';
 import { ProgramList } from '../ui/ProgramList';
-import { BlockParamEditor } from '../ui/BlockParamEditor';
+import { CodeParamEditor } from '../ui/CodeParamEditor';
 import { saveShipTemplate } from '../utils/save';
 
 const FONT = 'system-ui, "Segoe UI", sans-serif';
@@ -45,9 +45,9 @@ export class ProgramEditorScene extends Phaser.Scene {
   private backdrop!: Phaser.GameObjects.Rectangle;
   private card!: Phaser.GameObjects.Rectangle;
   private chrome: Phaser.GameObjects.GameObject[] = [];
-  private palette!: BlockPalette;
+  private palette!: CodePalette;
   private list!: ProgramList;
-  private paramEditor!: BlockParamEditor;
+  private paramEditor!: CodeParamEditor;
   private escHandler?: () => void;
 
   // レイアウト計算で使う領域
@@ -115,7 +115,7 @@ export class ProgramEditorScene extends Phaser.Scene {
       .text(
         this.cardLeft + 24,
         this.cardTop + 44,
-        'ブロックを置いた順に実行 → 末尾まで来たら自動で先頭にループ。「繰り返し」は N 回だけ繰り返したい時に使用。',
+        'コードを置いた順に実行 → 末尾まで来たら自動で先頭にループ。「繰り返し」は N 回だけ繰り返したい時に使用。',
         {
           fontFamily: FONT,
           fontSize: '12px',
@@ -141,12 +141,12 @@ export class ProgramEditorScene extends Phaser.Scene {
     const midX = leftX + leftW + colGap;
     const rightX = midX + midW + colGap;
 
-    this.palette = new BlockPalette(this, leftX, innerTop, leftW);
+    this.palette = new CodePalette(this, leftX, innerTop, leftW);
     this.list = new ProgramList(this, midX, innerTop, midW, innerHeight);
-    this.paramEditor = new BlockParamEditor(this, rightX, innerTop, rightW);
+    this.paramEditor = new CodeParamEditor(this, rightX, innerTop, rightW);
 
     // ─── 配線 ────────────────────────────────────────────────
-    this.palette.on('addBlock', (type: BlockType) => this.handleAddBlock(type));
+    this.palette.on('addCode', (type: CodeType) => this.handleAddCode(type));
     this.palette.on('loadSample', () => this.handleLoadSample());
     this.palette.on('close', () => this.close());
 
@@ -157,7 +157,7 @@ export class ProgramEditorScene extends Phaser.Scene {
     this.list.on('moveUp', (path: number[]) => this.handleMoveUp(path));
     this.list.on('moveDown', (path: number[]) => this.handleMoveDown(path));
     this.list.on('remove', (path: number[]) => this.handleRemove(path));
-    this.paramEditor.on('change', (block) => this.handleParamChange(block));
+    this.paramEditor.on('change', (code) => this.handleParamChange(code));
 
     // ─── ESC で閉じる ────────────────────────────────────────
     this.escHandler = () => this.close();
@@ -171,27 +171,27 @@ export class ProgramEditorScene extends Phaser.Scene {
   // ─── ハンドラ ───────────────────────────────────────────────
 
   /**
-   * 新規ブロックの挿入位置を決める:
+   * 新規コードの挿入位置を決める:
    *  - 何も選択されていなければ root scope の末尾
-   *  - 選択中ブロックが REPEAT なら、その children の末尾 (= REPEAT 内に追加)
-   *  - 選択中ブロックがそれ以外なら、選択ブロックの直後 (= 同じ scope の +1 位置)
+   *  - 選択中コードが REPEAT なら、その children の末尾 (= REPEAT 内に追加)
+   *  - 選択中コードがそれ以外なら、選択コードの直後 (= 同じ scope の +1 位置)
    */
-  private handleAddBlock(type: BlockType): void {
-    const block = createBlock(type);
+  private handleAddCode(type: CodeType): void {
+    const code = createCode(type);
     if (this.selectedPath === null) {
-      this.program.append(block);
+      this.program.append(code);
       this.selectedPath = [this.program.length - 1];
     } else {
-      const sel = this.program.getBlockAt(this.selectedPath);
+      const sel = this.program.getCodeAt(this.selectedPath);
       if (sel && sel.type === 'REPEAT') {
         // REPEAT を選択中: 中に追加
-        sel.children.push(block);
+        sel.children.push(code);
         this.selectedPath = [...this.selectedPath, sel.children.length - 1];
       } else {
         // 通常: 同じ scope の直後に挿入
         const parentPath = this.selectedPath.slice(0, -1);
         const insertIdx = this.selectedPath[this.selectedPath.length - 1]! + 1;
-        this.program.insertAtPath(parentPath, insertIdx, block);
+        this.program.insertAtPath(parentPath, insertIdx, code);
         this.selectedPath = [...parentPath, insertIdx];
       }
     }
@@ -203,7 +203,7 @@ export class ProgramEditorScene extends Phaser.Scene {
   private handleLoadSample(): void {
     // root scope を入れ替える (Program インスタンスは保持し、中身だけ差し替え)
     while (this.program.length > 0) this.program.removeAt(0);
-    for (const b of sampleBlocks()) this.program.append(b);
+    for (const c of sampleCodes()) this.program.append(c);
     this.selectedPath = null;
     this.persist();
     this.ensureRunning();
@@ -223,7 +223,7 @@ export class ProgramEditorScene extends Phaser.Scene {
   }
 
   private handleMoveDown(path: number[]): void {
-    const parent = this.program.getBlocksAtParent(path);
+    const parent = this.program.getCodesAtParent(path);
     if (!parent) return;
     const last = path[path.length - 1]!;
     if (last < parent.length - 1) {
@@ -264,9 +264,9 @@ export class ProgramEditorScene extends Phaser.Scene {
     this.refresh();
   }
 
-  private handleParamChange(block: Block): void {
+  private handleParamChange(code: Code): void {
     if (this.selectedPath === null) return;
-    this.program.replaceBlockAtPath(this.selectedPath, block);
+    this.program.replaceCodeAtPath(this.selectedPath, code);
     this.persist();
     this.ensureRunning();
     this.refresh();
@@ -280,7 +280,7 @@ export class ProgramEditorScene extends Phaser.Scene {
    * 編集の結果、Executor が末尾停止 (idle) だったら先頭から再実行する。
    *
    * 背景: root cursor が末尾に到達した Ship は `getRunningPath() === null` の idle 状態に落ち、
-   * その状態でブロックを追加・編集しても再評価されない (cursor は既に末尾を指している)。
+   * その状態でコードを追加・編集しても再評価されない (cursor は既に末尾を指している)。
    * 編集と同時に Ship を動かしたい (走行マーカーも表示したい) ので、idle 検知時のみ reset する。
    * 採掘・移動など実行中のときは無干渉でライブ編集が反映される。
    */
@@ -296,13 +296,13 @@ export class ProgramEditorScene extends Phaser.Scene {
   private refresh(): void {
     // 選択 path が不正なら null に
     if (this.selectedPath !== null) {
-      const b = this.program.getBlockAt(this.selectedPath);
-      if (!b) this.selectedPath = null;
+      const c = this.program.getCodeAt(this.selectedPath);
+      if (!c) this.selectedPath = null;
     }
     const runningPath = this.executor?.getRunningPath() ?? null;
     this.lastRunningPath = runningPath;
-    this.list.render(this.program.getBlocks(), this.selectedPath, runningPath);
-    const sel = this.selectedPath !== null ? this.program.getBlockAt(this.selectedPath) : null;
+    this.list.render(this.program.getCodes(), this.selectedPath, runningPath);
+    const sel = this.selectedPath !== null ? this.program.getCodeAt(this.selectedPath) : null;
     this.paramEditor.render(sel);
   }
 

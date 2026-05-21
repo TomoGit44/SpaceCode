@@ -1,21 +1,21 @@
 import type { Ship, ShipBehavior, ShipWorld } from '../entities/Ship';
-import type { Block, BlockStepResult } from './Block';
+import type { Code, CodeStepResult } from './Code';
 import type { Program } from './Program';
-import { tickMoveTo } from './blocks/MoveTo';
-import { tickMine } from './blocks/Mine';
-import { tickDeposit } from './blocks/Deposit';
-import { tickAttackNearest } from './blocks/AttackNearest';
-import { tickWaitUntilFull } from './blocks/WaitUntilFull';
+import { tickMoveTo } from './codes/MoveTo';
+import { tickMine } from './codes/Mine';
+import { tickDeposit } from './codes/Deposit';
+import { tickAttackNearest } from './codes/AttackNearest';
+import { tickWaitUntilFull } from './codes/WaitUntilFull';
 
 const MAX_ADVANCES_PER_TICK = 16;
 
 interface Frame {
-  blocks: ReadonlyArray<Block>;
+  codes: ReadonlyArray<Code>;
   cursor: number;
   remainingIterations: number; // -1: root, >0: REPEAT 残り回数
 }
 
-export interface BlockExecContext {
+export interface CodeExecContext {
   elapsedMs: number;
   justEntered: boolean;
 }
@@ -24,27 +24,27 @@ export interface BlockExecContext {
  * Executor — Program を 1 tick ごとに解釈し、Ship の命令的 API を呼ぶ実行器。
  *
  * Phase 3 でスタックベースに刷新: REPEAT のネスト構造を扱うため。
- *   - root フレームは Program のブロック配列を参照
- *   - REPEAT に到達したら子ブロック配列を新フレームとして push、`remainingIterations = times`
+ *   - root フレームは Program のコード配列を参照
+ *   - REPEAT に到達したら子コード配列を新フレームとして push、`remainingIterations = times`
  *   - 子末尾で remainingIterations を消費 (>1 ならカーソルを 0 に戻して継続、それ以外なら pop)
  *   - **root 末尾は自動で先頭にループバック** (Phase 5 後の改善)。
  *     プログラムを置いただけで上から下に無限ループする挙動が前提。
- *     REPEAT は「特定の行動を N 回だけ繰り返したい」ときの専用ブロック。
+ *     REPEAT は「特定の行動を N 回だけ繰り返したい」ときの専用コード。
  *
- * ブロックには「現在ブロックに留まっている時間 (elapsedMs)」と「入った最初の tick か (justEntered)」
- * を BlockExecContext で渡す。ATTACK_NEAREST のような持続時間ブロックがこれを使う。
+ * コードには「現在コードに留まっている時間 (elapsedMs)」と「入った最初の tick か (justEntered)」
+ * を CodeExecContext で渡す。ATTACK_NEAREST のような持続時間コードがこれを使う。
  */
 export class Executor implements ShipBehavior {
   private readonly program: Program;
   private stack: Frame[];
-  private blockElapsedMs: number = 0;
+  private codeElapsedMs: number = 0;
   private justEntered: boolean = true;
 
   constructor(program: Program) {
     this.program = program;
     this.stack = [
       {
-        blocks: program.getBlocks(),
+        codes: program.getCodes(),
         cursor: program.cursorIndex,
         remainingIterations: -1,
       },
@@ -65,7 +65,7 @@ export class Executor implements ShipBehavior {
       }
       const top = this.stack[this.stack.length - 1]!;
 
-      if (top.cursor >= top.blocks.length) {
+      if (top.cursor >= top.codes.length) {
         if (top.remainingIterations > 1) {
           top.remainingIterations -= 1;
           top.cursor = 0;
@@ -74,60 +74,60 @@ export class Executor implements ShipBehavior {
         if (this.isRootFrame(top)) {
           // root: 末尾まで実行したら **先頭に戻して無限ループ** する。
           // 空 Program のみ停止 (無限ループ防止 + idle 表現)。
-          if (top.blocks.length === 0) {
+          if (top.codes.length === 0) {
             ship.stop();
             return;
           }
           top.cursor = 0;
           this.program.reset();
-          this.blockElapsedMs = 0;
+          this.codeElapsedMs = 0;
           this.justEntered = true;
           advances += 1;
           continue;
         }
         this.stack.pop();
-        this.blockElapsedMs = 0;
+        this.codeElapsedMs = 0;
         this.justEntered = true;
         advances += 1;
         continue;
       }
 
-      const block = top.blocks[top.cursor]!;
+      const code = top.codes[top.cursor]!;
 
-      if (block.type === 'REPEAT') {
+      if (code.type === 'REPEAT') {
         top.cursor += 1;
         if (this.isRootFrame(top)) this.program.advance();
-        if (block.times <= 0 || block.children.length === 0) {
-          this.blockElapsedMs = 0;
+        if (code.times <= 0 || code.children.length === 0) {
+          this.codeElapsedMs = 0;
           this.justEntered = true;
           advances += 1;
           continue;
         }
         this.stack.push({
-          blocks: block.children,
+          codes: code.children,
           cursor: 0,
-          remainingIterations: block.times,
+          remainingIterations: code.times,
         });
-        this.blockElapsedMs = 0;
+        this.codeElapsedMs = 0;
         this.justEntered = true;
         advances += 1;
         continue;
       }
 
-      const ctx: BlockExecContext = {
-        elapsedMs: this.blockElapsedMs,
+      const ctx: CodeExecContext = {
+        elapsedMs: this.codeElapsedMs,
         justEntered: this.justEntered,
       };
-      const result = this.evaluate(block, ship, world, ctx);
+      const result = this.evaluate(code, ship, world, ctx);
       if (result.status === 'done') {
         top.cursor += 1;
         if (this.isRootFrame(top)) this.program.advance();
-        this.blockElapsedMs = 0;
+        this.codeElapsedMs = 0;
         this.justEntered = true;
         advances += 1;
         continue;
       }
-      this.blockElapsedMs += delta;
+      this.codeElapsedMs += delta;
       this.justEntered = false;
       return;
     }
@@ -137,18 +137,18 @@ export class Executor implements ShipBehavior {
     this.program.reset();
     this.stack = [
       {
-        blocks: this.program.getBlocks(),
+        codes: this.program.getCodes(),
         cursor: this.program.cursorIndex,
         remainingIterations: -1,
       },
     ];
-    this.blockElapsedMs = 0;
+    this.codeElapsedMs = 0;
     this.justEntered = true;
   }
 
-  /** UI 用: 現在走行中フレームのブロック配列。 */
-  public getRunningBlocks(): ReadonlyArray<Block> | null {
-    return this.stack.length > 0 ? this.stack[this.stack.length - 1]!.blocks : null;
+  /** UI 用: 現在走行中フレームのコード配列。 */
+  public getRunningCodes(): ReadonlyArray<Code> | null {
+    return this.stack.length > 0 ? this.stack[this.stack.length - 1]!.codes : null;
   }
 
   /** UI 用: 現在走行中フレームのカーソル位置。 */
@@ -157,20 +157,20 @@ export class Executor implements ShipBehavior {
   }
 
   /**
-   * UI 用 (インライン階層編集): 現在走行中ブロックの **path** を返す。
+   * UI 用 (インライン階層編集): 現在走行中コードの **path** を返す。
    *  - 空配列 = root frame でカーソルが末尾 (= idle)
    *  - null   = stack 空 / 不正状態
    *  - [i]    = root の i 番目
    *  - [i, j] = root の i 番目 (REPEAT) の中の j 番目
    *
-   * Frame の `cursor` は「次に評価するブロック」の index なので、
-   * その位置が blocks.length 未満ならそれが走行中、超えていれば「親 frame の REPEAT」を path 末尾とする。
+   * Frame の `cursor` は「次に評価するコード」の index なので、
+   * その位置が codes.length 未満ならそれが走行中、超えていれば「親 frame の REPEAT」を path 末尾とする。
    */
   public getRunningPath(): number[] | null {
     if (this.stack.length === 0) return null;
     const path: number[] = [];
     // stack[0] = root, stack[i+1] は stack[i] の REPEAT の中身。
-    // root の cursor は「root.blocks の中の」index。
+    // root の cursor は「root.codes の中の」index。
     // REPEAT で push されたフレームの直前に親 cursor を進めているので、親 cursor - 1 が REPEAT 自身を指す。
     for (let i = 0; i < this.stack.length; i++) {
       const f = this.stack[i]!;
@@ -180,7 +180,7 @@ export class Executor implements ShipBehavior {
         path.push(parentCursor - 1);
       } else {
         // 最深フレーム = 現在走行中
-        if (f.cursor >= f.blocks.length) return null;
+        if (f.cursor >= f.codes.length) return null;
         path.push(f.cursor);
       }
     }
@@ -192,16 +192,16 @@ export class Executor implements ShipBehavior {
   }
 
   private evaluate(
-    block: Block,
+    code: Code,
     ship: Ship,
     world: ShipWorld,
-    ctx: BlockExecContext
-  ): BlockStepResult {
-    switch (block.type) {
+    ctx: CodeExecContext
+  ): CodeStepResult {
+    switch (code.type) {
       case 'MOVE_TO':
-        return tickMoveTo(block, ship, world);
+        return tickMoveTo(code, ship, world);
       case 'MINE':
-        return tickMine(block, ship, world);
+        return tickMine(code, ship, world);
       case 'DEPOSIT':
         return tickDeposit(ship, world);
       case 'ATTACK_NEAREST':
@@ -211,7 +211,7 @@ export class Executor implements ShipBehavior {
       case 'REPEAT':
         return { status: 'blocked', reason: 'REPEAT must be handled by Executor stack' };
       default: {
-        const exhaustive: never = block;
+        const exhaustive: never = code;
         return exhaustive;
       }
     }

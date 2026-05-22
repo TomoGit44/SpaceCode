@@ -23,7 +23,7 @@
 
 ---
 
-## 現在のステータス (最終更新: 2026-05-22)
+## 現在のステータス (最終更新: 2026-05-23)
 
 | Phase | 内容 | 状態 |
 |---|---|---|
@@ -34,13 +34,13 @@
 | **Phase 4** | **統合と難易度調整 / ローカルセーブ**: 射撃エネルギー消費、敵 3 種化 (basic/fast/tank)、Ship Program 永続化 (localStorage)、惑星 60s リスポーン、Wave/経済バランス調整 | ✅ 完了 (※ 永続化は Phase 6 で撤廃) |
 | **Phase 5** | **仕上げ**: 演出強化 (シーン遷移・フラッシュ・バナーイージング)、配色 hardcoded → `COLORS` 統一、README 整備 | ✅ 完了 (**MVP 達成 2026-05-16**) |
 | 補追 (Phase 5 後) | タワー廃止 → 基地砲塔統合 / Program 自動ループバック / 準備時間を手動開始制 | ✅ 完了 |
-| **Phase 6** | **アイテムシステム**: `Inventory` (Run 揮発) + `EffectSystem` (加算スタック) / オムニ・コア 6 / モジュール 5 / ケミカル 6 / **アイテムコード** 3 (ITEM_CODE 条件 wrapper) / `ItemInventoryScene` | 🔧 **Step 0-5 完了** (ガチャ UI / リワード経路は Step 6 以降) |
+| **Phase 6** | **アイテムシステム**: `Inventory` (Run 揮発) + `EffectSystem` (加算スタック) / オムニ・コア 6 / モジュール 5 / ケミカル 6 / **アイテムコード** 3 (ITEM_CODE 条件 wrapper) / `ItemInventoryScene` / **ガチャ系統** (Phase クリア + fast/tank ドロップ + `GachaOpenScene` 3 候補選択) | 🔧 **Step 0-6 完了** (Run リワード経路の拡張は後続) |
 
 通しプレイ可能。コア体験「プログラムを組まないと Ship は動かない」を維持しつつ、Run 中の成長要素 (アイテム) を載せている最中。
 
 **Phase 6 残作業**:
-- ガチャ抽選 / 開封 UI 配線 (`src/items/gacha.ts` は実装済だが未参照)
-- Run リワード経路 (Phase クリア / ドロップでアイテム獲得。現状はデバッグボタン経由のみ)
+- Run リワード経路の拡張 (ボス敵 / Wave 中間ドロップ等。現状は Phase クリア + fast/tank ドロップ)
+- ProgramEditorScene 内モジュール表示 (仕様 §7.4) — ItemInventoryScene で完結するため保留
 
 **MVP 後の継続課題** (Phase 6 と独立):
 - 実プレイ後バランス再調整 — `docs/PROGRESS.md` バランスメモ枠の計測ポイント。Phase 6 アイテム導入後の再計測必要
@@ -124,7 +124,7 @@ git push                            # 直後に必ず push
 
 ```
 src/
-├── main.ts                 # Phaser 起動・シーン登録 (Game / ProgramEditor / ItemInventory はこの順で並行 active 対応)
+├── main.ts                 # Phaser 起動・シーン登録 (Game / ProgramEditor / ItemInventory / GachaOpen はこの順で並行 active 対応)
 ├── config.ts               # 全定数 (GAME_*, COLORS (+ rarity*), BASE, BASE_TURRET, SHIP, ENEMY_TYPES, ENEMY_VS_SHIP, ECONOMY, STAGE, PHASES (enemySpecs), SPAWN, PLANETS, PLANET)
 ├── scenes/                 # Phaser シーン (薄く保つ。ロジックは entities/systems/items/program へ)
 │   ├── BootScene.ts        # 即 Menu へ
@@ -133,7 +133,8 @@ src/
 │   ├── GameOverScene.ts    # R リトライ / ESC メニュー
 │   ├── VictoryScene.ts     # STAGE CLEAR
 │   ├── ProgramEditorScene.ts  # 並行 active オーバーレイ。Ship クリックで起動、Program をライブ編集。ITEM_CODE 配置 + 残数管理
-│   └── ItemInventoryScene.ts  # Phase 6: 並行 active オーバーレイ。カテゴリタブ + 所持一覧 + 詳細 + 装着/使用フロー
+│   ├── ItemInventoryScene.ts  # Phase 6: 並行 active オーバーレイ。カテゴリタブ + 所持一覧 + 詳細 + 装着/使用フロー + ガチャ「開封する」
+│   └── GachaOpenScene.ts      # Phase 6 Step 6: ガチャ開封オーバーレイ。drawGacha で 3 候補 → 選択 → Inventory に追加
 ├── entities/               # ゲーム内オブジェクト (描画+状態を自分で持つ)
 │   ├── Base.ts             # 基地 HP, takeDamage, heal, 脈動 + 回転リング + 内蔵砲塔 (射程リング表示 + 射撃。火力は effects.baseStat 経由)
 │   ├── Enemy.ts            # 基地へ直進, dead/reachedBase フラグ。3 種 (basic/fast/tank)
@@ -152,7 +153,7 @@ src/
 │   ├── Inventory.ts        # items[] + codes[] + shipModules{shipId: uid[]} + reset()。**メモリ上のみ** (Run 毎リセット)
 │   ├── effects.ts          # EffectSystem: shipStat/baseStat/economyStat (オムニ・コア + モジュール + 時限バフを加算スタックで合成) + shipExtraShots + tick
 │   ├── codePlacement.ts    # ITEM_CODE 配置の真実源走査 (collectPlacedCodeUids / availableCodeCounts / pickUnplacedInstance)
-│   ├── gacha.ts            # ⬜ 抽選ロジック (drawGacha) 実装済だが未配線 (Step 6 で UI 接続予定)
+│   ├── gacha.ts            # Phase 6 Step 6: drawGacha + phaseRewardCategory + rollPhaseRewardRarity + gachaCategoryOf
 │   └── types/              # data-driven なアイテム定義テーブル
 │       ├── omniCores.ts    # OMNI_CORE_TYPES (6 種: 攻撃/推進/採掘/装甲/砲塔/賞金)
 │       ├── modules.ts      # MODULE_TYPES (5 種: ガトリング/装甲/スラスタ/ドリル/カーゴ)
@@ -200,7 +201,8 @@ src/
 - **初期コード (6 種)**: `MOVE_TO` / `MINE` / `DEPOSIT` / `ATTACK_NEAREST` / `WAIT_UNTIL_FULL` / `REPEAT`。REPEAT はネスト構造で **特定の行動を N 回繰り返したい時に使う**、ATTACK_NEAREST は持続時間コード。**所持無制限**
 - **アイテムコード (Phase 6, 3 種)**: `IF_HP_BELOW` / `IF_ENEMY_IN_RANGE` / `IF_INVENTORY_FULL` — 条件 wrapper。所持アイテム個体 (`CodeItemInstance`) と 1:1 対応、配置の真実源は **プログラム内 ITEM_CODE ノード**。同じ個体は 1 箇所しか配置不可、Ship 破壊や wrapper 削除で自動的に「未配置」に戻る
 - **自動ループ (Phase 5 後)**: Program は **置いただけで先頭 → 末尾 → 先頭 → … と無限にループ** する。空 Program のみ idle
-- **アイテム (Phase 6)**: オムニ・コア (装着で全 Ship/基地/経済に永続効果) / モジュール (Ship 個別装着) / ケミカル (消費型・即時 or 時限バフ or AoE) / コードガチャ・モジュールガチャ (Step 6 で UI 実装予定)。効果は加算スタック、`EffectSystem` 経由で集計
+- **アイテム (Phase 6)**: オムニ・コア (装着で全 Ship/基地/経済に永続効果) / モジュール (Ship 個別装着) / ケミカル (消費型・即時 or 時限バフ or AoE) / コードガチャ・モジュールガチャ (`GachaOpenScene` で開封)。効果は加算スタック、`EffectSystem` 経由で集計
+- **リワード経路 (Phase 6 Step 6)**: Phase クリアごとに 1 個保証 (code/module 交互 + 重み付きレア度 R55/SR30/L15) + fast/tank 撃破時の低確率 R ドロップ (fast 4% / tank 12%)。basic はドロップなし
 
 > ※「Phase」が二重に登場する: **Wave Phase** (敵編成の段階。1 Stage 中で進行) と **開発 Phase** (実装ロードマップ)。コード内では `Wave Phase` を指す。本ドキュメントでは「開発 Phase」と明示する。
 

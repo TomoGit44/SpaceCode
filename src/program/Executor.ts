@@ -6,6 +6,9 @@ import { tickMine } from './codes/Mine';
 import { tickDeposit } from './codes/Deposit';
 import { tickAttackNearest } from './codes/AttackNearest';
 import { tickWaitUntilFull } from './codes/WaitUntilFull';
+import { conditionIfHpBelow } from './codes/IfHpBelow';
+import { conditionIfEnemyInRange } from './codes/IfEnemyInRange';
+import { conditionIfInventoryFull } from './codes/IfInventoryFull';
 
 const MAX_ADVANCES_PER_TICK = 16;
 
@@ -114,6 +117,25 @@ export class Executor implements ShipBehavior {
         continue;
       }
 
+      if (code.type === 'ITEM_CODE') {
+        // 条件 wrapper: cursor を先に進め、条件成立なら子コード列を 1 周だけ実行。
+        top.cursor += 1;
+        if (this.isRootFrame(top)) this.program.advance();
+        const pass =
+          code.children.length > 0 && this.evaluateItemCondition(code, ship, world);
+        if (pass) {
+          this.stack.push({
+            codes: code.children,
+            cursor: 0,
+            remainingIterations: 1,
+          });
+        }
+        this.codeElapsedMs = 0;
+        this.justEntered = true;
+        advances += 1;
+        continue;
+      }
+
       const ctx: CodeExecContext = {
         elapsedMs: this.codeElapsedMs,
         justEntered: this.justEntered,
@@ -210,8 +232,30 @@ export class Executor implements ShipBehavior {
         return tickWaitUntilFull(ship);
       case 'REPEAT':
         return { status: 'blocked', reason: 'REPEAT must be handled by Executor stack' };
+      case 'ITEM_CODE':
+        return { status: 'blocked', reason: 'ITEM_CODE must be handled by Executor stack' };
       default: {
         const exhaustive: never = code;
+        return exhaustive;
+      }
+    }
+  }
+
+  /** ITEM_CODE (条件 wrapper) の条件を評価する。 */
+  private evaluateItemCondition(
+    code: Extract<Code, { type: 'ITEM_CODE' }>,
+    ship: Ship,
+    world: ShipWorld
+  ): boolean {
+    switch (code.itemCodeType) {
+      case 'IF_HP_BELOW':
+        return conditionIfHpBelow(code, ship, world);
+      case 'IF_ENEMY_IN_RANGE':
+        return conditionIfEnemyInRange(code, ship, world);
+      case 'IF_INVENTORY_FULL':
+        return conditionIfInventoryFull(code, ship, world);
+      default: {
+        const exhaustive: never = code.itemCodeType;
         return exhaustive;
       }
     }

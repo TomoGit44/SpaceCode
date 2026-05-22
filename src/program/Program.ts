@@ -1,4 +1,5 @@
 import type { Code } from './Code';
+import { codeChildren } from './Code';
 
 /**
  * Program — Code の配列 + 実行カーソル。
@@ -129,15 +130,17 @@ export class Program {
   // root scope のみで、ネスト内は cursor を動かさない (Executor 側で
   // getRunningPath で別途追跡)。
 
-  /** path 直前の親 (root or REPEAT.children) の Code 配列を返す。path が不正なら null。 */
+  /** path 直前の親 (root または wrapper コードの children) の Code 配列。path が不正なら null。 */
   public getCodesAtParent(path: ReadonlyArray<number>): Code[] | null {
     if (path.length === 0) return this.codes;
     let arr: Code[] = this.codes;
     for (let i = 0; i < path.length - 1; i++) {
       const idx = path[i]!;
       const c = arr[idx];
-      if (!c || c.type !== 'REPEAT') return null;
-      arr = c.children;
+      if (!c) return null;
+      const ch = codeChildren(c);
+      if (!ch) return null;
+      arr = ch;
     }
     return arr;
   }

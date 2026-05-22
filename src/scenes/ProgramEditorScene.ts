@@ -1,19 +1,37 @@
 import Phaser from 'phaser';
 import { GAME_WIDTH, GAME_HEIGHT, COLORS } from '../config';
 import type { Ship } from '../entities/Ship';
-import type { Program } from '../program/Program';
+import { Program } from '../program/Program';
 import type { Code, CodeType } from '../program/Code';
-import { createCode } from '../program/Code';
+import { createCode, codeChildren } from '../program/Code';
 import { Executor } from '../program/Executor';
 import { sampleCodes } from '../program/samples';
-import { CodePalette } from '../ui/CodePalette';
+import { CodePalette, type ItemCodeEntry } from '../ui/CodePalette';
 import { ProgramList } from '../ui/ProgramList';
 import { CodeParamEditor } from '../ui/CodeParamEditor';
+import type { Inventory } from '../items/Inventory';
+import { ALL_RARITIES, RARITY_SHORT, RARITY_COLOR } from '../items/itemTypes';
+import {
+  type ItemCodeType,
+  ALL_ITEM_CODE_TYPES,
+  ITEM_CODE_DEFS,
+  createItemCodeNode,
+  makeRandomItemCode,
+} from '../items/types/itemCodes';
+import {
+  collectPlacedCodeUids,
+  availableCodeCounts,
+  pickUnplacedInstance,
+} from '../items/codePlacement';
 
 const FONT = 'system-ui, "Segoe UI", sans-serif';
 
 export interface ProgramEditorData {
   ship: Ship;
+  /** アイテムコードの所持・残数算出に使う共有インベントリ。 */
+  inventory: Inventory;
+  /** 全 Ship を返す getter (残数のグローバル走査用)。 */
+  getShips: () => Ship[];
 }
 
 /** path 同値判定 */
@@ -37,6 +55,8 @@ function pathEquals(a: ReadonlyArray<number> | null, b: ReadonlyArray<number> | 
  */
 export class ProgramEditorScene extends Phaser.Scene {
   private targetShip!: Ship;
+  private inventory!: Inventory;
+  private getShips!: () => Ship[];
   private program!: Program;
   private executor: Executor | null = null;
   private selectedPath: number[] | null = null;
@@ -62,6 +82,8 @@ export class ProgramEditorScene extends Phaser.Scene {
 
   init(data: ProgramEditorData): void {
     this.targetShip = data.ship;
+    this.inventory = data.inventory;
+    this.getShips = data.getShips;
     this.selectedPath = null;
     this.executor = null;
     this.lastRunningPath = null;
@@ -146,6 +168,7 @@ export class ProgramEditorScene extends Phaser.Scene {
 
     // ─── 配線 ────────────────────────────────────────────────
     this.palette.on('addCode', (type: CodeType) => this.handleAddCode(type));
+    this.palette.on('addItemCode', (type: ItemCodeType) => this.handleAddItemCode(type));
     this.palette.on('loadSample', () => this.handleLoadSample());
     this.palette.on('close', () => this.close());
 
@@ -164,38 +187,60 @@ export class ProgramEditorScene extends Phaser.Scene {
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.shutdown, this);
 
+    this.makeDebugRow();
     this.refresh();
   }
 
   // ─── ハンドラ ───────────────────────────────────────────────
 
   /**
-   * 新規コードの挿入位置を決める:
+   * 新規コードの挿入位置を決めて挿入する:
    *  - 何も選択されていなければ root scope の末尾
-   *  - 選択中コードが REPEAT なら、その children の末尾 (= REPEAT 内に追加)
-   *  - 選択中コードがそれ以外なら、選択コードの直後 (= 同じ scope の +1 位置)
+   *  - 選択中コードが wrapper (REPEAT / ITEM_CODE) なら、その children の末尾
+   *  - それ以外なら、選択コードの直後 (= 同じ scope の +1 位置)
    */
-  private handleAddCode(type: CodeType): void {
-    const code = createCode(type);
+  private insertNewCode(code: Code): void {
     if (this.selectedPath === null) {
       this.program.append(code);
       this.selectedPath = [this.program.length - 1];
-    } else {
-      const sel = this.program.getCodeAt(this.selectedPath);
-      if (sel && sel.type === 'REPEAT') {
-        // REPEAT を選択中: 中に追加
-        sel.children.push(code);
-        this.selectedPath = [...this.selectedPath, sel.children.length - 1];
-      } else {
-        // 通常: 同じ scope の直後に挿入
-        const parentPath = this.selectedPath.slice(0, -1);
-        const insertIdx = this.selectedPath[this.selectedPath.length - 1]! + 1;
-        this.program.insertAtPath(parentPath, insertIdx, code);
-        this.selectedPath = [...parentPath, insertIdx];
-      }
+      return;
     }
+    const sel = this.program.getCodeAt(this.selectedPath);
+    const selChildren = sel ? codeChildren(sel) : null;
+    if (selChildren) {
+      selChildren.push(code);
+      this.selectedPath = [...this.selectedPath, selChildren.length - 1];
+    } else {
+      const parentPath = this.selectedPath.slice(0, -1);
+      const insertIdx = this.selectedPath[this.selectedPath.length - 1]! + 1;
+      this.program.insertAtPath(parentPath, insertIdx, code);
+      this.selectedPath = [...parentPath, insertIdx];
+    }
+  }
+
+  private handleAddCode(type: CodeType): void {
+    this.insertNewCode(createCode(type));
     this.ensureRunning();
     this.refresh();
+  }
+
+  /** アイテムコードを配置する。未配置インスタンスを 1 個選んで ITEM_CODE ノード化。 */
+  private handleAddItemCode(type: ItemCodeType): void {
+    const inst = pickUnplacedInstance(this.inventory.codes, this.collectPlaced(), type);
+    if (!inst) return; // 残数 0 (パレットが無効化しているはず)
+    this.insertNewCode(createItemCodeNode(inst));
+    this.ensureRunning();
+    this.refresh();
+  }
+
+  /** 全 Ship のプログラムを走査し、配置済みアイテムコードの uid 集合を返す。 */
+  private collectPlaced(): Set<string> {
+    const programs: ReadonlyArray<Code>[] = [];
+    for (const s of this.getShips()) {
+      const p = s.getProgram();
+      if (p) programs.push(p.getCodes());
+    }
+    return collectPlacedCodeUids(programs);
   }
 
   private handleLoadSample(): void {
@@ -293,6 +338,70 @@ export class ProgramEditorScene extends Phaser.Scene {
     this.list.render(this.program.getCodes(), this.selectedPath, runningPath);
     const sel = this.selectedPath !== null ? this.program.getCodeAt(this.selectedPath) : null;
     this.paramEditor.render(sel);
+    this.refreshPalette();
+  }
+
+  /** コードパレットのアイテムコード残数を再計算して反映する。 */
+  private refreshPalette(): void {
+    const placed = this.collectPlaced();
+    const counts = availableCodeCounts(this.inventory.codes, placed);
+    const order: Record<string, number> = { L: 3, SR: 2, R: 1, N: 0 };
+    const entries: ItemCodeEntry[] = [];
+    for (const type of ALL_ITEM_CODE_TYPES) {
+      const owned = this.inventory.codes.filter((c) => c.codeType === type);
+      if (owned.length === 0) continue;
+      // 表示色は所持インスタンス中で最も高いレア度
+      const best = owned.reduce((a, b) => ((order[b.rarity] ?? 0) > (order[a.rarity] ?? 0) ? b : a));
+      entries.push({
+        type,
+        label: ITEM_CODE_DEFS[type].nameJa,
+        rarity: best.rarity,
+        available: counts[type] ?? 0,
+      });
+    }
+    this.palette.setItemCodes(entries);
+  }
+
+  /** デバッグ用: レア度別にアイテムコードを獲得する暫定行 (カード上部)。 */
+  private makeDebugRow(): void {
+    const y = this.cardTop + 30;
+    this.chrome.push(
+      this.add
+        .text(this.cardLeft + 540, y, 'DEBUG コード獲得:', {
+          fontFamily: FONT,
+          fontSize: '12px',
+          color: '#6b7da0',
+        })
+        .setOrigin(0, 0.5)
+        .setDepth(2)
+    );
+    let x = this.cardLeft + 662;
+    for (const r of ALL_RARITIES) {
+      const rc = RARITY_COLOR[r];
+      const bg = this.add
+        .rectangle(x, y, 52, 24, COLORS.panelBg, 1)
+        .setStrokeStyle(1, rc, 0.9)
+        .setDepth(2)
+        .setInteractive({ useHandCursor: true });
+      const t = this.add
+        .text(x, y, RARITY_SHORT[r], {
+          fontFamily: FONT,
+          fontSize: '12px',
+          color: '#' + rc.toString(16).padStart(6, '0'),
+          fontStyle: 'bold',
+        })
+        .setOrigin(0.5)
+        .setDepth(3);
+      bg.on('pointerover', () => bg.setFillStyle(COLORS.panelHover, 1));
+      bg.on('pointerout', () => bg.setFillStyle(COLORS.panelBg, 1));
+      bg.on('pointerdown', (p: Phaser.Input.Pointer) => {
+        if (p.rightButtonDown()) return;
+        this.inventory.codes.push(makeRandomItemCode(r));
+        this.refresh();
+      });
+      this.chrome.push(bg, t);
+      x += 60;
+    }
   }
 
   // ─── 閉じる ─────────────────────────────────────────────────

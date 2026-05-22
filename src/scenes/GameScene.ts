@@ -237,10 +237,15 @@ export class GameScene extends Phaser.Scene {
     const program = ship.getProgram();
     if (!program) return;
     this.overlayDepth += 1;
-    this.scene.launch('ProgramEditorScene', { ship });
+    this.scene.launch('ProgramEditorScene', {
+      ship,
+      inventory: this.inventory,
+      getShips: () => this.ships,
+    });
     const editor = this.scene.get('ProgramEditorScene');
     editor.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.overlayDepth -= 1;
+      this.refreshItemButton();
     });
     this.scene.bringToTop('ProgramEditorScene');
   }

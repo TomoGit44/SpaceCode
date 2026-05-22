@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { COLORS } from '../config';
 import type { Code } from '../program/Code';
+import { ITEM_CODE_DEFS } from '../items/types/itemCodes';
 import {
   ALL_LOCATION_IDS,
   ALL_PLANET_IDS,
@@ -83,6 +84,56 @@ export class CodeParamEditor {
       case 'REPEAT':
         this.renderRepeat(code);
         return;
+      case 'ITEM_CODE':
+        this.renderItemCode(code);
+        return;
+    }
+  }
+
+  /** ITEM_CODE のパラメータ編集 (レア度で最大値が変わる、§2.4)。 */
+  private renderItemCode(code: Extract<Code, { type: 'ITEM_CODE' }>): void {
+    const def = ITEM_CODE_DEFS[code.itemCodeType];
+    if (!def || def.params.length === 0) {
+      this.addNote('このコードに設定はありません');
+      return;
+    }
+    let cy = this.y + 28;
+    for (const spec of def.params) {
+      const max = spec.rarityMax[code.rarity];
+      const cur = code.params[spec.key] ?? spec.fallbackDefault;
+      const title = this.scene.add
+        .text(this.x + 4, cy, `${spec.label} (${spec.min}〜${max}${spec.unit})`, {
+          fontFamily: FONT,
+          fontSize: '12px',
+          color: '#cfd6e6',
+        })
+        .setDepth(3);
+      this.controls.push(title);
+
+      const rowY = cy + 22;
+      const emit = (next: number): void => {
+        const clamped = Math.min(max, Math.max(spec.min, next));
+        if (clamped === cur) return;
+        this.emitter.emit('change', {
+          ...code,
+          params: { ...code.params, [spec.key]: clamped },
+        } as Code);
+      };
+      const minus = this.makeStepButton(this.x + 4, rowY, '−', () => emit(cur - spec.step));
+      const value = this.scene.add
+        .text(this.x + this.width / 2, rowY + 16, `${cur}${spec.unit}`, {
+          fontFamily: FONT,
+          fontSize: '18px',
+          color: '#cfd6e6',
+          fontStyle: 'bold',
+        })
+        .setOrigin(0.5)
+        .setDepth(3);
+      const plus = this.makeStepButton(this.x + this.width - 36, rowY, '+', () =>
+        emit(cur + spec.step)
+      );
+      this.controls.push(value, ...minus, ...plus);
+      cy = rowY + 48;
     }
   }
 

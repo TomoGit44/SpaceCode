@@ -1,6 +1,8 @@
 import Phaser from 'phaser';
 import { COLORS } from '../config';
 import type { Code } from '../program/Code';
+import { codeChildren } from '../program/Code';
+import { itemCodeLabel } from '../items/types/itemCodes';
 import { LOCATION_LABELS } from '../program/locations';
 
 const FONT = 'system-ui, "Segoe UI", sans-serif';
@@ -30,6 +32,8 @@ function codeLabel(code: Code): string {
       return '満タンまで待機';
     case 'REPEAT':
       return `繰り返し × ${code.times}`;
+    case 'ITEM_CODE':
+      return itemCodeLabel(code);
   }
 }
 
@@ -139,8 +143,8 @@ export class ProgramList {
       this.makeRow(row, rowY, selectedPath, runningPath);
       lastRowBottomY = rowY + ROW_HEIGHT;
 
-      // この row が REPEAT なら、bounds を初期化 (topY だけ確定)
-      if (row.code.type === 'REPEAT') {
+      // この row が wrapper (REPEAT / ITEM_CODE) なら、bounds を初期化 (topY だけ確定)
+      if (codeChildren(row.code)) {
         scopeBounds.set(row, { topY: rowY, bottomY: rowY + ROW_HEIGHT });
       }
 
@@ -198,8 +202,9 @@ export class ProgramList {
       const path = [...parentPath, i];
       const row: Row = { code: c, path, depth, parentRow };
       out.push(row);
-      if (c.type === 'REPEAT' && c.children.length > 0) {
-        out.push(...this.expandRows(c.children, depth + 1, path, row));
+      const ch = codeChildren(c);
+      if (ch && ch.length > 0) {
+        out.push(...this.expandRows(ch, depth + 1, path, row));
       }
     });
     return out;
@@ -226,7 +231,7 @@ export class ProgramList {
   ): void {
     const selected = this.pathEq(row.path, selectedPath);
     const onCursor = this.pathEq(row.path, runningPath);
-    const isRepeat = row.code.type === 'REPEAT';
+    const isWrapper = codeChildren(row.code) !== null;
 
     // コード本体の x 範囲
     const leftPad = row.depth * INDENT_PX + (row.depth > 0 ? BRACKET_GAP + 6 : 0);
@@ -238,17 +243,17 @@ export class ProgramList {
       ? COLORS.ally
       : onCursor
         ? COLORS.accent
-        : isRepeat
+        : isWrapper
           ? COLORS.accent
           : COLORS.panelBg;
-    const bgAlpha = selected ? 0.22 : onCursor ? 0.16 : isRepeat ? 0.08 : 0.6;
+    const bgAlpha = selected ? 0.22 : onCursor ? 0.16 : isWrapper ? 0.08 : 0.6;
 
     const bg = this.scene.add
       .rectangle(codeX + codeW / 2, rowY + ROW_HEIGHT / 2, codeW, ROW_HEIGHT, bgColor, bgAlpha)
       .setStrokeStyle(
         1,
-        selected ? COLORS.ally : isRepeat ? COLORS.accent : COLORS.panelBorder,
-        selected ? 1 : isRepeat ? 0.7 : 0.9
+        selected ? COLORS.ally : isWrapper ? COLORS.accent : COLORS.panelBorder,
+        selected ? 1 : isWrapper ? 0.7 : 0.9
       )
       .setDepth(2)
       .setInteractive({ useHandCursor: true });
@@ -277,7 +282,7 @@ export class ProgramList {
         fontFamily: FONT,
         fontSize: '14px',
         color: '#cfd6e6',
-        fontStyle: isRepeat ? 'bold' : 'normal',
+        fontStyle: isWrapper ? 'bold' : 'normal',
       })
       .setOrigin(0, 0.5)
       .setDepth(3);

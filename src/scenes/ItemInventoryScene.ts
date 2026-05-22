@@ -14,6 +14,7 @@ import {
 import { OMNI_CORE_TYPES, isOmniCore, omniCorePercent, makeRandomOmniCore } from '../items/types/omniCores';
 import { MODULE_TYPES, isModule, moduleEffectText, makeRandomModule } from '../items/types/modules';
 import { CHEMICAL_TYPES, isChemical, chemicalEffectText, makeRandomChemical } from '../items/types/chemicals';
+import { isCodeGacha, isModuleGacha, isGacha, gachaItemName, makeGachaItem } from '../items/gacha';
 
 const FONT = 'system-ui, "Segoe UI", sans-serif';
 
@@ -40,7 +41,7 @@ const CATEGORIES: ReadonlyArray<CategoryDef> = [
   { id: 'moduleGacha', label: 'モジュールガチャ' },
 ];
 
-const IMPLEMENTED: ReadonlyArray<ItemCategory> = ['omniCore', 'module', 'chemical'];
+const IMPLEMENTED: ReadonlyArray<ItemCategory> = ['omniCore', 'module', 'chemical', 'codeGacha', 'moduleGacha'];
 
 /**
  * アイテム一覧オーバーレイ。
@@ -203,10 +204,17 @@ export class ItemInventoryScene extends Phaser.Scene {
     if (this.selectedCategory === 'chemical') {
       return this.inventory.items.filter((it) => isChemical(it.typeId));
     }
+    if (this.selectedCategory === 'codeGacha') {
+      return this.inventory.items.filter((it) => isCodeGacha(it.typeId));
+    }
+    if (this.selectedCategory === 'moduleGacha') {
+      return this.inventory.items.filter((it) => isModuleGacha(it.typeId));
+    }
     return [];
   }
 
   private displayName(typeId: string): string {
+    if (isGacha(typeId)) return gachaItemName(typeId);
     return (
       OMNI_CORE_TYPES[typeId]?.nameJa ??
       MODULE_TYPES[typeId]?.nameJa ??
@@ -264,6 +272,9 @@ export class ItemInventoryScene extends Phaser.Scene {
       subColor = '#3ee0c5';
     } else if (isChemical(it.typeId)) {
       sub = '使い切り';
+    } else if (isGacha(it.typeId)) {
+      sub = '未開封';
+      subColor = '#3ee0c5';
     }
     this.dyn.push(
       this.add
@@ -331,6 +342,44 @@ export class ItemInventoryScene extends Phaser.Scene {
     if (isOmniCore(sel.typeId)) this.renderCoreDetail(sel, x, w, top);
     else if (isModule(sel.typeId)) this.renderModuleDetail(sel, x, w, top);
     else if (isChemical(sel.typeId)) this.renderChemicalDetail(sel, x, w, top);
+    else if (isGacha(sel.typeId)) this.renderGachaDetail(sel, x, w, top);
+  }
+
+  private renderGachaDetail(it: ItemInstance, x: number, w: number, top: number): void {
+    const category = isCodeGacha(it.typeId) ? 'code' : 'module';
+    const note =
+      category === 'code'
+        ? 'アイテムコード 3 種から 1 つを獲得します。\n選択肢のレア度はガチャのレア度に従って決まります。'
+        : 'モジュール 3 種から 1 つを獲得します。\n選択肢のレア度はガチャのレア度に従って決まります。';
+    this.dyn.push(
+      this.add
+        .text(x + 16, top + 80, note, {
+          fontFamily: FONT,
+          fontSize: '13px',
+          color: '#cfd6e6',
+          lineSpacing: 6,
+          wordWrap: { width: w - 32 },
+        })
+        .setDepth(3)
+    );
+    this.makeActionButton(x + 16, top + 188, w - 32, '開封する', COLORS.accent, () => {
+      this.openGacha(it);
+    });
+  }
+
+  /** ガチャ開封シーンを launch する。閉じたら refresh + onChanged。 */
+  private openGacha(it: ItemInstance): void {
+    this.scene.launch('GachaOpenScene', {
+      gacha: it,
+      inventory: this.inventory,
+      onClosed: () => {
+        this.selectedUid = null;
+        this.confirmingUse = false;
+        this.onChanged();
+        this.render();
+      },
+    });
+    this.scene.bringToTop('GachaOpenScene');
   }
 
   private renderCoreDetail(it: ItemInstance, x: number, w: number, top: number): void {
@@ -560,12 +609,14 @@ export class ItemInventoryScene extends Phaser.Scene {
     this.chrome.push(bg, t);
   }
 
-  /** 選択中カテゴリのアイテムを 1 個獲得する (omniCore / module / chemical)。 */
+  /** 選択中カテゴリのアイテムを 1 個獲得する (全カテゴリ対応)。 */
   private debugGrant(rarity: Rarity): void {
     let granted: ItemInstance | null = null;
     if (this.selectedCategory === 'omniCore') granted = makeRandomOmniCore(rarity);
     else if (this.selectedCategory === 'module') granted = makeRandomModule(rarity);
     else if (this.selectedCategory === 'chemical') granted = makeRandomChemical(rarity);
+    else if (this.selectedCategory === 'codeGacha') granted = makeGachaItem('code', rarity);
+    else if (this.selectedCategory === 'moduleGacha') granted = makeGachaItem('module', rarity);
     if (!granted) return;
     this.inventory.items.push(granted);
     this.selectedUid = granted.uid;

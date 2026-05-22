@@ -12,6 +12,12 @@ import { Inventory } from '../items/Inventory';
 import { EffectSystem } from '../items/effects';
 import type { Rarity } from '../items/itemTypes';
 import { CHEMICAL_TYPES } from '../items/types/chemicals';
+import {
+  makeGachaItem,
+  rollPhaseRewardRarity,
+  phaseRewardCategory,
+  type GachaCategory,
+} from '../items/gacha';
 import { SpawnSystem } from '../systems/SpawnSystem';
 import { WaveSystem } from '../systems/WaveSystem';
 import { EconomySystem } from '../systems/EconomySystem';
@@ -133,6 +139,8 @@ export class GameScene extends Phaser.Scene {
       this.hud.showBanner(`PHASE ${n} CLEAR`, 1200);
       // Phase 5: クリア時に薄いカメラフラッシュ (alpha 0.12 / 220ms)
       this.cameras.main.flash(220, 62, 224, 197, true);
+      // Phase 6 Step 6: クリア報酬としてガチャを 1 個付与
+      this.grantPhaseClearGacha(n);
     });
 
     // 準備時間 (preparing) に入ったら開始ボタンを出す。
@@ -318,6 +326,38 @@ export class GameScene extends Phaser.Scene {
     delete this.inventory.shipModules[ship.id];
   }
 
+  /**
+   * Phase クリア報酬: カテゴリは Phase 番号で交互 (奇数=code / 偶数=module)、
+   * レア度は重み付き抽選 (R 55% / SR 30% / L 15%)。バナーで通知。
+   */
+  private grantPhaseClearGacha(phaseNumber: number): void {
+    const category = phaseRewardCategory(phaseNumber);
+    const rarity = rollPhaseRewardRarity();
+    const item = makeGachaItem(category, rarity);
+    this.inventory.items.push(item);
+    this.refreshItemButton();
+    const label = category === 'code' ? 'コードガチャ' : 'モジュールガチャ';
+    this.hud.showBanner(`報酬: ${rarity} ${label} を獲得`, 1400);
+  }
+
+  /**
+   * 敵撃破時のガチャドロップ判定 (fast 4% / tank 12%、basic は出ない)。
+   * R 固定、カテゴリは 50/50 ランダム。
+   */
+  private rollEnemyDropGacha(enemy: Enemy): void {
+    let chance = 0;
+    if (enemy.type === 'fast') chance = 0.04;
+    else if (enemy.type === 'tank') chance = 0.12;
+    if (chance <= 0) return;
+    if (Math.random() >= chance) return;
+    const category: GachaCategory = Math.random() < 0.5 ? 'code' : 'module';
+    const item = makeGachaItem(category, 'R');
+    this.inventory.items.push(item);
+    this.refreshItemButton();
+    const label = category === 'code' ? 'コードガチャ' : 'モジュールガチャ';
+    this.hud.showBanner(`ドロップ: R ${label}`, 1100);
+  }
+
   /** ケミカル使用効果を適用する (ItemInventoryScene から呼ばれる)。 */
   private applyChemical(typeId: string, rarity: Rarity): void {
     const chem = CHEMICAL_TYPES[typeId];
@@ -401,11 +441,15 @@ export class GameScene extends Phaser.Scene {
     }
 
     // 撃破集計 (Phase 4: 敵種ごとの creditsValue で加算)
+    // Phase 6 Step 6: 撃破時にガチャドロップ判定 (基地接触で死んだ敵は対象外)
     let creditsThisFrame = 0;
     for (const e of this.enemies) {
       if (e.dead && !(e as Enemy & { _counted?: boolean })._counted) {
         // 基地接触で死んだ場合は reachedBase=true (報酬なし)
-        if (!e.reachedBase) creditsThisFrame += e.creditsValue;
+        if (!e.reachedBase) {
+          creditsThisFrame += e.creditsValue;
+          this.rollEnemyDropGacha(e);
+        }
         (e as Enemy & { _counted?: boolean })._counted = true;
       }
     }

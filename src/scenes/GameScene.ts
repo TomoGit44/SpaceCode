@@ -10,6 +10,8 @@ import { Executor } from '../program/Executor';
 import { Program } from '../program/Program';
 import { Inventory } from '../items/Inventory';
 import { EffectSystem } from '../items/effects';
+import type { Rarity } from '../items/itemTypes';
+import { CHEMICAL_TYPES } from '../items/types/chemicals';
 import { SpawnSystem } from '../systems/SpawnSystem';
 import { WaveSystem } from '../systems/WaveSystem';
 import { EconomySystem } from '../systems/EconomySystem';
@@ -254,6 +256,7 @@ export class GameScene extends Phaser.Scene {
         this.recomputeShipStats();
         this.refreshItemButton();
       },
+      useChemical: (typeId: string, rarity: Rarity) => this.applyChemical(typeId, rarity),
     });
     const ov = this.scene.get('ItemInventoryScene');
     ov.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
@@ -308,6 +311,43 @@ export class GameScene extends Phaser.Scene {
   /** Ship 破壊時: その Ship の装着モジュールをインベントリへ戻す (未装着状態にする)。 */
   private releaseShipItems(ship: Ship): void {
     delete this.inventory.shipModules[ship.id];
+  }
+
+  /** ケミカル使用効果を適用する (ItemInventoryScene から呼ばれる)。 */
+  private applyChemical(typeId: string, rarity: Rarity): void {
+    const chem = CHEMICAL_TYPES[typeId];
+    if (!chem) return;
+    const v = chem.rarityValue[rarity];
+    switch (chem.kind) {
+      case 'baseHeal':
+        this.base.heal(v);
+        this.hud.setHp(this.base.hp);
+        break;
+      case 'shipHeal':
+        for (const s of this.ships) s.heal(v);
+        break;
+      case 'shipRefuel':
+        for (const s of this.ships) s.refuel();
+        break;
+      case 'credits':
+        this.economy.add(v, 'chemical');
+        break;
+      case 'timedAttack':
+        this.effects.addTimedShipBuff(
+          chem.buffStat ?? 'damagePerShot',
+          v,
+          chem.durationMs ?? 20000
+        );
+        break;
+      case 'aoeDamage': {
+        const r = chem.radius ?? 300;
+        for (const e of this.enemies) {
+          if (e.dead) continue;
+          if (Math.hypot(e.x - this.base.x, e.y - this.base.y) <= r) e.takeDamage(v);
+        }
+        break;
+      }
+    }
   }
 
   update(_time: number, delta: number): void {

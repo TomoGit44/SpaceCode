@@ -13,6 +13,7 @@ import {
 } from '../items/itemTypes';
 import { OMNI_CORE_TYPES, isOmniCore, omniCorePercent, makeRandomOmniCore } from '../items/types/omniCores';
 import { MODULE_TYPES, isModule, moduleEffectText, makeRandomModule } from '../items/types/modules';
+import { CHEMICAL_TYPES, isChemical, chemicalEffectText, makeRandomChemical } from '../items/types/chemicals';
 
 const FONT = 'system-ui, "Segoe UI", sans-serif';
 
@@ -22,6 +23,8 @@ export interface ItemInventoryData {
   getShips: () => Ship[];
   /** アイテム構成が変わったとき呼ぶ (GameScene が最大 stat 再計算 + バッジ更新)。 */
   onChanged: () => void;
+  /** ケミカル使用効果を適用する (GameScene が base/ships/economy 等に反映)。 */
+  useChemical: (typeId: string, rarity: Rarity) => void;
 }
 
 interface CategoryDef {
@@ -37,22 +40,25 @@ const CATEGORIES: ReadonlyArray<CategoryDef> = [
   { id: 'moduleGacha', label: 'モジュールガチャ' },
 ];
 
+const IMPLEMENTED: ReadonlyArray<ItemCategory> = ['omniCore', 'module', 'chemical'];
+
 /**
  * アイテム一覧オーバーレイ。
  *
  * GameScene を pause せずに並行 active で起動する (ProgramEditorScene と同じパターン)。
  * 左: カテゴリタブ / 中央: 所持アイテム一覧 / 右: 選択アイテムの詳細・操作。
  *
- * Phase 6 Step 3 時点: オムニ・コア + モジュール (装着先 Ship 選択フロー) に対応。
- * ケミカル / ガチャは後続ステップ。
+ * Phase 6 Step 4 時点: オムニ・コア + モジュール + ケミカルに対応。ガチャは後続。
  */
 export class ItemInventoryScene extends Phaser.Scene {
   private inventory!: Inventory;
   private getShips!: () => Ship[];
   private onChanged!: () => void;
+  private useChemicalCb!: (typeId: string, rarity: Rarity) => void;
 
   private selectedCategory: ItemCategory = 'omniCore';
   private selectedUid: string | null = null;
+  private confirmingUse = false;
 
   private dyn: Phaser.GameObjects.GameObject[] = [];
   private chrome: Phaser.GameObjects.GameObject[] = [];
@@ -71,8 +77,10 @@ export class ItemInventoryScene extends Phaser.Scene {
     this.inventory = data.inventory;
     this.getShips = data.getShips;
     this.onChanged = data.onChanged;
+    this.useChemicalCb = data.useChemical;
     this.selectedCategory = 'omniCore';
     this.selectedUid = null;
+    this.confirmingUse = false;
   }
 
   create(): void {
@@ -152,6 +160,7 @@ export class ItemInventoryScene extends Phaser.Scene {
         if (p.rightButtonDown()) return;
         this.selectedCategory = cat.id;
         this.selectedUid = null;
+        this.confirmingUse = false;
         this.render();
       });
       this.dyn.push(bg, label);
@@ -165,11 +174,11 @@ export class ItemInventoryScene extends Phaser.Scene {
     const w = 480;
     const top = this.cardTop + 60;
 
-    const items = this.categoryItems();
-    if (this.selectedCategory !== 'omniCore' && this.selectedCategory !== 'module') {
+    if (!IMPLEMENTED.includes(this.selectedCategory)) {
       this.addCenterNote(x + w / 2, top + 80, 'このカテゴリのアイテムは後のステップで実装予定です');
       return;
     }
+    const items = this.categoryItems();
     if (items.length === 0) {
       this.addCenterNote(x + w / 2, top + 80, 'このカテゴリのアイテムを所持していません');
       return;
@@ -191,15 +200,24 @@ export class ItemInventoryScene extends Phaser.Scene {
     if (this.selectedCategory === 'module') {
       return this.inventory.items.filter((it) => isModule(it.typeId));
     }
+    if (this.selectedCategory === 'chemical') {
+      return this.inventory.items.filter((it) => isChemical(it.typeId));
+    }
     return [];
+  }
+
+  private displayName(typeId: string): string {
+    return (
+      OMNI_CORE_TYPES[typeId]?.nameJa ??
+      MODULE_TYPES[typeId]?.nameJa ??
+      CHEMICAL_TYPES[typeId]?.nameJa ??
+      typeId
+    );
   }
 
   private makeItemRow(it: ItemInstance, x: number, y: number, w: number): void {
     const selected = it.uid === this.selectedUid;
     const rc = RARITY_COLOR[it.rarity];
-    const name = isOmniCore(it.typeId)
-      ? OMNI_CORE_TYPES[it.typeId]?.nameJa ?? it.typeId
-      : MODULE_TYPES[it.typeId]?.nameJa ?? it.typeId;
 
     const bg = this.add
       .rectangle(x + w / 2, y + 20, w, 42, selected ? rc : COLORS.panelBg, selected ? 0.24 : 0.85)
@@ -209,6 +227,7 @@ export class ItemInventoryScene extends Phaser.Scene {
     bg.on('pointerdown', (p: Phaser.Input.Pointer) => {
       if (p.rightButtonDown()) return;
       this.selectedUid = it.uid;
+      this.confirmingUse = false;
       this.render();
     });
 
@@ -223,7 +242,7 @@ export class ItemInventoryScene extends Phaser.Scene {
       .setDepth(3);
 
     const nameText = this.add
-      .text(x + 52, y + 20, name, {
+      .text(x + 52, y + 20, this.displayName(it.typeId), {
         fontFamily: FONT,
         fontSize: '14px',
         color: '#cfd6e6',
@@ -233,29 +252,29 @@ export class ItemInventoryScene extends Phaser.Scene {
 
     this.dyn.push(bg, badge, nameText);
 
-    // 右側: モジュールは装着状態、オムニ・コアは効果%
+    // 右側: カテゴリ別の補助表示
+    let sub = '';
+    let subColor = '#6b7da0';
     if (isModule(it.typeId)) {
       const idx = this.equippedShipIndex(it.uid);
-      const sub = this.add
-        .text(x + w - 14, y + 20, idx >= 0 ? `→ 宇宙船 #${idx + 1}` : '未装着', {
+      sub = idx >= 0 ? `→ 宇宙船 #${idx + 1}` : '未装着';
+      subColor = idx >= 0 ? '#3ee0c5' : '#6b7da0';
+    } else if (isOmniCore(it.typeId)) {
+      sub = `+${omniCorePercent(it.typeId, it.rarity)}%`;
+      subColor = '#3ee0c5';
+    } else if (isChemical(it.typeId)) {
+      sub = '使い切り';
+    }
+    this.dyn.push(
+      this.add
+        .text(x + w - 14, y + 20, sub, {
           fontFamily: FONT,
           fontSize: '12px',
-          color: idx >= 0 ? '#3ee0c5' : '#6b7da0',
+          color: subColor,
         })
         .setOrigin(1, 0.5)
-        .setDepth(3);
-      this.dyn.push(sub);
-    } else {
-      const eff = this.add
-        .text(x + w - 14, y + 20, `+${omniCorePercent(it.typeId, it.rarity)}%`, {
-          fontFamily: FONT,
-          fontSize: '13px',
-          color: '#3ee0c5',
-        })
-        .setOrigin(1, 0.5)
-        .setDepth(3);
-      this.dyn.push(eff);
-    }
+        .setDepth(3)
+    );
   }
 
   /** 右: 選択アイテムの詳細とアクション。 */
@@ -290,14 +309,9 @@ export class ItemInventoryScene extends Phaser.Scene {
     }
 
     const rc = RARITY_COLOR[sel.rarity];
-    const isCore = isOmniCore(sel.typeId);
-    const name = isCore
-      ? OMNI_CORE_TYPES[sel.typeId]?.nameJa ?? sel.typeId
-      : MODULE_TYPES[sel.typeId]?.nameJa ?? sel.typeId;
-
     this.dyn.push(
       this.add
-        .text(x + 16, top + 18, name, {
+        .text(x + 16, top + 18, this.displayName(sel.typeId), {
           fontFamily: FONT,
           fontSize: '17px',
           color: '#cfd6e6',
@@ -314,36 +328,40 @@ export class ItemInventoryScene extends Phaser.Scene {
         .setDepth(3)
     );
 
-    if (isCore) {
-      const core = OMNI_CORE_TYPES[sel.typeId]!;
-      this.dyn.push(
-        this.add
-          .text(x + 16, top + 80, `${core.descJa}\n+${omniCorePercent(sel.typeId, sel.rarity)}%`, {
-            fontFamily: FONT,
-            fontSize: '14px',
-            color: '#cfd6e6',
-            lineSpacing: 6,
-            wordWrap: { width: w - 32 },
-          })
-          .setDepth(3),
-        this.add
-          .text(x + 16, top + 150, '所持しているだけで常時有効。\n同種コアの効果は加算で重なる。', {
-            fontFamily: FONT,
-            fontSize: '12px',
-            color: '#6b7da0',
-            lineSpacing: 5,
-            wordWrap: { width: w - 32 },
-          })
-          .setDepth(3)
-      );
-      return;
-    }
+    if (isOmniCore(sel.typeId)) this.renderCoreDetail(sel, x, w, top);
+    else if (isModule(sel.typeId)) this.renderModuleDetail(sel, x, w, top);
+    else if (isChemical(sel.typeId)) this.renderChemicalDetail(sel, x, w, top);
+  }
 
-    // モジュール詳細 + 装着 / 取り外し
-    const mod = MODULE_TYPES[sel.typeId]!;
+  private renderCoreDetail(it: ItemInstance, x: number, w: number, top: number): void {
+    const core = OMNI_CORE_TYPES[it.typeId]!;
     this.dyn.push(
       this.add
-        .text(x + 16, top + 80, `${mod.descJa}\n\n${moduleEffectText(sel.typeId, sel.rarity)}`, {
+        .text(x + 16, top + 80, `${core.descJa}\n+${omniCorePercent(it.typeId, it.rarity)}%`, {
+          fontFamily: FONT,
+          fontSize: '14px',
+          color: '#cfd6e6',
+          lineSpacing: 6,
+          wordWrap: { width: w - 32 },
+        })
+        .setDepth(3),
+      this.add
+        .text(x + 16, top + 150, '所持しているだけで常時有効。\n同種コアの効果は加算で重なる。', {
+          fontFamily: FONT,
+          fontSize: '12px',
+          color: '#6b7da0',
+          lineSpacing: 5,
+          wordWrap: { width: w - 32 },
+        })
+        .setDepth(3)
+    );
+  }
+
+  private renderModuleDetail(it: ItemInstance, x: number, w: number, top: number): void {
+    const mod = MODULE_TYPES[it.typeId]!;
+    this.dyn.push(
+      this.add
+        .text(x + 16, top + 80, `${mod.descJa}\n\n${moduleEffectText(it.typeId, it.rarity)}`, {
           fontFamily: FONT,
           fontSize: '13px',
           color: '#cfd6e6',
@@ -352,7 +370,50 @@ export class ItemInventoryScene extends Phaser.Scene {
         })
         .setDepth(3)
     );
-    this.renderModuleActions(sel, x + 16, top + 178, w - 32);
+    this.renderModuleActions(it, x + 16, top + 178, w - 32);
+  }
+
+  private renderChemicalDetail(it: ItemInstance, x: number, w: number, top: number): void {
+    const chem = CHEMICAL_TYPES[it.typeId]!;
+    this.dyn.push(
+      this.add
+        .text(x + 16, top + 80, `${chem.descJa}\n\n効果: ${chemicalEffectText(it.typeId, it.rarity)}`, {
+          fontFamily: FONT,
+          fontSize: '13px',
+          color: '#cfd6e6',
+          lineSpacing: 6,
+          wordWrap: { width: w - 32 },
+        })
+        .setDepth(3)
+    );
+
+    const ax = x + 16;
+    const aw = w - 32;
+    let ay = top + 188;
+    if (this.confirmingUse) {
+      this.dyn.push(
+        this.add
+          .text(ax, ay, '使用すると消費されます。', {
+            fontFamily: FONT,
+            fontSize: '12px',
+            color: '#6b7da0',
+          })
+          .setDepth(3)
+      );
+      ay += 22;
+      this.makeActionButton(ax, ay, aw, '使用する', COLORS.accent, () => {
+        this.consumeChemical(it);
+      });
+      this.makeActionButton(ax, ay + 34, aw, 'やめる', COLORS.uiDim, () => {
+        this.confirmingUse = false;
+        this.render();
+      });
+    } else {
+      this.makeActionButton(ax, ay, aw, '使用する', COLORS.accent, () => {
+        this.confirmingUse = true;
+        this.render();
+      });
+    }
   }
 
   /** モジュールの装着 / 取り外し操作 UI。 */
@@ -407,7 +468,7 @@ export class ItemInventoryScene extends Phaser.Scene {
     });
   }
 
-  // ─── モジュール操作 ────────────────────────────────────────
+  // ─── アイテム操作 ──────────────────────────────────────────
 
   private equippedShipIndex(uid: string): number {
     const ships = this.getShips();
@@ -441,6 +502,16 @@ export class ItemInventoryScene extends Phaser.Scene {
       if (next.length > 0) this.inventory.shipModules[id] = next;
       else delete this.inventory.shipModules[id];
     }
+  }
+
+  /** ケミカルを使用 (効果適用 + インベントリから消費)。 */
+  private consumeChemical(it: ItemInstance): void {
+    this.useChemicalCb(it.typeId, it.rarity);
+    this.inventory.items = this.inventory.items.filter((i) => i.uid !== it.uid);
+    this.selectedUid = null;
+    this.confirmingUse = false;
+    this.onChanged();
+    this.render();
   }
 
   // ─── デバッグ獲得行 ────────────────────────────────────────
@@ -489,14 +560,16 @@ export class ItemInventoryScene extends Phaser.Scene {
     this.chrome.push(bg, t);
   }
 
-  /** 選択中カテゴリのアイテムを 1 個獲得する (omniCore / module のみ)。 */
+  /** 選択中カテゴリのアイテムを 1 個獲得する (omniCore / module / chemical)。 */
   private debugGrant(rarity: Rarity): void {
     let granted: ItemInstance | null = null;
     if (this.selectedCategory === 'omniCore') granted = makeRandomOmniCore(rarity);
     else if (this.selectedCategory === 'module') granted = makeRandomModule(rarity);
+    else if (this.selectedCategory === 'chemical') granted = makeRandomChemical(rarity);
     if (!granted) return;
     this.inventory.items.push(granted);
     this.selectedUid = granted.uid;
+    this.confirmingUse = false;
     this.onChanged();
     this.render();
   }

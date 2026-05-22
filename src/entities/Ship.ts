@@ -353,6 +353,12 @@ export class Ship {
     this.energy = this.maxEnergy;
   }
 
+  /** Phase 6: ケミカルによる HP 回復。最大 HP を超えない。死亡 Ship には効かない。 */
+  public heal(amount: number): void {
+    if (this.dead || amount <= 0) return;
+    this.hp = Math.min(this.maxHp, this.hp + amount);
+  }
+
   /**
    * Phase 6: 装着アイテムによる最大 stat (HP / エネルギー / 積載量) を再計算して適用する。
    * アイテム獲得・モジュール着脱など「最大値が変わりうる瞬間」に呼ぶ (仕様 A5)。

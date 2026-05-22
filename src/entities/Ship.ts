@@ -50,11 +50,13 @@ export class Ship {
   public readonly id: string = crypto.randomUUID();
   public x: number;
   public y: number;
-  public readonly maxHp: number = SHIP.hp;
+  // Phase 6: 最大値はアイテム (オムニ・コア/モジュール) で変動するため可変。
+  // 変更は applyMaxStats() 経由で行い、増加時は差分回復・減少時は clamp する (仕様 A5)。
+  public maxHp: number = SHIP.hp;
   public hp: number = SHIP.hp;
-  public readonly maxEnergy: number = SHIP.energy;
+  public maxEnergy: number = SHIP.energy;
   public energy: number = SHIP.energy;
-  public readonly inventoryCap: number = SHIP.inventoryCap;
+  public inventoryCap: number = SHIP.inventoryCap;
   public inventory: number = 0;
   public dead: boolean = false;
   public state: ShipState = 'idle';
@@ -171,10 +173,16 @@ export class Ship {
     if (d > SHIP.attackRange) return false;
     // Phase 6: 攻撃力はオムニ・コア/モジュールで強化されうる (EffectSystem 経由)
     const damage = world.effects.shipStat(this, 'damagePerShot', SHIP.damagePerShot);
-    world.bullets.push(
-      new Bullet(this.scene, this.x, this.y, enemy, damage, SHIP.bulletSpeed)
-    );
-    this.energy -= SHIP.energyPerShot;  // Phase 4: 射撃でエネルギー消費
+    // Phase 6: モジュール (ガトリング砲等) で 1 射の弾数が増える
+    const shots = 1 + world.effects.shipExtraShots(this);
+    for (let i = 0; i < shots; i++) {
+      const jx = i === 0 ? 0 : (Math.random() - 0.5) * 12;
+      const jy = i === 0 ? 0 : (Math.random() - 0.5) * 12;
+      world.bullets.push(
+        new Bullet(this.scene, this.x + jx, this.y + jy, enemy, damage, SHIP.bulletSpeed)
+      );
+    }
+    this.energy -= SHIP.energyPerShot;  // Phase 4: 射撃でエネルギー消費 (1 射ぶん)
     // Phase 5: マズルフラッシュ (短い円が拡大して消える)
     const flash = this.scene.add.graphics();
     flash.fillStyle(COLORS.accent, 0.7);
@@ -343,6 +351,34 @@ export class Ship {
 
   public refuel(): void {
     this.energy = this.maxEnergy;
+  }
+
+  /**
+   * Phase 6: 装着アイテムによる最大 stat (HP / エネルギー / 積載量) を再計算して適用する。
+   * アイテム獲得・モジュール着脱など「最大値が変わりうる瞬間」に呼ぶ (仕様 A5)。
+   *  - 最大値が増えたら現在値を差分ぶん回復
+   *  - 最大値が減って現在値が超過したら新最大値まで clamp (超過分は失われる)
+   */
+  public applyMaxStats(effects: EffectSystem): void {
+    this.setMaxHp(Math.round(effects.shipStat(this, 'maxHp', SHIP.hp)));
+    this.setMaxEnergy(Math.round(effects.shipStat(this, 'maxEnergy', SHIP.energy)));
+    const cap = Math.max(1, Math.round(effects.shipStat(this, 'inventoryCap', SHIP.inventoryCap)));
+    this.inventoryCap = cap;
+    if (this.inventory > cap) this.inventory = cap;
+  }
+
+  private setMaxHp(newMax: number): void {
+    const delta = newMax - this.maxHp;
+    this.maxHp = newMax;
+    if (delta > 0) this.hp += delta;
+    if (this.hp > this.maxHp) this.hp = this.maxHp;
+  }
+
+  private setMaxEnergy(newMax: number): void {
+    const delta = newMax - this.maxEnergy;
+    this.maxEnergy = newMax;
+    if (delta > 0) this.energy += delta;
+    if (this.energy > this.maxEnergy) this.energy = this.maxEnergy;
   }
 
   private die(): void {

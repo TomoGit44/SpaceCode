@@ -214,6 +214,8 @@ export class GameScene extends Phaser.Scene {
     // コア原則どおり「組まなければ動かない」状態から始まる。
     const program = new Program([]);
     ship.setProgram(program, new Executor(program));
+    // Phase 6: 既にオムニ・コア等を所持していれば最大 stat に反映して出現させる
+    ship.applyMaxStats(this.effects);
     this.ships.push(ship);
     this.hud.showBanner('船をクリックしてプログラムを編集', 1100);
   }
@@ -247,8 +249,11 @@ export class GameScene extends Phaser.Scene {
     this.overlayDepth += 1;
     this.scene.launch('ItemInventoryScene', {
       inventory: this.inventory,
-      effects: this.effects,
-      waveState: this.waves.getState(),
+      getShips: () => this.ships,
+      onChanged: () => {
+        this.recomputeShipStats();
+        this.refreshItemButton();
+      },
     });
     const ov = this.scene.get('ItemInventoryScene');
     ov.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
@@ -293,6 +298,16 @@ export class GameScene extends Phaser.Scene {
     if (!this.itemBtnLabel) return;
     const n = this.inventory.items.length + this.inventory.codes.length;
     this.itemBtnLabel.setText(`📦 アイテム (${n})`);
+  }
+
+  /** 全 Ship の最大 stat を装着アイテムに合わせて再計算する (アイテム構成変化時)。 */
+  private recomputeShipStats(): void {
+    for (const s of this.ships) s.applyMaxStats(this.effects);
+  }
+
+  /** Ship 破壊時: その Ship の装着モジュールをインベントリへ戻す (未装着状態にする)。 */
+  private releaseShipItems(ship: Ship): void {
+    delete this.inventory.shipModules[ship.id];
   }
 
   update(_time: number, delta: number): void {
@@ -360,7 +375,13 @@ export class GameScene extends Phaser.Scene {
     // 廃棄
     this.enemies = this.enemies.filter((e) => !e.dead);
     this.bullets = this.bullets.filter((b) => !b.dead);
-    this.ships = this.ships.filter((s) => !s.dead);
+    // Phase 6: 破壊された Ship の装着モジュールはインベントリへ戻す
+    const survivors: Ship[] = [];
+    for (const s of this.ships) {
+      if (s.dead) this.releaseShipItems(s);
+      else survivors.push(s);
+    }
+    this.ships = survivors;
 
     // ステータステキスト更新
     this.updateStatusText();

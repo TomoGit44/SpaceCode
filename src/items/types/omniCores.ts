@@ -56,6 +56,14 @@ export const OMNI_CORE_TYPES: Record<string, OmniCoreType> = {
     stat: 'mineRate',
     rarityPercent: STD,
   },
+  core_hull: {
+    id: 'core_hull',
+    nameJa: '装甲コア',
+    descJa: '全宇宙船の最大 HP',
+    target: 'ship',
+    stat: 'maxHp',
+    rarityPercent: STD,
+  },
   core_turret: {
     id: 'core_turret',
     nameJa: '砲塔コア',

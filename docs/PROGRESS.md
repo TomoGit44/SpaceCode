@@ -1,6 +1,6 @@
 # SpaceCode — 開発進捗ログ
 
-最終更新: 2026-05-16 (MVP 達成 + インライン階層編集改修)
+最終更新: 2026-05-22 (Phase 6 Step 0-5 完了 — アイテムシステム実装中)
 
 > このドキュメントは **「現状どこまでできているか / 次に何をすべきか / 設計書からどこを変えたか」** を Phase 単位で記録する。
 > 設計思想・用語・過去判断は [`DESIGN.md`](DESIGN.md) を参照。
@@ -350,6 +350,119 @@ Phase 5 完了直後にユーザーから UI 仕様変更の指示:
 
 ---
 
+## Phase 6: アイテムシステム 🔧 進行中 (2026-05-22 時点 Step 0-5 完了)
+
+### 目標
+MVP (Phase 5) で完成したコアループに、Run 中の成長要素として **アイテムシステム** を載せる。
+カテゴリは 5 つ (オムニ・コア / モジュール / ケミカル / コードガチャ / モジュールガチャ) + 配置型の **アイテムコード** (Code 拡張)。
+**コア体験「コードを組まないと Ship は動かない」は維持** — アイテムはコードの組み合わせを広げる手段であって、自動挙動の足し算ではない。
+
+進捗: Step 0 〜 5 完了 (commit 済)。ガチャ開封・抽選 UI (`src/items/gacha.ts` は実装済だが未配線)・Run リワード経路は Step 6 以降の予定。
+
+### Phase 6 共通の確定済み設計判断
+- **localStorage 永続化は撤廃** (Phase 4 の `spacecode.shipTemplate` を含む)。Inventory は **Run 毎にリセット**、メモリ上のみ
+- レア度 4 段階 (N / R / SR / L) を全アイテム共通で採用、色を `COLORS.rarity*` に集約
+- 装着効果は **加算スタック** (乗算は終盤の倍々ゲー破綻、§6.1 オムニ・コア)
+- アイテム種類追加は **data-driven** (新オムニ・コア = `OMNI_CORE_TYPES` に 1 行、モジュール = `MODULE_TYPES` に 1 行、ケミカル = `CHEMICAL_TYPES` に 1 行)
+- アイテム一覧 / 編集オーバーレイは複数並ぶため、`editorOpen: boolean` を `overlayDepth: number` に一般化
+
+### Step 0: 用語シフト「ブロック」→「コード」 ✅ 2026-05-22
+**経緯**: Phase 6 でアイテム配置型の Code 拡張 (条件 wrapper) を導入する前段として、用語を「コード」に統一。
+**成果物**:
+- `Block` → `Code` を型名・ファイル名・変数名・UI 文字列で一括 rename。ファイル移動は `git mv` で blame 保持
+- `src/program/Block.ts` → `Code.ts`、`blocks/` → `codes/`、`BlockPalette` → `CodePalette`、`ProgramList`/`BlockParamEditor` 等の API も Code 系に統一
+- `docs/DESIGN.md` §1-5・`CLAUDE.md`・`README.md` の用語を更新 (§6 以降の過去判断ログは当時の表記を保持)
+**設計判断**: 過去判断ログ (§6) の本文は当時の「ブロック」呼称をそのまま残す — 判断の文脈保存を優先 (改名は履歴 fact ではなく表記揺れに該当)
+**検証**: typecheck / build PASS、挙動変化なし
+
+### Step 1: アイテムデータモデル + EffectSystem の枠 ✅ 2026-05-22
+**成果物**:
+- `src/items/itemTypes.ts` — `Rarity` / `ItemCategory` (5) / `ItemInstance` / `CodeItemInstance` / `ShipStat`/`BaseStat`/`EconomyStat` 列挙 + `RARITY_LABEL`/`RARITY_SHORT`/`RARITY_COLOR`
+- `src/items/effects.ts` — `EffectSystem` クラス (Step 1 は素通し: `shipStat(ship, stat, base) → base` を返すだけ)。Step 2 以降で集計を実装
+- `src/items/Inventory.ts` — `items[]` + `codes[]` + `shipModules: Record<shipId, uid[]>` + `reset()`。**メモリ上のみ**
+- `src/config.ts` — `COLORS.rarityN/R/SR/L` 追加
+- `src/entities/Ship.ts` — `readonly id: string` (`crypto.randomUUID()`)。`Inventory.shipModules` のキーに使う
+- `src/utils/save.ts` 削除、`ProgramEditorScene.persist()` 撤廃 — Phase 4 で導入した Program 永続化を破棄
+**設計判断**:
+- **`CodeItemInstance` は `ItemInstance` と別型**: コードアイテムは「プログラムへの配置」概念がモジュール装着と異質なため (配置の真実源は ITEM_CODE ノード自身、後述 Step 5)
+- **`Ship.id` を `crypto.randomUUID()` で発番**: 配列インデックスだと Ship の生成順 / 破壊で安定 ID にならない
+- stat 参照の EffectSystem 経由化は **Step 2 以降で順次**: 効果が即検証できるため (素通し段階で全箇所書き換えると検証不能)
+**検証**: typecheck / build PASS、ランタイムエラーなし
+
+### Step 2: アイテム一覧 UI + オムニ・コア ✅ 2026-05-22
+**成果物**:
+- `src/scenes/ItemInventoryScene.ts` — 並行 active オーバーレイ。左カテゴリタブ / 中央所持一覧 / 右詳細パネル。右端「📦 アイテム」ボタンから開く
+- `src/items/types/omniCores.ts` — `OMNI_CORE_TYPES` (5 種: 攻撃 / 推進 / 採掘 / 砲塔 / 賞金) + `makeRandomOmniCore`。Step 3 で装甲コア追加
+- `src/items/effects.ts` — オムニ・コア集計を実装 (`omniPercent(target, stat)`)。`shipStat`/`baseStat`/`economyStat` がインベントリ集計値で base を倍率補正
+- stat 参照を EffectSystem 経由に置換:
+  - `Ship.update` の `damagePerShot` / `moveSpeed` / `mineRate` → `effects.shipStat(...)`
+  - `Base.update` の砲塔火力 → `effects.baseStat('turretDamage', ...)`
+  - `GameScene` の撃破クレジット → `effects.economyStat('creditsPerKill', ...)`
+- `GameScene` — `editorOpen: boolean` を `overlayDepth: number` に一般化 (ProgramEditorScene と ItemInventoryScene の重複対策、SPACE で誤 startNextPhase しないガード)
+- デバッグ用「オムニ・コア獲得 (N/R/SR/L)」ボタンを ItemInventoryScene に配置
+**設計判断**:
+- **加算スタック**: `damagePerShot` ×1.2 を 3 個持つと `×1.6` (×1.2 を 3 回乗算ではなく)。仕様 §6.1 の「終盤バランス保護」
+- **overlayDepth カウンタ**: オーバーレイ排他ではなく**多重起動を許容**しつつ「最低 1 つ開いていれば GameScene 入力をブロック」できる形に
+- **stat 参照の置換は段階的**: Step 2 で `damagePerShot` / `moveSpeed` / `mineRate` / 砲塔 / 撃破クレジット。`maxHp` / `maxEnergy` / `inventoryCap` は Step 3 (動的 max 機構) と一緒に
+**検証**: typecheck / build PASS、ランタイムエラーなし
+
+### Step 3: モジュール + Ship 装備 ✅ 2026-05-22
+**成果物**:
+- `src/items/types/modules.ts` — `MODULE_TYPES` (5 種): ガトリング砲 / 装甲プレート / 補助スラスタ / 強化ドリル / 拡張カーゴ + `makeRandomModule`
+- `ModuleEffect` は `kind: 'percent' | 'flat'` で表現。`extraShots` (flat) は `config` に base を持たない特殊値
+- `src/items/effects.ts` — `shipModulePercent(ship, stat)` で Ship 個別集計を追加。`shipExtraShots(ship)` で 1 射あたり追加弾数
+- `src/entities/Ship.ts` — `maxHp`/`maxEnergy`/`inventoryCap` を可変化 (`public` フィールド)。`applyMaxStats(effects)`: 増加=差分回復 / 減少=clamp (仕様 A5)。`fireAt` が複数弾発射 (`1 + extraShots` 発)
+- `src/entities/Base.ts` — `applyMaxStats` 相当のオムニ・コア対応 (`maxHp` 拡張は将来用に予約)
+- `src/scenes/ItemInventoryScene.ts` — モジュールタブ + 「装着先 Ship 選択」/「取り外し」フロー。Ship 個別表示
+- `src/scenes/GameScene.ts` — Ship 購入時 / アイテム構成変化時に `applyMaxStats(effects)` 再計算。**Ship 破壊時に装着モジュールをインベントリへ自動返却** (B3)
+- `src/items/types/omniCores.ts` — 装甲コア (`core_hull`, maxHp%) を追加
+**設計判断**:
+- **モジュール個体は 1 Ship 排他** (同種は加算スタックなので個体を複数持てば複数 Ship に分散可能)。仕様 §6.3
+- **ガトリング砲のトレードオフ表現** (`extraShots` + `damagePerShot -40%`): 効果配列で複数 stat を持てる構造、「強化のみ」アイテムにしないため
+- **§7.4 (ProgramEditorScene 内モジュールセクション) は見送り**: ItemInventoryScene で装着完結する設計のため、編集オーバーレイにモジュール UI を重ねる必要なし
+- **Ship 破壊時の装着モジュール返却は GameScene 側**: Ship/Inventory のどちらにも参照を持たせず GameScene が仲介 (B3)
+**検証**: typecheck / build PASS、ランタイムエラーなし
+
+### Step 4: ケミカル ✅ 2026-05-22
+**成果物**:
+- `src/items/types/chemicals.ts` — `CHEMICAL_TYPES` (6 種): 基地修理キット / 船団リペアパック / エネルギーセル / クレジットチップ (即時)、オーバードライブ (時限バフ)、衝撃波ジェネレータ (AoE)
+- `ChemicalKind`: `baseHeal` / `shipHeal` / `shipRefuel` / `credits` / `timedAttack` / `aoeDamage`
+- `src/items/effects.ts` — 時限バフ `TimedShipBuff` + `addTimedShipBuff(stat, percent, durationMs)` + `tick(delta)` で残時間減算。`shipStat` に時限バフ加算を合算
+- `src/entities/Base.ts` — `heal(amount)` 追加 / `src/entities/Ship.ts` — `heal(amount)` 追加
+- `src/scenes/GameScene.ts` — `applyChemical(typeId, rarity)` を kind で振り分け。AoE は基地中心 + 半径内の敵に damage、`effects.tick(delta)` を毎フレーム呼ぶ
+- `src/scenes/ItemInventoryScene.ts` — ケミカルタブ + 「使用する」→ 確認 → 消費フロー
+**設計判断**:
+- ケミカルは **消費型** (装着ではない)。使用すると `Inventory.items` から remove
+- **時限バフは全 Ship 共通** (Ship 個別のバフは MVP スコープ外)
+- 衝撃波は基地中心固定 (任意座標選択は MVP スコープ外、UI 複雑化を回避)
+**検証**: typecheck / build PASS、ランタイムエラーなし
+
+### Step 5: アイテムコードと配置システム ✅ 2026-05-22
+**成果物**:
+- `src/program/Code.ts` — `ITEM_CODE` variant を `Code` union に追加 (`itemUid` / `itemCodeType` / `rarity` / `params` / `children`)。`codeChildren(code)` ヘルパで REPEAT / ITEM_CODE の子配列取得を統一
+- `src/items/types/itemCodes.ts` — `ItemCodeType` 3 種 (`IF_HP_BELOW` / `IF_ENEMY_IN_RANGE` / `IF_INVENTORY_FULL`) + `ITEM_CODE_DEFS` (パラメータ仕様、レア度ごとの最大値)。`createItemCodeNode(inst)` / `itemCodeLabel(node)` / `defaultItemCodeParams`
+- `src/program/codes/IfHpBelow.ts` / `IfEnemyInRange.ts` / `IfInventoryFull.ts` — 条件判定関数 (純関数、ship/world から bool を返す)
+- `src/program/Executor.ts` — `ITEM_CODE` を条件 wrapper として処理: 条件成立時に子コードを 1 周実行 (REPEAT との違い: 1 ループ後 done、何度も繰り返さない)
+- `src/items/codePlacement.ts` — **配置の真実源はプログラム内 ITEM_CODE ノード** (`itemUid`)。`collectPlacedCodeUids(programs)` で全 Ship を走査 → 残数算出。`availableCodeCounts` / `pickUnplacedInstance` (レア度高い順)
+- `src/ui/CodePalette.ts` — 初期コード (∞) と アイテムコード (残数表示、0 で無効化) を別セクションで表示
+- `src/ui/CodeParamEditor.ts` — `ITEM_CODE` のパラメータ編集 UI (レア度ごとの最大値で clamp)
+- `src/ui/ProgramList.ts` — `ITEM_CODE` をネスト wrapper として階層描画 (REPEAT と同じ縦線 + 終端)
+- `src/scenes/ProgramEditorScene.ts` — `inventory` / `getShips` を受け取り、配置・残数を毎フレーム再計算。デバッグ用「アイテムコード獲得」行を追加
+**設計判断 (仕様 §8.4)**:
+- **配置の真実源 = プログラム内 ITEM_CODE ノード**: `CodeItemInstance` 側に配置フラグを持たない。残数は全 Ship のプログラム走査で算出
+- **理由**: Ship 破壊・wrapper コード削除のいずれでもノードが消えれば走査結果から自動的に外れる → アイテムが「未使用」に戻る。明示的な解放処理 (B5) が不要
+- **wrapper の意味**: 条件成立時に子を **1 周だけ実行**。REPEAT が「N 回」「root が無限ループ」とは意味論的に異なる
+- **同じアイテムを複数箇所に配置不可**: `itemUid` は 1 個体 1 配置 (`collectPlacedCodeUids` の Set で保証)
+**検証**: typecheck / build PASS、ランタイムエラーなし
+
+### Phase 6 残作業 (Step 6 以降)
+- **ガチャ抽選 / 開封 UI** (`src/items/gacha.ts` は実装済だが配線されていない)。`drawGacha(category, gachaRarity)` で 3 候補返却・1 つ選択する UI が未実装
+- **Run リワード経路**: Phase クリアやドロップでアイテム / ガチャを獲得する仕組み (現状はデバッグボタン経由のみ)
+- **既知の保留**: ProgramEditorScene 内モジュール表示 (仕様 §7.4) — ItemInventoryScene で完結するため後回し
+- 実プレイ後バランス調整 (Phase 6 アイテムが入った状態での再計測)
+
+---
+
 ## バランス調整メモ (実プレイ後に追記する場所)
 
 > 各 Phase の体感難易度・経済感をプレイ後にここに残す。`config.ts` の数値を触る前に参照。
@@ -384,43 +497,54 @@ Phase 5 完了直後にユーザーから UI 仕様変更の指示:
 
 | ファイル | 状態 | 備考 |
 |---|---|---|
-| `src/main.ts` | ✅ | `ProgramEditorScene` 登録済 (GameScene の後ろ = 並行 active 時に入力レイヤが上) |
-| `src/config.ts` | ✅ | Phase 1/2 で追加なし |
+| `src/main.ts` | ✅ | `ProgramEditorScene` + `ItemInventoryScene` を GameScene の後ろに登録 (並行 active 時の入力レイヤ順) |
+| `src/config.ts` | ✅ | Phase 6: `COLORS.rarity*` 追加 |
 | `src/scenes/BootScene.ts` | ✅ | 変更予定なし |
-| `src/scenes/MenuScene.ts` | ✅ | Phase 5 で軽い演出追加可 |
-| `src/scenes/GameScene.ts` | ✅ | `findShipAt` + `openProgramEditor` + 空 Program 開始 + `editorOpen` ガード |
+| `src/scenes/MenuScene.ts` | ✅ | Phase 5 演出済 |
+| `src/scenes/GameScene.ts` | ✅ | Phase 6: `overlayDepth` カウンタ / `Inventory` + `EffectSystem` 保有 / `applyChemical` / Ship 破壊時のモジュール返却 / Ship 購入時 `applyMaxStats` |
 | `src/scenes/GameOverScene.ts` | ✅ | |
 | `src/scenes/VictoryScene.ts` | ✅ | |
-| `src/scenes/ProgramEditorScene.ts` | ✅ | 並行 active オーバーレイ。SHUTDOWN で全 GameObject 破棄 |
-| `src/entities/Base.ts` | ✅ | `radius` 公開化済 |
-| `src/entities/Tower.ts` | ✅ | 自由配置は Phase D で実現 (既存 2 基はそのまま) |
-| `src/entities/Enemy.ts` | ✅ | Phase 4: 3 種化 (`type: EnemyType` + `stats`/`creditsValue` ゲッタ) |
-| `src/entities/Bullet.ts` | ✅ | Tower/Ship 共用 |
-| `src/entities/Planet.ts` | ✅ | Phase 4: 60s リスポーン (`depletedElapsedMs` + `respawn()` + 進捗バー) |
-| `src/entities/Ship.ts` | ✅ | `program` フィールド + `fireAt` に射撃エネルギー判定 (Phase 4) |
-| `src/systems/SpawnSystem.ts` | ✅ | Phase 4: `spawnAtRandomEdge(type?)` で type 指定可 |
-| `src/systems/WaveSystem.ts` | ✅ | Phase 4: `SpecRunner[]` で並行スポーンタイマー |
-| `src/systems/EconomySystem.ts` | ✅ | `depositResource` 追加済 |
-| `src/systems/DamageSystem.ts` | ⬜ | 現状 GameScene 内に分散。Phase 5 で集約検討 (もしくはこのまま) |
-| `src/program/Block.ts` | ✅ | 名前付き地点 union (6 種) + `BlockType` + `createBlock` ファクトリ |
-| `src/program/Program.ts` | ✅ | ミューテーション API + カーソル追従 (root scope) |
-| `src/program/Executor.ts` | ✅ | スタック実行モデル + REPEAT + `BlockExecContext` + `getRunningBlocks/Cursor` |
-| `src/program/samples.ts` | ✅ | `sampleBlocks()` を export (パレットのサンプル投入ボタン用) |
-| `src/program/locations.ts` | ✅ | `LocationId`/`PlanetId` + resolver |
-| `src/program/blocks/MoveTo.ts` | ✅ | resolveLocation 経由 |
-| `src/program/blocks/Mine.ts` | ✅ | Phase 4: 枯渇は `blocked` でリスポーン待ち |
-| `src/program/blocks/Deposit.ts` | ✅ | Phase 1 |
-| `src/program/blocks/AttackNearest.ts` | ✅ | justEntered で 1 発、`SHIP.attackDurationMs` で done |
-| `src/program/blocks/WaitUntilFull.ts` | ✅ | `ship.isInventoryFull()` で done |
-| `src/program/blocks/Repeat.ts` | ✅ | Executor が直接ハンドル (spec コメントのみ) |
-| `src/ui/HUD.ts` | ✅ | |
+| `src/scenes/ProgramEditorScene.ts` | ✅ | Phase 6: `inventory`/`getShips` 受領、ITEM_CODE 配置 + 残数管理、デバッグ用アイテムコード獲得 |
+| `src/scenes/ItemInventoryScene.ts` | ✅ | Phase 6: 並行 active オーバーレイ。カテゴリタブ + 所持一覧 + 詳細 + 装着/使用フロー |
+| `src/entities/Base.ts` | ✅ | Phase 6: `heal(amount)`、砲塔火力に `effects.baseStat` 経由 |
+| `src/entities/Tower.ts` | 🗑️ | Phase 5 後に削除済 (基地砲塔に統合) |
+| `src/entities/Enemy.ts` | ✅ | Phase 4: 3 種化 |
+| `src/entities/Bullet.ts` | ✅ | 基地砲塔/Ship 共用 |
+| `src/entities/Planet.ts` | ✅ | Phase 4: 60s リスポーン |
+| `src/entities/Ship.ts` | ✅ | Phase 6: `id` 発番 / `maxHp`/`maxEnergy`/`inventoryCap` 可変 / `applyMaxStats` / `heal` / `fireAt` が複数弾 / stat 参照を `effects.shipStat` 経由 |
+| `src/systems/SpawnSystem.ts` | ✅ | |
+| `src/systems/WaveSystem.ts` | ✅ | Phase 5 後: `intermission` を `preparing` 統合、`startNextPhase()` 手動開始 |
+| `src/systems/EconomySystem.ts` | ✅ | |
+| `src/program/Code.ts` | ✅ | Phase 6: `ITEM_CODE` variant 追加、`codeChildren` ヘルパで wrapper を統一 |
+| `src/program/Program.ts` | ✅ | path ベース API + カーソル追従 (root scope) |
+| `src/program/Executor.ts` | ✅ | Phase 6: `ITEM_CODE` を条件 wrapper として処理 (1 周実行) / root 末尾は自動ループバック |
+| `src/program/samples.ts` | ✅ | `sampleCodes()` (Phase 6 で rename) |
+| `src/program/locations.ts` | ✅ | |
+| `src/program/codes/MoveTo.ts` | ✅ | Phase 6 Step 0 で `blocks/` → `codes/` 改名 |
+| `src/program/codes/Mine.ts` | ✅ | 枯渇時 `blocked` |
+| `src/program/codes/Deposit.ts` | ✅ | |
+| `src/program/codes/AttackNearest.ts` | ✅ | |
+| `src/program/codes/WaitUntilFull.ts` | ✅ | |
+| `src/program/codes/Repeat.ts` | ✅ | Executor が直接ハンドル |
+| `src/program/codes/IfHpBelow.ts` | ✅ | Phase 6 Step 5: ITEM_CODE 条件判定 (純関数) |
+| `src/program/codes/IfEnemyInRange.ts` | ✅ | Phase 6 Step 5: ITEM_CODE 条件判定 |
+| `src/program/codes/IfInventoryFull.ts` | ✅ | Phase 6 Step 5: ITEM_CODE 条件判定 |
+| `src/items/itemTypes.ts` | ✅ | Phase 6 Step 1: `Rarity` / `ItemInstance` / `CodeItemInstance` / stat 列挙 |
+| `src/items/Inventory.ts` | ✅ | Phase 6 Step 1: items/codes/shipModules。**メモリ上のみ** (Run 毎リセット) |
+| `src/items/effects.ts` | ✅ | Phase 6: オムニ・コア + モジュール + 時限バフを集約、加算スタック |
+| `src/items/codePlacement.ts` | ✅ | Phase 6 Step 5: ITEM_CODE 配置の真実源走査 (`collectPlacedCodeUids` / `availableCodeCounts` / `pickUnplacedInstance`) |
+| `src/items/types/omniCores.ts` | ✅ | Phase 6 Step 2-3: 6 種 (攻撃/推進/採掘/装甲/砲塔/賞金) |
+| `src/items/types/modules.ts` | ✅ | Phase 6 Step 3: 5 種 (ガトリング/装甲/スラスタ/ドリル/カーゴ) |
+| `src/items/types/chemicals.ts` | ✅ | Phase 6 Step 4: 6 種 (修理/船団リペア/エネ/$/オーバードライブ/衝撃波) |
+| `src/items/types/itemCodes.ts` | ✅ | Phase 6 Step 5: アイテムコード定義 3 種 (もし HP/敵/満タン) + `createItemCodeNode` |
+| `src/items/gacha.ts` | ⬜ | Phase 6: 抽選ロジック実装済 (`drawGacha` 等) **だが未配線**。Step 6 で UI 接続予定 |
+| `src/ui/HUD.ts` | ✅ | Phase 5 後: 「開始」ボタン |
 | `src/ui/ShopPanel.ts` | ✅ | |
-| `src/ui/BlockPalette.ts` | ✅ | ブロック追加 + サンプル投入 + 閉じる |
-| `src/ui/ProgramList.ts` | ✅ | ブロック行 ▲▼✕ + 走行中マーカー |
-| `src/ui/BlockParamEditor.ts` | ✅ | LocationId/PlanetId チップ選択 |
+| `src/ui/CodePalette.ts` | ✅ | Phase 6: 初期コード (∞) + アイテムコード (残数) の 2 セクション |
+| `src/ui/ProgramList.ts` | ✅ | Phase 6: ITEM_CODE をネスト wrapper として階層描画 |
+| `src/ui/CodeParamEditor.ts` | ✅ | Phase 6: ITEM_CODE のパラメータ編集 (レア度で最大値 clamp) |
 | `src/utils/starfield.ts` | ✅ | |
-| `src/utils/math.ts` | ⬜ | 必要になったら |
-| `src/utils/save.ts` | ✅ | Phase 4: Ship Program 永続化 (`saveShipTemplate` / `loadShipTemplate` / `clearShipTemplate`) |
+| `src/utils/save.ts` | 🗑️ | Phase 6 Step 1 で削除済 (Inventory はメモリ上のみ、Program 永続化も撤廃) |
 
 凡例: ✅ 完了 / 🔧 部分実装・拡張予定 / 🗑️ 削除予定 / ⬜ 未着手
 

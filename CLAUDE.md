@@ -23,25 +23,30 @@
 
 ---
 
-## 現在のステータス (最終更新: 2026-05-16)
+## 現在のステータス (最終更新: 2026-05-22)
 
 | Phase | 内容 | 状態 |
 |---|---|---|
-| 基盤層 | Boot/Menu/Game/GameOver/Victory + Base/Tower/Enemy/Bullet/Planet/Ship + Wave/Spawn/Economy + HUD/ShopPanel | ✅ 完了 (旧 Phase A-D) |
+| 基盤層 | Boot/Menu/Game/GameOver/Victory + Base/Enemy/Bullet/Planet/Ship + Wave/Spawn/Economy + HUD/ShopPanel | ✅ 完了 (旧 Phase A-D) |
 | **Phase 1** | **コード実行系**: `Code`/`Program`/`Executor` + 3 種 (`MOVE_TO`/`MINE`/`DEPOSIT`) | ✅ 完了 |
 | **Phase 2** | **コード編集 UI**: `ProgramEditorScene` (並行 active オーバーレイ) + 3 UI コンポーネント。Ship クリック → ライブ編集 | ✅ 完了 |
 | **Phase 3** | **残り 3 コード + 制御フロー**: `ATTACK_NEAREST` / `WAIT_UNTIL_FULL` / `REPEAT` (ネスト構造)。Executor スタック化、Ship cooldown 撤廃 | ✅ 完了 |
-| **Phase 4** | **統合と難易度調整 / ローカルセーブ**: 射撃エネルギー消費、敵 3 種化 (basic/fast/tank)、Ship Program 永続化 (localStorage)、惑星 60s リスポーン、Wave/経済バランス調整 | ✅ 完了 |
-| **Phase 5** | **仕上げ**: 演出強化 (シーン遷移・フラッシュ・バナーイージング)、配色 hardcoded → `COLORS` 統一、README 整備 | ✅ 完了 |
+| **Phase 4** | **統合と難易度調整 / ローカルセーブ**: 射撃エネルギー消費、敵 3 種化 (basic/fast/tank)、Ship Program 永続化 (localStorage)、惑星 60s リスポーン、Wave/経済バランス調整 | ✅ 完了 (※ 永続化は Phase 6 で撤廃) |
+| **Phase 5** | **仕上げ**: 演出強化 (シーン遷移・フラッシュ・バナーイージング)、配色 hardcoded → `COLORS` 統一、README 整備 | ✅ 完了 (**MVP 達成 2026-05-16**) |
+| 補追 (Phase 5 後) | タワー廃止 → 基地砲塔統合 / Program 自動ループバック / 準備時間を手動開始制 | ✅ 完了 |
+| **Phase 6** | **アイテムシステム**: `Inventory` (Run 揮発) + `EffectSystem` (加算スタック) / オムニ・コア 6 / モジュール 5 / ケミカル 6 / **アイテムコード** 3 (ITEM_CODE 条件 wrapper) / `ItemInventoryScene` | 🔧 **Step 0-5 完了** (ガチャ UI / リワード経路は Step 6 以降) |
 
-**🎉 MVP 達成 (2026-05-16)**。通しプレイ可能。コア体験「プログラムを組まないと Ship は動かない」を実装で成立。
+通しプレイ可能。コア体験「プログラムを組まないと Ship は動かない」を維持しつつ、Run 中の成長要素 (アイテム) を載せている最中。
 
-**Phase 5 後の継続課題** (本セッションでは未着手):
-- **実プレイ後バランス再調整** — `docs/PROGRESS.md` のバランスメモ枠を埋めて、数値を微調整
+**Phase 6 残作業**:
+- ガチャ抽選 / 開封 UI 配線 (`src/items/gacha.ts` は実装済だが未参照)
+- Run リワード経路 (Phase クリア / ドロップでアイテム獲得。現状はデバッグボタン経由のみ)
+
+**MVP 後の継続課題** (Phase 6 と独立):
+- 実プレイ後バランス再調整 — `docs/PROGRESS.md` バランスメモ枠の計測ポイント。Phase 6 アイテム導入後の再計測必要
 - バンドル分割 (Phaser dynamic import で初期ロード軽減)
 - 音 (BGM / SE)
 - 敵バリエーション拡張・惑星追加
-- セーブの拡張 (Ship スロット別保存)
 
 ---
 
@@ -119,42 +124,55 @@ git push                            # 直後に必ず push
 
 ```
 src/
-├── main.ts                 # Phaser 起動・シーン登録
-├── config.ts               # 全定数 (GAME_*, COLORS, BASE, BASE_TURRET, SHIP, ENEMY/ENEMY_TYPES, ENEMY_VS_SHIP, ECONOMY, STAGE, PHASES (enemySpecs), SPAWN, PLANETS, PLANET)
-├── scenes/                 # Phaser シーン (薄く保つ。ロジックは entities/systems へ)
+├── main.ts                 # Phaser 起動・シーン登録 (Game / ProgramEditor / ItemInventory はこの順で並行 active 対応)
+├── config.ts               # 全定数 (GAME_*, COLORS (+ rarity*), BASE, BASE_TURRET, SHIP, ENEMY_TYPES, ENEMY_VS_SHIP, ECONOMY, STAGE, PHASES (enemySpecs), SPAWN, PLANETS, PLANET)
+├── scenes/                 # Phaser シーン (薄く保つ。ロジックは entities/systems/items/program へ)
 │   ├── BootScene.ts        # 即 Menu へ
 │   ├── MenuScene.ts        # タイトル + クリック/SPACE で開始
-│   ├── GameScene.ts        # メインループ。enemies/bullets/planets/ships 配列を所有
+│   ├── GameScene.ts        # メインループ。enemies/bullets/planets/ships + Inventory + EffectSystem を所有。overlayDepth でオーバーレイ入力ガード
 │   ├── GameOverScene.ts    # R リトライ / ESC メニュー
 │   ├── VictoryScene.ts     # STAGE CLEAR
-│   └── ProgramEditorScene.ts  # 並行 active オーバーレイ。Ship クリックで起動、Program をライブ編集
+│   ├── ProgramEditorScene.ts  # 並行 active オーバーレイ。Ship クリックで起動、Program をライブ編集。ITEM_CODE 配置 + 残数管理
+│   └── ItemInventoryScene.ts  # Phase 6: 並行 active オーバーレイ。カテゴリタブ + 所持一覧 + 詳細 + 装着/使用フロー
 ├── entities/               # ゲーム内オブジェクト (描画+状態を自分で持つ)
-│   ├── Base.ts             # 基地 HP, takeDamage, 脈動 + 回転リング + 内蔵砲塔 (射程リング表示 + 射撃)
-│   ├── Enemy.ts            # 基地へ直進, dead/reachedBase フラグ
+│   ├── Base.ts             # 基地 HP, takeDamage, heal, 脈動 + 回転リング + 内蔵砲塔 (射程リング表示 + 射撃。火力は effects.baseStat 経由)
+│   ├── Enemy.ts            # 基地へ直進, dead/reachedBase フラグ。3 種 (basic/fast/tank)
 │   ├── Bullet.ts           # 対象ホーミング (基地砲塔/Ship 共用)
-│   ├── Planet.ts           # 資源源。extract API + 残量リング/バー
-│   └── Ship.ts             # 命令的 API (moveTo/mineAt/depositAt/attackNearest/stop) + setBehavior
-├── program/                # コード実行系 (Phase 1+2+3 完了。6 種揃った)
-│   ├── Code.ts             # Discriminated union (6 種、名前付き地点 + REPEAT ネスト) + CodeType + createCode + CodeStepResult
-│   ├── Program.ts          # 配列 + カーソル。append/insert/removeAt/replaceCode/moveUp/moveDown (root scope カーソル追従)
-│   ├── Executor.ts         # implements ShipBehavior。スタック実行モデル + CodeExecContext + REPEAT ハンドリング
-│   ├── locations.ts        # LocationId / PlanetId 型 + ラベル + resolver (ShipWorld を type-only import)
-│   ├── samples.ts          # sampleCodes() (CodePalette「サンプル読み込み」が使う。REPEAT 入り)
-│   └── codes/              # 1 ファイル 1 種 (MoveTo / Mine / Deposit / AttackNearest / WaitUntilFull / Repeat)
+│   ├── Planet.ts           # 資源源。extract API + 残量リング/バー + 60s リスポーン
+│   └── Ship.ts             # 命令的 API (moveTo/mineAt/depositAt/attackNearest/fireAt/stop) + setBehavior + id (UUID) + 可変 maxHp/maxEnergy/inventoryCap + applyMaxStats + heal + stat 参照は effects.shipStat 経由
+├── program/                # コード実行系 (7 種揃った: 初期 6 種 + ITEM_CODE)
+│   ├── Code.ts             # Discriminated union (7 種) + CodeType (初期 6) + createCode + codeChildren (REPEAT/ITEM_CODE 共用) + CodeStepResult
+│   ├── Program.ts          # 配列 + カーソル。path ベース API (insertAtPath/removeAtPath/...) + root scope カーソル追従
+│   ├── Executor.ts         # implements ShipBehavior。スタック実行モデル + CodeExecContext + REPEAT (N 回) / ITEM_CODE (条件 wrapper、1 周) ハンドリング + root 末尾自動ループバック
+│   ├── locations.ts        # LocationId / PlanetId 型 + ラベル + resolver
+│   ├── samples.ts          # sampleCodes() (CodePalette「サンプル読み込み」が使う)
+│   └── codes/              # 1 ファイル 1 種 (MoveTo / Mine / Deposit / AttackNearest / WaitUntilFull / Repeat / IfHpBelow / IfEnemyInRange / IfInventoryFull)
+├── items/                  # Phase 6: アイテムシステム
+│   ├── itemTypes.ts        # Rarity (N/R/SR/L) / ItemCategory (5) / ItemInstance / CodeItemInstance / ShipStat/BaseStat/EconomyStat + RARITY_LABEL/COLOR
+│   ├── Inventory.ts        # items[] + codes[] + shipModules{shipId: uid[]} + reset()。**メモリ上のみ** (Run 毎リセット)
+│   ├── effects.ts          # EffectSystem: shipStat/baseStat/economyStat (オムニ・コア + モジュール + 時限バフを加算スタックで合成) + shipExtraShots + tick
+│   ├── codePlacement.ts    # ITEM_CODE 配置の真実源走査 (collectPlacedCodeUids / availableCodeCounts / pickUnplacedInstance)
+│   ├── gacha.ts            # ⬜ 抽選ロジック (drawGacha) 実装済だが未配線 (Step 6 で UI 接続予定)
+│   └── types/              # data-driven なアイテム定義テーブル
+│       ├── omniCores.ts    # OMNI_CORE_TYPES (6 種: 攻撃/推進/採掘/装甲/砲塔/賞金)
+│       ├── modules.ts      # MODULE_TYPES (5 種: ガトリング/装甲/スラスタ/ドリル/カーゴ)
+│       ├── chemicals.ts    # CHEMICAL_TYPES (6 種: 即時 4 + 時限バフ + AoE)
+│       └── itemCodes.ts    # ITEM_CODE_DEFS (3 種: IF_HP_BELOW / IF_ENEMY_IN_RANGE / IF_INVENTORY_FULL) + createItemCodeNode
 ├── systems/                # 横断的なロジック
-│   ├── SpawnSystem.ts      # `spawnAtRandomEdge()` で 1 体生成 (時間管理はしない)
-│   ├── WaveSystem.ts       # Phase 状態機械 (preparing/spawning/clearing/intermission/victory)
-│   └── EconomySystem.ts    # credits + depositResource + EventEmitter (change イベント)
+│   ├── SpawnSystem.ts      # `spawnAtRandomEdge(type?)` で 1 体生成
+│   ├── WaveSystem.ts       # Phase 状態機械 (preparing/spawning/clearing/victory)。preparing は手動開始 (startNextPhase)
+│   └── EconomySystem.ts    # credits + depositResource + EventEmitter
 ├── ui/
-│   ├── HUD.ts              # HP/クレジット/Phase + 中央バナー + クレジット増減ポップ
-│   ├── ShopPanel.ts        # 画面下端 [宇宙船 $70] (タワーは Phase 5 後に廃止)
-│   ├── CodePalette.ts      # 編集 UI 左カラム: コード追加 + サンプル読み込み + 閉じる
-│   ├── ProgramList.ts      # 編集 UI 中央: コード行 + ▲▼✕ + 走行中マーカー
-│   └── CodeParamEditor.ts  # 編集 UI 右: LocationId/PlanetId チップ選択
+│   ├── HUD.ts              # HP/クレジット/Phase + 中央バナー + クレジット増減ポップ + 「▶ PHASE N 開始」ボタン
+│   ├── ShopPanel.ts        # 画面下端 [宇宙船 $70] + 右端「📦 アイテム」
+│   ├── CodePalette.ts      # 編集 UI 左カラム: 初期コード (∞) + アイテムコード (残数表示、0 で無効) + サンプル読み込み + 閉じる
+│   ├── ProgramList.ts      # 編集 UI 中央: REPEAT/ITEM_CODE をネスト wrapper として階層描画 + ▲▼✕ + 走行中マーカー
+│   └── CodeParamEditor.ts  # 編集 UI 右: LocationId/PlanetId チップ + REPEAT 回数 + ITEM_CODE パラメータ (レア度で最大値 clamp)
 └── utils/
-    ├── starfield.ts        # 星空背景描画ヘルパ
-    └── save.ts             # Ship Program の localStorage 永続化 (Phase 4)
+    └── starfield.ts        # 星空背景描画ヘルパ
 ```
+
+> 注: `src/utils/save.ts` (Phase 4 の Program 永続化) と `src/entities/Tower.ts` は削除済。Inventory もメモリ上のみで永続化なし (Run 毎リセット)。
 
 ### 設計原則 (重要)
 
@@ -173,14 +191,16 @@ src/
 - **コア体験**: コードを組んで Ship をプログラム → 敵 Wave に対抗。プログラム未割り当ての Ship は何もしない。
 - **基地 (Base)**: 中央固定。HP=100。0 でゲームオーバー。資源納品先。**Phase 5 後: 固定砲塔を内蔵** — 射程 260 / 12 ダメ × 1.25Hz、`BASE_TURRET` で集約。射程リングが常時可視化される。
 - **タワー (廃止)**: Phase 5 後にタワーは撤廃され、自動迎撃は基地砲塔に統合された。`Tower` クラス・ShopPanel の「タワー」ボタン・設置モードは無い。
-- **宇宙船**: 命令的 API (`moveTo/mineAt/depositAt/attackNearest/fireAt/stop`) + `ShipBehavior` 差し替え。HP 30 / エネ 100 / コスト $70 / インベントリ 20。Phase 3 で cooldown 自動発射を撤廃 (連射は `REPEAT { ATTACK_NEAREST }` で表現)。Phase 4 で射撃エネルギー消費を追加 (5/shot)。
+- **宇宙船**: 命令的 API (`moveTo/mineAt/depositAt/attackNearest/fireAt/stop`) + `ShipBehavior` 差し替え。HP 30 / エネ 100 / コスト $70 / インベントリ 20 (Phase 6 でモジュール装着により最大値が動的変動)。Phase 3 で cooldown 自動発射を撤廃 (連射は `REPEAT { ATTACK_NEAREST }` で表現)。Phase 4 で射撃エネルギー消費を追加 (5/shot)。
 - **敵 3 種 (Phase 4)**: `basic` (HP 20 / 速度 60 / $5) / `fast` (HP 12 / 速度 95 / $7、オレンジ) / `tank` (HP 55 / 速度 38 / $14、濃赤)。Phase 1-2 basic、Phase 3-4 basic+fast、Phase 5 全種混在。
 - **資源**: 惑星 2 個 (220,200)/(1060,540) から採掘 → 基地納品で資源 1:お金 2 変換。**枯渇 60s でリスポーン**。
 - **エネルギー**: 宇宙船のみ。移動中 2/s 消費 + 射撃 5/shot 消費。0 で停止 (stalled)。基地納品で全回復。
-- **Ship Program 永続化 (Phase 4)**: 編集のたびに `localStorage['spacecode.shipTemplate']` へ保存。新規 Ship 購入時に自動投入。リトライ時にも引き継ぎ。
-- **Wave 構成**: 1 Stage = 5 Phase。`config.ts` の `PHASES` を参照。
-- **コード (MVP 6 種)**: `MOVE_TO` / `MINE` / `DEPOSIT` / `ATTACK_NEAREST` / `WAIT_UNTIL_FULL` / `REPEAT`。REPEAT はネスト構造 (`{ times, children }`) で **特定の行動を N 回繰り返したい時に使う**、ATTACK_NEAREST は持続時間コード (`SHIP.attackDurationMs`)。
-- **自動ループ (Phase 5 後)**: Program は **置いただけで先頭 → 末尾 → 先頭 → … と無限にループ** する (Executor root frame が末尾でループバック)。プログラム全体を `REPEAT` で囲む必要はない。空 Program のみ idle。
+- **永続化なし (Phase 6 で撤廃)**: Inventory も Program も localStorage 保存しない。Game Over / Victory / Menu 復帰で Run リセット。Phase 4 の `spacecode.shipTemplate` は廃止
+- **Wave 構成**: 1 Stage = 5 Phase。`config.ts` の `PHASES` を参照。**準備時間は手動開始**: 各 Phase 前にプレイヤーが「▶ PHASE N 開始」ボタンを押すまで進まない
+- **初期コード (6 種)**: `MOVE_TO` / `MINE` / `DEPOSIT` / `ATTACK_NEAREST` / `WAIT_UNTIL_FULL` / `REPEAT`。REPEAT はネスト構造で **特定の行動を N 回繰り返したい時に使う**、ATTACK_NEAREST は持続時間コード。**所持無制限**
+- **アイテムコード (Phase 6, 3 種)**: `IF_HP_BELOW` / `IF_ENEMY_IN_RANGE` / `IF_INVENTORY_FULL` — 条件 wrapper。所持アイテム個体 (`CodeItemInstance`) と 1:1 対応、配置の真実源は **プログラム内 ITEM_CODE ノード**。同じ個体は 1 箇所しか配置不可、Ship 破壊や wrapper 削除で自動的に「未配置」に戻る
+- **自動ループ (Phase 5 後)**: Program は **置いただけで先頭 → 末尾 → 先頭 → … と無限にループ** する。空 Program のみ idle
+- **アイテム (Phase 6)**: オムニ・コア (装着で全 Ship/基地/経済に永続効果) / モジュール (Ship 個別装着) / ケミカル (消費型・即時 or 時限バフ or AoE) / コードガチャ・モジュールガチャ (Step 6 で UI 実装予定)。効果は加算スタック、`EffectSystem` 経由で集計
 
 > ※「Phase」が二重に登場する: **Wave Phase** (敵編成の段階。1 Stage 中で進行) と **開発 Phase** (実装ロードマップ)。コード内では `Wave Phase` を指す。本ドキュメントでは「開発 Phase」と明示する。
 

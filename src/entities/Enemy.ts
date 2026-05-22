@@ -64,9 +64,19 @@ export class Enemy {
     const g = this.gfx;
     const stats = this.stats;
     g.clear();
-    // 外側のグロー
-    g.fillStyle(stats.color, 0.18);
-    g.fillCircle(0, 0, stats.radius + 5);
+    // ボス: 大きめ外周 + 二重リング (Phase 6 Step 7)
+    if (this.type === 'boss') {
+      g.fillStyle(stats.color, 0.22);
+      g.fillCircle(0, 0, stats.radius + 14);
+      g.lineStyle(2, stats.color, 0.7);
+      g.strokeCircle(0, 0, stats.radius + 8);
+      g.lineStyle(1, COLORS.highlight, 0.4);
+      g.strokeCircle(0, 0, stats.radius + 2);
+    } else {
+      // 外側のグロー
+      g.fillStyle(stats.color, 0.18);
+      g.fillCircle(0, 0, stats.radius + 5);
+    }
     // 三角 (右向き、後で setRotation で進行方向に合わせる)
     g.fillStyle(stats.color, 1);
     g.beginPath();
@@ -75,10 +85,10 @@ export class Enemy {
     g.lineTo(-stats.radius * 0.7, stats.radius * 0.8);
     g.closePath();
     g.fillPath();
-    // コア (tank は濃いめ、fast は白っぽく速度感を強調)
+    // コア (tank は濃いめ、fast は白っぽく速度感を強調、boss は強コア)
     const coreAlpha = this.type === 'fast' ? 1 : 0.85;
     g.fillStyle(COLORS.highlight, coreAlpha);
-    g.fillCircle(0, 0, stats.radius * 0.25);
+    g.fillCircle(0, 0, stats.radius * (this.type === 'boss' ? 0.35 : 0.25));
   }
 
   /** delta は ms */

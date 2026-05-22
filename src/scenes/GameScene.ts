@@ -11,7 +11,7 @@ import { Program } from '../program/Program';
 import { Inventory } from '../items/Inventory';
 import { EffectSystem } from '../items/effects';
 import type { Rarity } from '../items/itemTypes';
-import { CHEMICAL_TYPES } from '../items/types/chemicals';
+import { CHEMICAL_TYPES, makeRandomChemical } from '../items/types/chemicals';
 import {
   makeGachaItem,
   rollPhaseRewardRarity,
@@ -59,6 +59,12 @@ export class GameScene extends Phaser.Scene {
   // > 0 のとき GameScene の入力を抑止する (Phase 6: editorOpen から一般化)。
   private overlayDepth: number = 0;
 
+  // Phase 6 Step 8: 当該 Phase 内の累計撃破数 (基地接触は数えない) と
+  // 半数到達ボーナス (ケミカル N) を 1 回付与したかのフラグ。
+  // phaseStart で 0 / false にリセットする。
+  private phaseKillCount: number = 0;
+  private phaseHalfRewarded: boolean = false;
+
   // 右端「アイテム」ボタンのラベル (所持総数バッジ更新用)
   private itemBtnLabel?: Phaser.GameObjects.Text;
 
@@ -77,6 +83,8 @@ export class GameScene extends Phaser.Scene {
     this.terminating = false;
     this.overlayDepth = 0;
     this.itemBtnLabel = undefined;
+    this.phaseKillCount = 0;
+    this.phaseHalfRewarded = false;
 
     // 背景
     drawStarfield(this, GAME_WIDTH, GAME_HEIGHT);
@@ -132,6 +140,9 @@ export class GameScene extends Phaser.Scene {
       this.hud.setStatus('敵が接近中');
       this.hud.showBanner(`PHASE ${n}`);
       this.hud.hideStartButton();
+      // Phase 6 Step 8: 半数ボーナス用カウンタを Phase 開始ごとにリセット
+      this.phaseKillCount = 0;
+      this.phaseHalfRewarded = false;
     });
 
     this.waves.on('phaseClear', (n) => {
@@ -153,6 +164,14 @@ export class GameScene extends Phaser.Scene {
     });
 
     this.waves.on('victory', () => this.endGame('VictoryScene'));
+
+    // Phase 6 Step 7: ボス出現バナー
+    this.waves.on('enemySpawned', (e) => {
+      if (e.type === 'boss') {
+        this.hud.showBanner('⚠ BOSS 接近中', 1400);
+        this.cameras.main.shake(180, 0.004);
+      }
+    });
 
     // 初回 Phase 1 も準備時間からスタートするので、初期表示でボタンを出す。
     this.showStartButtonForCurrentPhase();
@@ -341,10 +360,45 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * 敵撃破時のガチャドロップ判定 (fast 4% / tank 12%、basic は出ない)。
-   * R 固定、カテゴリは 50/50 ランダム。
+   * Phase 6 Step 8: 当該 Phase の累計撃破数が合計の半数以上に達したら、
+   * ケミカル N をランダムに 1 個ドロップする (Phase ごとに 1 回まで)。
+   *
+   * 「半数」は floor(total / 2) を超えた瞬間。ボスを含む特殊編成でも
+   * 単純な総数比較で十分 (Phase 5 は 14 体 → 7 体撃破で発火)。
+   */
+  private checkPhaseHalfReward(): void {
+    if (this.phaseHalfRewarded) return;
+    const total = this.waves.getPhaseTotal();
+    if (total <= 0) return;
+    const threshold = Math.floor(total / 2);
+    if (this.phaseKillCount < threshold) return;
+    this.phaseHalfRewarded = true;
+    const chem = makeRandomChemical('N');
+    this.inventory.items.push(chem);
+    this.refreshItemButton();
+    const name = CHEMICAL_TYPES[chem.typeId]?.nameJa ?? 'ケミカル';
+    this.hud.showBanner(`中盤ボーナス: ${name} を獲得`, 1300);
+  }
+
+  /**
+   * 敵撃破時のガチャドロップ判定。
+   * - basic: ドロップなし
+   * - fast: 4% で R ガチャ
+   * - tank: 12% で R ガチャ
+   * - boss: 100% で SR ガチャ確定 (Phase 6 Step 7)
+   * カテゴリは 50/50 ランダム。
    */
   private rollEnemyDropGacha(enemy: Enemy): void {
+    if (enemy.type === 'boss') {
+      const category: GachaCategory = Math.random() < 0.5 ? 'code' : 'module';
+      const item = makeGachaItem(category, 'SR');
+      this.inventory.items.push(item);
+      this.refreshItemButton();
+      const label = category === 'code' ? 'コードガチャ' : 'モジュールガチャ';
+      this.hud.showBanner(`ボス撃破! SR ${label} を獲得`, 1600);
+      this.cameras.main.flash(280, 160, 123, 255, true);
+      return;
+    }
     let chance = 0;
     if (enemy.type === 'fast') chance = 0.04;
     else if (enemy.type === 'tank') chance = 0.12;
@@ -442,6 +496,7 @@ export class GameScene extends Phaser.Scene {
 
     // 撃破集計 (Phase 4: 敵種ごとの creditsValue で加算)
     // Phase 6 Step 6: 撃破時にガチャドロップ判定 (基地接触で死んだ敵は対象外)
+    // Phase 6 Step 8: 当該 Phase の累計撃破数を更新し、半数到達でケミカル N をドロップ
     let creditsThisFrame = 0;
     for (const e of this.enemies) {
       if (e.dead && !(e as Enemy & { _counted?: boolean })._counted) {
@@ -449,6 +504,8 @@ export class GameScene extends Phaser.Scene {
         if (!e.reachedBase) {
           creditsThisFrame += e.creditsValue;
           this.rollEnemyDropGacha(e);
+          this.phaseKillCount += 1;
+          this.checkPhaseHalfReward();
         }
         (e as Enemy & { _counted?: boolean })._counted = true;
       }

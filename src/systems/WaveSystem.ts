@@ -18,6 +18,8 @@ export type WaveEvents = {
   victory: () => void;
   /** 状態遷移 (HUD用) */
   state: (state: WaveState) => void;
+  /** 敵 1 体スポーン直後 (Phase 6 Step 7: ボス出現バナー等で使用) */
+  enemySpawned: (enemy: Enemy) => void;
 };
 
 /**
@@ -90,6 +92,13 @@ export class WaveSystem {
     return pending + aliveEnemies;
   }
 
+  /** 現在 Phase の合計敵数 (全 spec の count を足し合わせ)。Phase 6 Step 8: 半数判定に使う。 */
+  public getPhaseTotal(): number {
+    const def = PHASES[this.phaseIndex];
+    if (!def) return 0;
+    return def.enemySpecs.reduce((a, s) => a + s.count, 0);
+  }
+
   /**
    * 毎フレーム呼ぶ。enemies はシーン側で管理している配列を渡す。
    * 新規スポーン時はここから push する。
@@ -108,7 +117,9 @@ export class WaveSystem {
           if (r.remaining <= 0) continue;
           r.timerMs -= delta;
           if (r.timerMs <= 0) {
-            enemies.push(this.spawner.spawnAtRandomEdge(r.spec.type));
+            const e = this.spawner.spawnAtRandomEdge(r.spec.type);
+            enemies.push(e);
+            this.emitter.emit('enemySpawned', e);
             r.remaining -= 1;
             r.timerMs = r.spec.intervalMs;
           }

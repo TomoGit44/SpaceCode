@@ -11,6 +11,7 @@ import { ProgramList } from '../ui/ProgramList';
 import { CodeParamEditor } from '../ui/CodeParamEditor';
 import type { Inventory } from '../items/Inventory';
 import { ALL_RARITIES, RARITY_SHORT, RARITY_COLOR } from '../items/itemTypes';
+import { MODULE_TYPES } from '../items/types/modules';
 import {
   type ItemCodeType,
   ALL_ITEM_CODE_TYPES,
@@ -149,9 +150,12 @@ export class ProgramEditorScene extends Phaser.Scene {
     // 右上の ✕ ボタン
     this.makeCloseButton(cardX + cardW / 2 - 50, this.cardTop + 30);
 
+    // ─── 装着モジュールチップ行 (Phase 6 Step 9, read-only) ──
+    this.renderEquippedModules(this.cardLeft + 24, this.cardTop + 70, cardW - 48);
+
     // ─── 3 カラムレイアウト ──────────────────────────────────
-    const innerTop = this.cardTop + 76;
-    const innerHeight = cardH - 96;
+    const innerTop = this.cardTop + 100;
+    const innerHeight = cardH - 120;
     const colGap = 16;
     const totalInnerW = cardW - 48;
     const leftW = 220;
@@ -360,6 +364,84 @@ export class ProgramEditorScene extends Phaser.Scene {
       });
     }
     this.palette.setItemCodes(entries);
+  }
+
+  /**
+   * Phase 6 Step 9: この Ship に装着中のモジュールを read-only チップで表示する。
+   * 装着なしならその旨のヒント文。装着/取り外しは ItemInventoryScene 側で完結する。
+   */
+  private renderEquippedModules(x: number, y: number, w: number): void {
+    const uids = this.inventory.shipModules[this.targetShip.id] ?? [];
+
+    // ラベル
+    this.chrome.push(
+      this.add
+        .text(x, y, '装着中:', {
+          fontFamily: FONT,
+          fontSize: '12px',
+          color: '#6b7da0',
+        })
+        .setOrigin(0, 0.5)
+        .setDepth(2)
+    );
+
+    if (uids.length === 0) {
+      this.chrome.push(
+        this.add
+          .text(x + 56, y, 'モジュールなし — 📦 アイテムから装着できます', {
+            fontFamily: FONT,
+            fontSize: '12px',
+            color: '#6b7da0',
+            fontStyle: 'italic',
+          })
+          .setOrigin(0, 0.5)
+          .setDepth(2)
+      );
+      return;
+    }
+
+    let chipX = x + 56;
+    const maxX = x + w - 4;
+    for (const uid of uids) {
+      const it = this.inventory.items.find((i) => i.uid === uid);
+      if (!it) continue;
+      const mt = MODULE_TYPES[it.typeId];
+      if (!mt) continue;
+      const rc = RARITY_COLOR[it.rarity];
+      const label = `${RARITY_SHORT[it.rarity]} ${mt.nameJa}`;
+      // 仮の Text を作って幅を測り、その幅で背景チップを描く
+      const t = this.add
+        .text(0, 0, label, {
+          fontFamily: FONT,
+          fontSize: '12px',
+          color: '#cfd6e6',
+          fontStyle: 'bold',
+        })
+        .setOrigin(0, 0.5);
+      const chipW = t.width + 16;
+      if (chipX + chipW > maxX) {
+        // チップが入り切らないときはここで省略マーカー
+        t.destroy();
+        this.chrome.push(
+          this.add
+            .text(chipX, y, '…', {
+              fontFamily: FONT,
+              fontSize: '12px',
+              color: '#6b7da0',
+            })
+            .setOrigin(0, 0.5)
+            .setDepth(2)
+        );
+        break;
+      }
+      const bg = this.add
+        .rectangle(chipX + chipW / 2, y, chipW, 22, rc, 0.15)
+        .setStrokeStyle(1, rc, 0.85)
+        .setDepth(2);
+      t.setPosition(chipX + 8, y).setDepth(3);
+      this.chrome.push(bg, t);
+      chipX += chipW + 6;
+    }
   }
 
   /** デバッグ用: レア度別にアイテムコードを獲得する暫定行 (カード上部)。 */

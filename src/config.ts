@@ -102,8 +102,8 @@ export const PLANET = {
   respawnMs: 60000,     // Phase 4: 枯渇後この時間で resources が全回復
 } as const;
 
-/** 敵 (Phase 4 で 3 種類化) */
-export type EnemyType = 'basic' | 'fast' | 'tank';
+/** 敵 (Phase 4 で 3 種類化 / Phase 6 Step 7 で boss 追加) */
+export type EnemyType = 'basic' | 'fast' | 'tank' | 'boss';
 
 export interface EnemyTypeStats {
   readonly hp: number;
@@ -117,9 +117,11 @@ export interface EnemyTypeStats {
 }
 
 export const ENEMY_TYPES: Record<EnemyType, EnemyTypeStats> = {
-  basic: { hp: 20, speed: 60, damage: 10, radius: 10, hitRadius: 12, contactRadius: 24, color: 0xff4d5a, creditsOnKill: 5 },
-  fast:  { hp: 12, speed: 95, damage: 8,  radius: 8,  hitRadius: 10, contactRadius: 22, color: 0xff9040, creditsOnKill: 7 },
-  tank:  { hp: 55, speed: 38, damage: 15, radius: 14, hitRadius: 16, contactRadius: 28, color: 0xb01828, creditsOnKill: 14 },
+  basic: { hp: 20,  speed: 60, damage: 10, radius: 10, hitRadius: 12, contactRadius: 24, color: 0xff4d5a, creditsOnKill: 5  },
+  fast:  { hp: 12,  speed: 95, damage: 8,  radius: 8,  hitRadius: 10, contactRadius: 22, color: 0xff9040, creditsOnKill: 7  },
+  tank:  { hp: 55,  speed: 38, damage: 15, radius: 14, hitRadius: 16, contactRadius: 28, color: 0xb01828, creditsOnKill: 14 },
+  // Phase 6 Step 7: Stage クリア直前のボス。HP 高め / 速度遅め / ダメ大。撃破で SR ガチャ確定 (GameScene 側)。
+  boss:  { hp: 200, speed: 30, damage: 30, radius: 22, hitRadius: 26, contactRadius: 38, color: 0xa07bff, creditsOnKill: 50 },
 };
 
 /** 敵 → 宇宙船 接触ダメージ (Phase D) */
@@ -187,5 +189,7 @@ export const PHASES: ReadonlyArray<{ readonly enemySpecs: ReadonlyArray<EnemySpe
       { type: 'basic', count: 6, intervalMs: 1500 },
       { type: 'fast',  count: 5, intervalMs: 1200, delayMs: 2500 },
       { type: 'tank',  count: 2, intervalMs: 4000, delayMs: 6000 },
+      // Phase 6 Step 7: 最終 Phase 末尾にボス 1 体。雑魚を片付け終わる頃に登場
+      { type: 'boss',  count: 1, intervalMs: 1,    delayMs: 18000 },
   ]},
 ];

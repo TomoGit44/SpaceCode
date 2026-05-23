@@ -74,12 +74,13 @@ export class CodePalette {
 
     this.addText(x + width / 2, y, '─ 初期コード (無制限) ─', '13px', COLORS.uiDim).setOrigin(0.5, 0);
 
+    // Phase 7: タッチ操作向けにボタンを少し大きく (32→36 / 30→34)
     let cy = y + 24;
     for (const t of INITIAL_TYPES) {
-      this.makeButton(x, cy, width, `${CODE_LABEL[t]}　∞`, CODE_COLOR[t], 32, true, () =>
+      this.makeButton(x, cy, width, `${CODE_LABEL[t]}　∞`, CODE_COLOR[t], 36, true, () =>
         this.emitter.emit('addCode', t)
       );
-      cy += 36;
+      cy += 40;
     }
 
     const itemHeaderY = cy + 4;
@@ -91,10 +92,10 @@ export class CodePalette {
 
     // 下部固定: サンプル読み込み / 閉じる
     const sampleY = y + 422;
-    this.makeButton(x, sampleY, width, 'サンプル読み込み', COLORS.resource, 30, true, () =>
+    this.makeButton(x, sampleY, width, 'サンプル読み込み', COLORS.resource, 34, true, () =>
       this.emitter.emit('loadSample')
     );
-    this.makeButton(x, sampleY + 36, width, '✕ 閉じる', COLORS.enemy, 30, true, () =>
+    this.makeButton(x, sampleY + 40, width, '✕ 閉じる', COLORS.enemy, 34, true, () =>
       this.emitter.emit('close')
     );
 
@@ -129,12 +130,12 @@ export class CodePalette {
         this.width,
         `${e.label}　×${e.available}`,
         accent,
-        30,
+        34,
         enabled,
         () => this.emitter.emit('addItemCode', e.type),
         this.itemObjects
       );
-      cy += 34;
+      cy += 38;
     }
   }
 
@@ -174,7 +175,7 @@ export class CodePalette {
     const text = this.scene.add
       .text(x + width / 2, y + h / 2, label, {
         fontFamily: FONT,
-        fontSize: '13px',
+        fontSize: '14px',
         color: enabled ? '#cfd6e6' : '#6b7da0',
         fontStyle: 'bold',
       })

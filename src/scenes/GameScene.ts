@@ -300,8 +300,9 @@ export class GameScene extends Phaser.Scene {
 
   /** 右端「アイテム」ボタンを作る。 */
   private createItemButton(): void {
-    const w = 130;
-    const h = 34;
+    // Phase 7: タッチ向けに 130×34 → 160×44 (44pt 以上)、フォントも 14→16
+    const w = 160;
+    const h = 44;
     const cx = GAME_WIDTH - 12 - w / 2;
     const cy = 96;
     const bg = this.add
@@ -312,7 +313,7 @@ export class GameScene extends Phaser.Scene {
     this.itemBtnLabel = this.add
       .text(cx, cy, '', {
         fontFamily: FONT,
-        fontSize: '14px',
+        fontSize: '16px',
         color: '#cfd6e6',
         fontStyle: 'bold',
       })

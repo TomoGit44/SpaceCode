@@ -6,10 +6,11 @@ import { itemCodeLabel } from '../items/types/itemCodes';
 import { LOCATION_LABELS } from '../program/locations';
 
 const FONT = 'system-ui, "Segoe UI", sans-serif';
-const ROW_HEIGHT = 36;
+const ROW_HEIGHT = 40;       // Phase 7: タッチ操作向けに 36 → 40
 const ROW_GAP = 4;
 const INDENT_PX = 18;        // ネスト 1 段あたりの左インデント
 const BRACKET_GAP = 4;       // 罫線とコード本体の間隔
+const ROW_BTN_SIZE = 30;     // Phase 7: ▲▼✕ ボタン 24 → 30 (タッチ向け)
 
 export interface ProgramListEvents {
   select: (path: number[]) => void;
@@ -235,7 +236,7 @@ export class ProgramList {
 
     // コード本体の x 範囲
     const leftPad = row.depth * INDENT_PX + (row.depth > 0 ? BRACKET_GAP + 6 : 0);
-    const rightBtnSpace = 26 * 3 + 6 * 2 + 8; // ▲ ▼ ✕ のスペース
+    const rightBtnSpace = ROW_BTN_SIZE * 3 + 6 * 2 + 8; // ▲ ▼ ✕ のスペース
     const codeX = this.x + leftPad;
     const codeW = this.width - leftPad - rightBtnSpace;
 
@@ -280,7 +281,7 @@ export class ProgramList {
     const label = this.scene.add
       .text(labelX, rowY + ROW_HEIGHT / 2, codeLabel(row.code), {
         fontFamily: FONT,
-        fontSize: '14px',
+        fontSize: '15px',
         color: '#cfd6e6',
         fontStyle: isWrapper ? 'bold' : 'normal',
       })
@@ -291,7 +292,7 @@ export class ProgramList {
 
     // 右端のボタン群 ▲▼✕
     const parent = this.parentLength(row.path);
-    const btnW = 26;
+    const btnW = ROW_BTN_SIZE;
     const gap = 6;
     const rightEdge = this.x + this.width - 6;
     const removeX = rightEdge - btnW / 2;
@@ -351,13 +352,13 @@ export class ProgramList {
     onClick: () => void
   ): void {
     const bg = this.scene.add
-      .rectangle(cx, cy, 24, 24, COLORS.panelBg, enabled ? 1 : 0.4)
+      .rectangle(cx, cy, ROW_BTN_SIZE, ROW_BTN_SIZE, COLORS.panelBg, enabled ? 1 : 0.4)
       .setStrokeStyle(1, enabled ? COLORS.ally : COLORS.uiDim, enabled ? 0.7 : 0.4)
       .setDepth(3);
     const t = this.scene.add
       .text(cx, cy, label, {
         fontFamily: FONT,
-        fontSize: '13px',
+        fontSize: '15px',
         color: enabled ? '#cfd6e6' : '#6b7da0',
         fontStyle: 'bold',
       })

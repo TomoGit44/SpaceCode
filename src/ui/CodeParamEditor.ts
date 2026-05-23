@@ -16,6 +16,10 @@ const FONT = 'system-ui, "Segoe UI", sans-serif';
 const REPEAT_TIMES_MIN = 1;
 const REPEAT_TIMES_MAX = 20;
 
+/** Phase 7: タッチ操作向けに拡大したスピナー / chip サイズ。 */
+const SPIN_BTN_SIZE = 38;    // was 32
+const CHIP_HEIGHT = 38;       // was 32
+
 export interface CodeParamEditorEvents {
   /** 新しい code オブジェクトを emit (元の code は変更しない)。
    *  REPEAT のときは `children` は同じ配列参照を保つ (エディタが直接編集中の参照を切らない)。 */
@@ -121,7 +125,7 @@ export class CodeParamEditor {
       };
       const minus = this.makeStepButton(this.x + 4, rowY, '−', () => emit(cur - spec.step));
       const value = this.scene.add
-        .text(this.x + this.width / 2, rowY + 16, `${cur}${spec.unit}`, {
+        .text(this.x + this.width / 2, rowY + SPIN_BTN_SIZE / 2, `${cur}${spec.unit}`, {
           fontFamily: FONT,
           fontSize: '18px',
           color: '#cfd6e6',
@@ -129,11 +133,11 @@ export class CodeParamEditor {
         })
         .setOrigin(0.5)
         .setDepth(3);
-      const plus = this.makeStepButton(this.x + this.width - 36, rowY, '+', () =>
+      const plus = this.makeStepButton(this.x + this.width - 4 - SPIN_BTN_SIZE, rowY, '+', () =>
         emit(cur + spec.step)
       );
       this.controls.push(value, ...minus, ...plus);
-      cy = rowY + 48;
+      cy = rowY + SPIN_BTN_SIZE + 14;
     }
   }
 
@@ -169,7 +173,7 @@ export class CodeParamEditor {
     for (const id of ids) {
       const selected = id === current;
       const w = this.width - 8;
-      const h = 32;
+      const h = CHIP_HEIGHT;
       const bg = this.scene.add
         .rectangle(this.x + 4 + w / 2, cy + h / 2, w, h, selected ? COLORS.ally : COLORS.panelBg, selected ? 0.4 : 1)
         .setStrokeStyle(1, selected ? COLORS.accent : COLORS.ally, selected ? 1 : 0.5)
@@ -215,15 +219,15 @@ export class CodeParamEditor {
       } as Code);
     });
     const value = this.scene.add
-      .text(this.x + this.width / 2, cy + 16, `${code.times}`, {
+      .text(this.x + this.width / 2, cy + SPIN_BTN_SIZE / 2, `${code.times}`, {
         fontFamily: FONT,
-        fontSize: '20px',
+        fontSize: '22px',
         color: '#cfd6e6',
         fontStyle: 'bold',
       })
       .setOrigin(0.5)
       .setDepth(3);
-    const plus = this.makeStepButton(this.x + this.width - 36, cy, '+', () => {
+    const plus = this.makeStepButton(this.x + this.width - 4 - SPIN_BTN_SIZE, cy, '+', () => {
       const next = Math.min(REPEAT_TIMES_MAX, code.times + 1);
       if (next === code.times) return;
       this.emitter.emit('change', {
@@ -235,10 +239,11 @@ export class CodeParamEditor {
     this.controls.push(value, ...minus, ...plus);
 
     // ヒント (Phase 5 後: 中身編集はリスト側でインラインに行う)
+    const hintY = cy + SPIN_BTN_SIZE + 14;
     const hint = this.scene.add
       .text(
         this.x + this.width / 2,
-        cy + 56,
+        hintY,
         '中身はリストでそのまま編集',
         {
           fontFamily: FONT,
@@ -251,7 +256,7 @@ export class CodeParamEditor {
     const hint2 = this.scene.add
       .text(
         this.x + this.width / 2,
-        cy + 74,
+        hintY + 18,
         `子コード: ${code.children.length}`,
         {
           fontFamily: FONT,
@@ -270,8 +275,8 @@ export class CodeParamEditor {
     label: string,
     onClick: () => void
   ): Phaser.GameObjects.GameObject[] {
-    const w = 32;
-    const h = 32;
+    const w = SPIN_BTN_SIZE;
+    const h = SPIN_BTN_SIZE;
     const bg = this.scene.add
       .rectangle(x + w / 2, y + h / 2, w, h, COLORS.panelBg, 1)
       .setStrokeStyle(1, COLORS.ally, 0.7)
@@ -280,7 +285,7 @@ export class CodeParamEditor {
     const t = this.scene.add
       .text(x + w / 2, y + h / 2, label, {
         fontFamily: FONT,
-        fontSize: '18px',
+        fontSize: '20px',
         color: '#cfd6e6',
         fontStyle: 'bold',
       })

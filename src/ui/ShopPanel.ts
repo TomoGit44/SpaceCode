@@ -16,9 +16,9 @@ interface ShopButton {
   enabled: boolean;
 }
 
-const PANEL_HEIGHT = 60;
-const BUTTON_WIDTH = 180;
-const BUTTON_HEIGHT = 40;
+const PANEL_HEIGHT = 64;       // Phase 7: 60 → 64 (ボタン拡大に合わせる)
+const BUTTON_WIDTH = 200;      // Phase 7: 180 → 200
+const BUTTON_HEIGHT = 46;      // Phase 7: 40 → 46 (タッチ向け 44pt 以上)
 const BUTTON_GAP = 16;
 
 /**
@@ -87,7 +87,7 @@ export class ShopPanel {
     const text = this.scene.add
       .text(x, y, label, {
         fontFamily: 'system-ui, "Segoe UI", sans-serif',
-        fontSize: '15px',
+        fontSize: '16px',
         color: '#cfd6e6',
         fontStyle: 'bold',
       })

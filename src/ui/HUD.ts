@@ -3,7 +3,7 @@ import { GAME_WIDTH, GAME_HEIGHT, COLORS } from '../config';
 
 const START_BUTTON_WIDTH = 280;
 const START_BUTTON_HEIGHT = 56;
-const SHOP_PANEL_HEIGHT = 60; // ShopPanel と一致 (HUD はその上に乗る)
+const SHOP_PANEL_HEIGHT = 64; // ShopPanel と一致 (HUD はその上に乗る)。Phase 7: 60 → 64
 
 /**
  * 画面上部の HUD。基地 HP / 所持クレジット / Phase 進行 / 状態テキストを表示。

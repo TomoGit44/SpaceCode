@@ -22,6 +22,8 @@ const config: Phaser.Types.Core.GameConfig = {
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
+    // スマホ等で小数ピクセル位置になると線/テキストがにじむのを抑える
+    autoRound: true,
   },
   render: {
     pixelArt: false,

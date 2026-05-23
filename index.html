@@ -43,10 +43,54 @@
       canvas {
         display: block;
       }
+      /* 縦持ちスマホ用「横にしてください」オーバーレイ。
+         orientation: landscape のとき、または十分広い画面では非表示。 */
+      #rotate-hint {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        background: #05070d;
+        color: #cfd6e6;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+        gap: 16px;
+        padding: 24px;
+        text-align: center;
+        font-size: 16px;
+        line-height: 1.6;
+      }
+      #rotate-hint .icon {
+        font-size: 56px;
+        animation: rotate-hint-spin 2.4s ease-in-out infinite;
+      }
+      #rotate-hint .title {
+        font-size: 20px;
+        font-weight: 600;
+        color: #ffffff;
+      }
+      #rotate-hint .sub {
+        color: #6b7da0;
+        font-size: 13px;
+      }
+      @keyframes rotate-hint-spin {
+        0%, 40% { transform: rotate(0deg); }
+        60%, 100% { transform: rotate(90deg); }
+      }
+      /* 縦持ち かつ 横幅が狭い端末でだけ表示 (タブレット横や PC では出さない) */
+      @media (orientation: portrait) and (max-width: 900px) {
+        #rotate-hint { display: flex; }
+      }
     </style>
   </head>
   <body>
     <div id="game"></div>
+    <div id="rotate-hint" role="alert">
+      <div class="icon">📱</div>
+      <div class="title">横向きにしてください</div>
+      <div class="sub">SpaceCode は横画面でプレイします</div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

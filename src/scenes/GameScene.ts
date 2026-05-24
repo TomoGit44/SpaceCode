@@ -65,6 +65,13 @@ export class GameScene extends Phaser.Scene {
   private phaseKillCount: number = 0;
   private phaseHalfRewarded: boolean = false;
 
+  // 選択中宇宙船のステータス表示 (HP / エネルギー / 積載量)。同時に表示できるのは 1 隻のみ。
+  // クリックで select、空クリックで解除、Ship 死亡で自動解除、別船クリックで移動。
+  private selectedShip: Ship | null = null;
+  private statPanelContainer: Phaser.GameObjects.Container | null = null;
+  private statPanelTexts: Phaser.GameObjects.Text[] = [];
+  private selectionRing: Phaser.GameObjects.Graphics | null = null;
+
   // 右端「アイテム」ボタンのラベル (所持総数バッジ更新用)
   private itemBtnLabel?: Phaser.GameObjects.Text;
 
@@ -85,6 +92,10 @@ export class GameScene extends Phaser.Scene {
     this.itemBtnLabel = undefined;
     this.phaseKillCount = 0;
     this.phaseHalfRewarded = false;
+    this.selectedShip = null;
+    this.statPanelContainer = null;
+    this.statPanelTexts = [];
+    this.selectionRing = null;
 
     // 背景
     drawStarfield(this, GAME_WIDTH, GAME_HEIGHT);
@@ -196,11 +207,17 @@ export class GameScene extends Phaser.Scene {
       if (this.terminating) return;
       if (this.overlayDepth > 0) return; // バックドロップが届けても scene-level は止まらないので明示ガード
 
-      // Ship クリックでプログラム編集を開く
+      // Ship クリックでプログラム編集を開く + ステータス選択
       if (p.rightButtonDown()) return;
       if (p.y >= GAME_HEIGHT - 60) return; // ShopPanel 帯
       const ship = this.findShipAt(p.worldX, p.worldY);
-      if (ship) this.openProgramEditor(ship);
+      if (ship) {
+        this.setSelectedShip(ship);
+        this.openProgramEditor(ship);
+      } else {
+        // 空きエリアクリックで選択解除
+        this.setSelectedShip(null);
+      }
     });
   }
 
@@ -256,6 +273,78 @@ export class GameScene extends Phaser.Scene {
       if (Math.hypot(s.x - x, s.y - y) <= SHIP.radius + 4) return s;
     }
     return null;
+  }
+
+  // ─── 選択中宇宙船のステータス表示 ────────────────────────
+
+  /**
+   * 選択 Ship を切り替える (null で解除)。
+   * ステータスパネル + 目印リングを生成 / 破棄する。同時に表示できるのは 1 隻のみ。
+   */
+  private setSelectedShip(ship: Ship | null): void {
+    if (this.selectedShip === ship) return;
+    this.selectedShip = ship;
+    if (ship === null) {
+      this.destroyStatPanel();
+      return;
+    }
+    this.ensureStatPanel();
+    this.updateStatPanel();
+  }
+
+  private ensureStatPanel(): void {
+    if (this.statPanelContainer) return;
+    const container = this.add.container(0, 0).setDepth(18);
+    // 3 行 (HP / ENE / INV)。padding 付きで暗背景にしておくと星空に重なっても可読
+    for (let i = 0; i < 3; i++) {
+      const t = this.add
+        .text(0, i * 14, '', {
+          fontFamily: FONT,
+          fontSize: '11px',
+          color: '#cfd6e6',
+          backgroundColor: '#05070dcc',
+          padding: { left: 5, right: 5, top: 1, bottom: 1 },
+          align: 'center',
+        })
+        .setOrigin(0.5, 0);
+      container.add(t);
+      this.statPanelTexts.push(t);
+    }
+    this.statPanelContainer = container;
+    // 選択中の船の足元に細いティールリング (目印)
+    this.selectionRing = this.add.graphics().setDepth(2);
+  }
+
+  private destroyStatPanel(): void {
+    if (this.statPanelContainer) {
+      this.statPanelContainer.destroy();
+      this.statPanelContainer = null;
+      this.statPanelTexts = [];
+    }
+    if (this.selectionRing) {
+      this.selectionRing.destroy();
+      this.selectionRing = null;
+    }
+  }
+
+  /** パネル位置 + 値を毎フレーム再計算する。 */
+  private updateStatPanel(): void {
+    const s = this.selectedShip;
+    if (!s || !this.statPanelContainer) return;
+    // ship の上にパネル (3 行ぶん = 約 44px) を浮かべる
+    this.statPanelContainer.setPosition(s.x, s.y - SHIP.radius - 50);
+    this.statPanelTexts[0]?.setText(`HP  ${Math.ceil(s.hp)}/${s.maxHp}`);
+    this.statPanelTexts[1]?.setText(`ENE ${Math.ceil(s.energy)}/${s.maxEnergy}`);
+    this.statPanelTexts[2]?.setText(`INV ${s.inventory}/${s.inventoryCap}`);
+
+    // 目印リング (薄い ally 色 + ティール) を描き直す
+    if (this.selectionRing) {
+      this.selectionRing.clear();
+      this.selectionRing.lineStyle(2, COLORS.accent, 0.85);
+      this.selectionRing.strokeCircle(s.x, s.y, SHIP.radius + 5);
+      this.selectionRing.lineStyle(1, COLORS.accent, 0.3);
+      this.selectionRing.strokeCircle(s.x, s.y, SHIP.radius + 9);
+    }
   }
 
   /** プログラム編集オーバーレイを開く。GameScene は active のまま並行更新される。 */
@@ -530,6 +619,15 @@ export class GameScene extends Phaser.Scene {
     }
     this.ships = survivors;
 
+    // 選択 Ship のステータスパネル更新 (死亡や除去で居なくなったら解除)
+    if (this.selectedShip) {
+      if (this.selectedShip.dead || !this.ships.includes(this.selectedShip)) {
+        this.setSelectedShip(null);
+      } else {
+        this.updateStatPanel();
+      }
+    }
+
     // ステータステキスト更新
     this.updateStatusText();
 
@@ -590,10 +688,13 @@ export class GameScene extends Phaser.Scene {
 
   private cleanup(): void {
     // オーバーレイを閉じてから GameScene を終了する
-    for (const key of ['ProgramEditorScene', 'ItemInventoryScene']) {
+    for (const key of ['ProgramEditorScene', 'ItemInventoryScene', 'GachaOpenScene']) {
       if (this.scene.isActive(key)) this.scene.stop(key);
     }
     this.overlayDepth = 0;
+
+    // 選択 Ship のステータスパネル / リングを破棄
+    this.setSelectedShip(null);
 
     for (const e of this.enemies) e.destroy();
     for (const b of this.bullets) b.destroy();

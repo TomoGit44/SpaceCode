@@ -1,4 +1,4 @@
-import type { LocationId, PlanetId } from './locations';
+import type { LocationId } from './locations';
 import type { Rarity } from '../items/itemTypes';
 import type { ItemCodeType } from '../items/types/itemCodes';
 
@@ -10,15 +10,16 @@ import type { ItemCodeType } from '../items/types/itemCodes';
  *
  * Phase 2 で MOVE_TO/MINE のターゲットを名前付き地点に。
  * Phase 3 で ATTACK_NEAREST / WAIT_UNTIL_FULL / REPEAT (ネスト) を追加。
- * Phase 6 で ITEM_CODE (アイテムコード) を追加。初期コード 6 種は無制限、
- * ITEM_CODE は所持アイテム個体 (CodeItemInstance) に 1:1 対応する。
+ * Phase 6 で ITEM_CODE (アイテムコード) を追加。
+ * Phase 6 後の改修 (2026-05-24): MINE / DEPOSIT / WAIT_UNTIL_FULL を撤廃し、
+ * 共通の `WAIT { seconds }` コードに統合。WAIT は秒数指定の待機で、
+ * 副作用として「惑星近くなら自動採掘」「基地近くなら自動納品 + エネルギー補給」が
+ * 暗黙的に走る (`tickWait` 内で位置判定)。
  */
 export type Code =
   | { type: 'MOVE_TO'; target: LocationId }
-  | { type: 'MINE'; target: PlanetId }
-  | { type: 'DEPOSIT' }
   | { type: 'ATTACK_NEAREST' }
-  | { type: 'WAIT_UNTIL_FULL' }
+  | { type: 'WAIT'; seconds: number }
   | { type: 'REPEAT'; times: number; children: Code[] }
   | {
       // Phase 6: アイテムコード。条件 wrapper として子コード列を持つ (§2.5)。
@@ -31,7 +32,7 @@ export type Code =
     };
 
 /** UI / ファクトリで使う **初期コード** 種別の列挙 (ITEM_CODE は含まない)。 */
-export type CodeType = 'MOVE_TO' | 'MINE' | 'DEPOSIT' | 'ATTACK_NEAREST' | 'WAIT_UNTIL_FULL' | 'REPEAT';
+export type CodeType = 'MOVE_TO' | 'ATTACK_NEAREST' | 'WAIT' | 'REPEAT';
 
 /**
  * 1 tick ぶんコードを評価した結果。
@@ -63,14 +64,10 @@ export function createCode(type: CodeType): Code {
   switch (type) {
     case 'MOVE_TO':
       return { type: 'MOVE_TO', target: 'base' };
-    case 'MINE':
-      return { type: 'MINE', target: 'planet0' };
-    case 'DEPOSIT':
-      return { type: 'DEPOSIT' };
     case 'ATTACK_NEAREST':
       return { type: 'ATTACK_NEAREST' };
-    case 'WAIT_UNTIL_FULL':
-      return { type: 'WAIT_UNTIL_FULL' };
+    case 'WAIT':
+      return { type: 'WAIT', seconds: 5 };
     case 'REPEAT':
       return { type: 'REPEAT', times: 3, children: [] };
   }

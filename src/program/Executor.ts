@@ -2,10 +2,8 @@ import type { Ship, ShipBehavior, ShipWorld } from '../entities/Ship';
 import type { Code, CodeStepResult } from './Code';
 import type { Program } from './Program';
 import { tickMoveTo } from './codes/MoveTo';
-import { tickMine } from './codes/Mine';
-import { tickDeposit } from './codes/Deposit';
 import { tickAttackNearest } from './codes/AttackNearest';
-import { tickWaitUntilFull } from './codes/WaitUntilFull';
+import { tickWait } from './codes/Wait';
 import { conditionIfHpBelow } from './codes/IfHpBelow';
 import { conditionIfEnemyInRange } from './codes/IfEnemyInRange';
 import { conditionIfInventoryFull } from './codes/IfInventoryFull';
@@ -222,14 +220,10 @@ export class Executor implements ShipBehavior {
     switch (code.type) {
       case 'MOVE_TO':
         return tickMoveTo(code, ship, world);
-      case 'MINE':
-        return tickMine(code, ship, world);
-      case 'DEPOSIT':
-        return tickDeposit(ship, world);
       case 'ATTACK_NEAREST':
         return tickAttackNearest(ship, world, ctx);
-      case 'WAIT_UNTIL_FULL':
-        return tickWaitUntilFull(ship);
+      case 'WAIT':
+        return tickWait(code, ship, world, ctx);
       case 'REPEAT':
         return { status: 'blocked', reason: 'REPEAT must be handled by Executor stack' };
       case 'ITEM_CODE':

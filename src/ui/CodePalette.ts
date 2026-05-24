@@ -8,28 +8,22 @@ const FONT = 'system-ui, "Segoe UI", sans-serif';
 
 const CODE_LABEL: Record<CodeType, string> = {
   MOVE_TO: '移動',
-  MINE: '採掘',
-  DEPOSIT: '納品',
   ATTACK_NEAREST: '攻撃',
-  WAIT_UNTIL_FULL: '満タンまで待機',
+  WAIT: '待機 (秒)',
   REPEAT: '繰り返し (N 回)',
 };
 
 const CODE_COLOR: Record<CodeType, number> = {
   MOVE_TO: COLORS.ally,
-  MINE: COLORS.resource,
-  DEPOSIT: COLORS.resource,
   ATTACK_NEAREST: COLORS.enemy,
-  WAIT_UNTIL_FULL: COLORS.uiDim,
+  WAIT: COLORS.resource,
   REPEAT: COLORS.accent,
 };
 
 const INITIAL_TYPES: ReadonlyArray<CodeType> = [
   'MOVE_TO',
-  'MINE',
-  'DEPOSIT',
+  'WAIT',
   'ATTACK_NEAREST',
-  'WAIT_UNTIL_FULL',
   'REPEAT',
 ];
 

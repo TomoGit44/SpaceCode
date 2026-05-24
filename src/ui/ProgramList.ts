@@ -23,14 +23,10 @@ function codeLabel(code: Code): string {
   switch (code.type) {
     case 'MOVE_TO':
       return `移動 → ${LOCATION_LABELS[code.target]}`;
-    case 'MINE':
-      return `採掘: ${LOCATION_LABELS[code.target]}`;
-    case 'DEPOSIT':
-      return '納品';
     case 'ATTACK_NEAREST':
       return '攻撃 (最寄り)';
-    case 'WAIT_UNTIL_FULL':
-      return '満タンまで待機';
+    case 'WAIT':
+      return `待機 ${code.seconds} 秒`;
     case 'REPEAT':
       return `繰り返し × ${code.times}`;
     case 'ITEM_CODE':

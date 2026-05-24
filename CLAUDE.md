@@ -23,7 +23,7 @@
 
 ---
 
-## 現在のステータス (最終更新: 2026-05-23)
+## 現在のステータス (最終更新: 2026-05-24)
 
 | Phase | 内容 | 状態 |
 |---|---|---|
@@ -35,6 +35,7 @@
 | **Phase 5** | **仕上げ**: 演出強化 (シーン遷移・フラッシュ・バナーイージング)、配色 hardcoded → `COLORS` 統一、README 整備 | ✅ 完了 (**MVP 達成 2026-05-16**) |
 | 補追 (Phase 5 後) | タワー廃止 → 基地砲塔統合 / Program 自動ループバック / 準備時間を手動開始制 | ✅ 完了 |
 | **Phase 6** | **アイテムシステム**: `Inventory` (Run 揮発) + `EffectSystem` (加算スタック) / オムニ・コア 6 / モジュール 5 / ケミカル 6 / **アイテムコード** 3 (ITEM_CODE 条件 wrapper) / `ItemInventoryScene` / **ガチャ系統** (Phase クリア + fast/tank ドロップ + `GachaOpenScene` 3 候補選択) / **ボス敵** (Phase 5 末尾、SR 確定) / **中間ドロップ** (Phase 半数撃破でケミカル N) / **編集画面装着モジュール表示** | 🔧 **Step 0-9 完了** (実プレイ後バランス調整が残作業) |
+| 補追 (Phase 6 後) | コード体系縮減: `MINE`/`DEPOSIT`/`WAIT_UNTIL_FULL` を撤廃し **`WAIT { seconds }`** に統合 (位置で挙動が決まる暗黙副作用 — 惑星近くで自動採掘 / 基地近くで自動納品+補給) | ✅ 完了 (2026-05-24) |
 
 通しプレイ可能。コア体験「プログラムを組まないと Ship は動かない」を維持しつつ、Run 中の成長要素 (アイテム) を載せている最中。
 
@@ -141,12 +142,12 @@ src/
 │   ├── Planet.ts           # 資源源。extract API + 残量リング/バー + 60s リスポーン
 │   └── Ship.ts             # 命令的 API (moveTo/mineAt/depositAt/attackNearest/fireAt/stop) + setBehavior + id (UUID) + 可変 maxHp/maxEnergy/inventoryCap + applyMaxStats + heal + stat 参照は effects.shipStat 経由
 ├── program/                # コード実行系 (7 種揃った: 初期 6 種 + ITEM_CODE)
-│   ├── Code.ts             # Discriminated union (7 種) + CodeType (初期 6) + createCode + codeChildren (REPEAT/ITEM_CODE 共用) + CodeStepResult
+│   ├── Code.ts             # Discriminated union (初期 4 + ITEM_CODE = 5 種) + CodeType (MOVE_TO/WAIT/ATTACK_NEAREST/REPEAT) + createCode + codeChildren (REPEAT/ITEM_CODE 共用) + CodeStepResult
 │   ├── Program.ts          # 配列 + カーソル。path ベース API (insertAtPath/removeAtPath/...) + root scope カーソル追従
 │   ├── Executor.ts         # implements ShipBehavior。スタック実行モデル + CodeExecContext + REPEAT (N 回) / ITEM_CODE (条件 wrapper、1 周) ハンドリング + root 末尾自動ループバック
 │   ├── locations.ts        # LocationId / PlanetId 型 + ラベル + resolver
 │   ├── samples.ts          # sampleCodes() (CodePalette「サンプル読み込み」が使う)
-│   └── codes/              # 1 ファイル 1 種 (MoveTo / Mine / Deposit / AttackNearest / WaitUntilFull / Repeat / IfHpBelow / IfEnemyInRange / IfInventoryFull)
+│   └── codes/              # 1 ファイル 1 種 (MoveTo / Wait / AttackNearest / Repeat / IfHpBelow / IfEnemyInRange / IfInventoryFull)
 ├── items/                  # Phase 6: アイテムシステム
 │   ├── itemTypes.ts        # Rarity (N/R/SR/L) / ItemCategory (5) / ItemInstance / CodeItemInstance / ShipStat/BaseStat/EconomyStat + RARITY_LABEL/COLOR
 │   ├── Inventory.ts        # items[] + codes[] + shipModules{shipId: uid[]} + reset()。**メモリ上のみ** (Run 毎リセット)
@@ -197,7 +198,11 @@ src/
 - **エネルギー**: 宇宙船のみ。移動中 2/s 消費 + 射撃 5/shot 消費。0 で停止 (stalled)。基地納品で全回復。
 - **永続化なし (Phase 6 で撤廃)**: Inventory も Program も localStorage 保存しない。Game Over / Victory / Menu 復帰で Run リセット。Phase 4 の `spacecode.shipTemplate` は廃止
 - **Wave 構成**: 1 Stage = 5 Phase。`config.ts` の `PHASES` を参照。**準備時間は手動開始**: 各 Phase 前にプレイヤーが「▶ PHASE N 開始」ボタンを押すまで進まない
-- **初期コード (6 種)**: `MOVE_TO` / `MINE` / `DEPOSIT` / `ATTACK_NEAREST` / `WAIT_UNTIL_FULL` / `REPEAT`。REPEAT はネスト構造で **特定の行動を N 回繰り返したい時に使う**、ATTACK_NEAREST は持続時間コード。**所持無制限**
+- **初期コード (4 種)**: `MOVE_TO` / **`WAIT { seconds }`** / `ATTACK_NEAREST` / `REPEAT`。**所持無制限**
+  - **`WAIT`**: 秒数指定 (1〜60s)。**惑星近くで待機 → 自動採掘** / **基地近くで待機 → 自動納品 + エネルギー全回復**。位置で副作用が決まるためターゲット指定不要
+  - REPEAT はネスト構造で **特定の行動を N 回繰り返したい時に使う**
+  - ATTACK_NEAREST は持続時間コード (1 発撃って 500ms 留まる)
+  - 旧 `MINE` / `DEPOSIT` / `WAIT_UNTIL_FULL` は 2026-05-24 改修で `WAIT` に統合 (削除済)
 - **アイテムコード (Phase 6, 3 種)**: `IF_HP_BELOW` / `IF_ENEMY_IN_RANGE` / `IF_INVENTORY_FULL` — 条件 wrapper。所持アイテム個体 (`CodeItemInstance`) と 1:1 対応、配置の真実源は **プログラム内 ITEM_CODE ノード**。同じ個体は 1 箇所しか配置不可、Ship 破壊や wrapper 削除で自動的に「未配置」に戻る
 - **自動ループ (Phase 5 後)**: Program は **置いただけで先頭 → 末尾 → 先頭 → … と無限にループ** する。空 Program のみ idle
 - **アイテム (Phase 6)**: オムニ・コア (装着で全 Ship/基地/経済に永続効果) / モジュール (Ship 個別装着) / ケミカル (消費型・即時 or 時限バフ or AoE) / コードガチャ・モジュールガチャ (`GachaOpenScene` で開封)。効果は加算スタック、`EffectSystem` 経由で集計

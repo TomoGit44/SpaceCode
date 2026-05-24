@@ -4,10 +4,8 @@ import type { Code } from '../program/Code';
 import { ITEM_CODE_DEFS } from '../items/types/itemCodes';
 import {
   ALL_LOCATION_IDS,
-  ALL_PLANET_IDS,
   LOCATION_LABELS,
   type LocationId,
-  type PlanetId,
 } from '../program/locations';
 
 const FONT = 'system-ui, "Segoe UI", sans-serif';
@@ -15,6 +13,10 @@ const FONT = 'system-ui, "Segoe UI", sans-serif';
 /** REPEAT の繰り返し回数 UI クランプ範囲 (内部値は無制限だがスピナー上はこの範囲)。 */
 const REPEAT_TIMES_MIN = 1;
 const REPEAT_TIMES_MAX = 20;
+
+/** WAIT の秒数 UI クランプ範囲。 */
+const WAIT_SECONDS_MIN = 1;
+const WAIT_SECONDS_MAX = 60;
 
 /** Phase 7: タッチ操作向けに拡大したスピナー / chip サイズ。 */
 const SPIN_BTN_SIZE = 38;    // was 32
@@ -28,9 +30,11 @@ export interface CodeParamEditorEvents {
 
 /**
  * 編集オーバーレイ右カラム: 選択中コードのパラメータを編集する。
- *  - MOVE_TO / MINE: LocationId / PlanetId のチップ選択
- *  - DEPOSIT / ATTACK_NEAREST / WAIT_UNTIL_FULL: 「設定なし」
- *  - REPEAT: 回数スピナーのみ (Phase 5 後: 中身はリストでインライン編集するためボタン不要)
+ *  - MOVE_TO: LocationId のチップ選択
+ *  - ATTACK_NEAREST: 「設定なし」
+ *  - WAIT: 秒数スピナー (1〜60)
+ *  - REPEAT: 回数スピナー (1〜20、Phase 5 後: 中身はリストでインライン編集)
+ *  - ITEM_CODE: レア度ごとに最大値が変わるパラメータスピナー
  */
 export class CodeParamEditor {
   private scene: Phaser.Scene;
@@ -64,14 +68,8 @@ export class CodeParamEditor {
       return;
     }
     switch (code.type) {
-      case 'DEPOSIT':
-        this.addNote('納品 — 設定なし');
-        return;
       case 'ATTACK_NEAREST':
         this.addNote('攻撃 — 設定なし');
-        return;
-      case 'WAIT_UNTIL_FULL':
-        this.addNote('満タンまで待機 — 設定なし');
         return;
       case 'MOVE_TO':
         this.addTitle('移動先');
@@ -79,11 +77,8 @@ export class CodeParamEditor {
           this.emitter.emit('change', { type: 'MOVE_TO', target: id } as Code)
         );
         return;
-      case 'MINE':
-        this.addTitle('採掘先');
-        this.renderLocationChips(ALL_PLANET_IDS, code.target, (id) =>
-          this.emitter.emit('change', { type: 'MINE', target: id as PlanetId } as Code)
-        );
+      case 'WAIT':
+        this.renderWait(code);
         return;
       case 'REPEAT':
         this.renderRepeat(code);
@@ -92,6 +87,52 @@ export class CodeParamEditor {
         this.renderItemCode(code);
         return;
     }
+  }
+
+  /** WAIT の秒数スピナー (1〜60 秒)。 */
+  private renderWait(code: Extract<Code, { type: 'WAIT' }>): void {
+    this.addTitle('待機する秒数');
+    const cy = this.y + 56;
+    const cur = Math.max(WAIT_SECONDS_MIN, Math.min(WAIT_SECONDS_MAX, code.seconds));
+
+    const minus = this.makeStepButton(this.x + 4, cy, '−', () => {
+      const next = Math.max(WAIT_SECONDS_MIN, cur - 1);
+      if (next === cur) return;
+      this.emitter.emit('change', { type: 'WAIT', seconds: next } as Code);
+    });
+    const value = this.scene.add
+      .text(this.x + this.width / 2, cy + SPIN_BTN_SIZE / 2, `${cur}秒`, {
+        fontFamily: FONT,
+        fontSize: '22px',
+        color: '#cfd6e6',
+        fontStyle: 'bold',
+      })
+      .setOrigin(0.5)
+      .setDepth(3);
+    const plus = this.makeStepButton(this.x + this.width - 4 - SPIN_BTN_SIZE, cy, '+', () => {
+      const next = Math.min(WAIT_SECONDS_MAX, cur + 1);
+      if (next === cur) return;
+      this.emitter.emit('change', { type: 'WAIT', seconds: next } as Code);
+    });
+    this.controls.push(value, ...minus, ...plus);
+
+    const hintY = cy + SPIN_BTN_SIZE + 14;
+    const hint = this.scene.add
+      .text(
+        this.x + this.width / 2,
+        hintY,
+        '惑星のそばで待機 → 自動採掘\n基地のそばで待機 → 自動納品 + 補給',
+        {
+          fontFamily: FONT,
+          fontSize: '12px',
+          color: '#6b7da0',
+          align: 'center',
+          lineSpacing: 5,
+        }
+      )
+      .setOrigin(0.5, 0)
+      .setDepth(3);
+    this.controls.push(hint);
   }
 
   /** ITEM_CODE のパラメータ編集 (レア度で最大値が変わる、§2.4)。 */

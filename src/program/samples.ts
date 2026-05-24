@@ -15,11 +15,15 @@ import type { Code } from './Code';
  * テンプレに焼けない)。
  */
 export function sampleCodes(): Code[] {
+  // 2026-05-24 改修: MINE / DEPOSIT を撤廃し WAIT に集約。
+  // 「移動 → 待機」の 2 手で同等の採掘ループになる
+  // (惑星近くの WAIT は自動採掘、基地近くの WAIT は自動納品 + 補給)。
+  // 採掘 5 秒 (inventoryCap=20 / mineRate=5 でちょうど満タン)、納品 1 秒。
   return [
     { type: 'MOVE_TO', target: 'planet0' },
-    { type: 'MINE', target: 'planet0' },
+    { type: 'WAIT', seconds: 5 },
     { type: 'MOVE_TO', target: 'base' },
-    { type: 'DEPOSIT' },
+    { type: 'WAIT', seconds: 1 },
   ];
 }
 

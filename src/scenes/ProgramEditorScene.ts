@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { GAME_WIDTH, GAME_HEIGHT, COLORS } from '../config';
+import { GAME_WIDTH, GAME_HEIGHT, COLORS, SHIP } from '../config';
 import type { Ship } from '../entities/Ship';
 import { Program } from '../program/Program';
 import type { Code, CodeType } from '../program/Code';
@@ -24,6 +24,7 @@ import {
   availableCodeCounts,
   pickUnplacedInstance,
 } from '../items/codePlacement';
+import type { EconomySystem } from '../systems/EconomySystem';
 
 const FONT = 'system-ui, "Segoe UI", sans-serif';
 
@@ -33,6 +34,8 @@ export interface ProgramEditorData {
   inventory: Inventory;
   /** 全 Ship を返す getter (残数のグローバル走査用)。 */
   getShips: () => Ship[];
+  /** クレジット消費で補給/修理するため EconomySystem を渡す (2026-05-25)。 */
+  economy: EconomySystem;
 }
 
 /** path 同値判定 */
@@ -58,6 +61,7 @@ export class ProgramEditorScene extends Phaser.Scene {
   private targetShip!: Ship;
   private inventory!: Inventory;
   private getShips!: () => Ship[];
+  private economy!: EconomySystem;
   private program!: Program;
   private executor: Executor | null = null;
   private selectedPath: number[] | null = null;
@@ -77,6 +81,11 @@ export class ProgramEditorScene extends Phaser.Scene {
   // 走行 path の前回値 (再描画判定用)
   private lastRunningPath: number[] | null = null;
 
+  // 2026-05-25: 編集画面に持ち込んだ Ship ステータス UI / クレジット補給修理ボタン
+  private statTexts: Phaser.GameObjects.Text[] = [];
+  private statBtns: Phaser.GameObjects.GameObject[] = [];
+  private warningText: Phaser.GameObjects.Text | null = null;
+
   constructor() {
     super({ key: 'ProgramEditorScene' });
   }
@@ -85,9 +94,13 @@ export class ProgramEditorScene extends Phaser.Scene {
     this.targetShip = data.ship;
     this.inventory = data.inventory;
     this.getShips = data.getShips;
+    this.economy = data.economy;
     this.selectedPath = null;
     this.executor = null;
     this.lastRunningPath = null;
+    this.statTexts = [];
+    this.statBtns = [];
+    this.warningText = null;
   }
 
   create(): void {
@@ -152,6 +165,10 @@ export class ProgramEditorScene extends Phaser.Scene {
 
     // ─── 装着モジュールチップ行 (Phase 6 Step 9, read-only) ──
     this.renderEquippedModules(this.cardLeft + 24, this.cardTop + 70, cardW - 48);
+
+    // ─── Ship ステータス + 補給/修理ボタン (2026-05-25) ──────
+    // カード右上、✕ ボタンの下から 3 行
+    this.renderShipStatusPanel();
 
     // ─── 3 カラムレイアウト ──────────────────────────────────
     const innerTop = this.cardTop + 100;
@@ -444,6 +461,169 @@ export class ProgramEditorScene extends Phaser.Scene {
     }
   }
 
+  // ─── Ship ステータス UI (2026-05-25) ──────────────────────
+
+  /**
+   * 編集カード右上に Ship ステータス (HP / ENE / INV) と
+   * クレジット消費の [補給]/[修理] ボタンを表示する。
+   * HP / ENE が 0 のときは赤強調 + 上部に警告メッセージを出す。
+   *
+   * 値の追従は `update()` (Phaser scene update) から `refreshShipStatus()` 経由。
+   */
+  private renderShipStatusPanel(): void {
+    // 3 行ぶんの Text プレースホルダ + warning text を生成し、
+    // 実値の流し込みは refreshShipStatus() に任せる
+    const cardRight = this.cardLeft + 1040 - 24; // cardW=1040 と一致 (create で使用)
+    const baseX = cardRight - 130;
+    const baseY = this.cardTop + 60;
+
+    for (let i = 0; i < 3; i++) {
+      const t = this.add
+        .text(baseX, baseY + i * 18, '', {
+          fontFamily: FONT,
+          fontSize: '13px',
+          color: '#cfd6e6',
+          fontStyle: 'bold',
+        })
+        .setOrigin(0, 0)
+        .setDepth(3);
+      this.statTexts.push(t);
+    }
+    this.chrome.push(...this.statTexts);
+
+    // 警告メッセージ (ダウン or ストール時のみ表示)
+    this.warningText = this.add
+      .text(this.cardLeft + 24, this.cardTop + 88, '', {
+        fontFamily: FONT,
+        fontSize: '13px',
+        color: '#ff4d5a',
+        fontStyle: 'bold',
+      })
+      .setOrigin(0, 0)
+      .setDepth(3);
+    this.chrome.push(this.warningText);
+
+    this.refreshShipStatus();
+  }
+
+  /** ステータス値とボタンを毎フレーム更新する。 */
+  private refreshShipStatus(): void {
+    if (!this.targetShip || this.statTexts.length < 3) return;
+    const s = this.targetShip;
+    const normalColor = '#cfd6e6';
+    const alertColor = '#ff4d5a';
+
+    const hpDown = s.hp <= 0;
+    const eneOut = s.energy <= 0;
+
+    this.statTexts[0]!.setText(`HP   ${Math.ceil(s.hp)} / ${s.maxHp}${hpDown ? '  ⚠ 戦闘不能' : ''}`);
+    this.statTexts[0]!.setColor(hpDown ? alertColor : normalColor);
+
+    this.statTexts[1]!.setText(`ENE  ${Math.ceil(s.energy)} / ${s.maxEnergy}${eneOut ? '  ⚠ 切れ' : ''}`);
+    this.statTexts[1]!.setColor(eneOut ? alertColor : normalColor);
+
+    this.statTexts[2]!.setText(`INV  ${Math.floor(s.inventory)} / ${s.inventoryCap}`);
+
+    // ボタン再構築 (HP/ENE 値で enable/disable が変わるので毎フレーム作り直す)
+    for (const g of this.statBtns) g.destroy();
+    this.statBtns = [];
+
+    const btnY = this.cardTop + 60;
+    const btnRightX = this.cardLeft + 1040 - 24;
+
+    // [修理] (左) / [補給] (右) を 2 段で重ねず横並び
+    const canRepair = s.hp < s.maxHp;
+    const canRefuel = s.energy < s.maxEnergy;
+    const repairAffordable = this.economy.credits >= SHIP.repairCost;
+    const refuelAffordable = this.economy.credits >= SHIP.refuelCost;
+
+    if (canRepair) {
+      this.makeStatusButton(
+        btnRightX - 220,
+        btnY + 56,
+        100,
+        `修理 $${SHIP.repairCost}`,
+        hpDown ? COLORS.enemy : COLORS.ally,
+        repairAffordable,
+        () => this.handleRepair()
+      );
+    }
+    if (canRefuel) {
+      this.makeStatusButton(
+        btnRightX - 110,
+        btnY + 56,
+        100,
+        `補給 $${SHIP.refuelCost}`,
+        eneOut ? COLORS.enemy : COLORS.ally,
+        refuelAffordable,
+        () => this.handleRefuel()
+      );
+    }
+
+    // 警告メッセージ
+    if (this.warningText) {
+      if (hpDown && eneOut) {
+        this.warningText.setText('⚠ 戦闘不能 + エネルギー切れ — クレジットで修理 + 補給してください');
+      } else if (hpDown) {
+        this.warningText.setText('⚠ 戦闘不能 — クレジットで修理してください');
+      } else if (eneOut) {
+        this.warningText.setText('⚠ エネルギー切れ — クレジットで補給してください');
+      } else {
+        this.warningText.setText('');
+      }
+    }
+  }
+
+  private handleRepair(): void {
+    if (this.targetShip.hp >= this.targetShip.maxHp) return;
+    if (!this.economy.spend(SHIP.repairCost, 'repair')) return;
+    this.targetShip.heal(this.targetShip.maxHp); // 全回復
+    this.refreshShipStatus();
+  }
+
+  private handleRefuel(): void {
+    if (this.targetShip.energy >= this.targetShip.maxEnergy) return;
+    if (!this.economy.spend(SHIP.refuelCost, 'refuel')) return;
+    this.targetShip.refuel();
+    this.refreshShipStatus();
+  }
+
+  /** 補給 / 修理用の小ボタン。enabled=false でグレーアウト。 */
+  private makeStatusButton(
+    x: number,
+    y: number,
+    w: number,
+    label: string,
+    accent: number,
+    enabled: boolean,
+    onClick: () => void
+  ): void {
+    const h = 26;
+    const bg = this.add
+      .rectangle(x + w / 2, y + h / 2, w, h, COLORS.panelBg, enabled ? 1 : 0.4)
+      .setStrokeStyle(1, accent, enabled ? 0.9 : 0.4)
+      .setDepth(3);
+    const t = this.add
+      .text(x + w / 2, y + h / 2, label, {
+        fontFamily: FONT,
+        fontSize: '12px',
+        color: enabled ? '#cfd6e6' : '#6b7da0',
+        fontStyle: 'bold',
+      })
+      .setOrigin(0.5)
+      .setDepth(4);
+    if (enabled) {
+      bg.setInteractive({ useHandCursor: true });
+      bg.on('pointerover', () => bg.setFillStyle(COLORS.panelHover, 1));
+      bg.on('pointerout', () => bg.setFillStyle(COLORS.panelBg, 1));
+      bg.on('pointerdown', (p: Phaser.Input.Pointer) => {
+        if (p.rightButtonDown()) return;
+        onClick();
+      });
+    }
+    this.statBtns.push(bg, t);
+  }
+
   /** デバッグ用: レア度別にアイテムコードを獲得する暫定行 (カード上部)。 */
   private makeDebugRow(): void {
     const y = this.cardTop + 30;
@@ -516,9 +696,12 @@ export class ProgramEditorScene extends Phaser.Scene {
   }
 
   /**
-   * 毎フレーム呼ばれる。走行中 path が変わったときだけ再描画。
+   * 毎フレーム呼ばれる。
+   *  - 走行中 path が変わったときだけ list を再描画
+   *  - Ship ステータス (HP / ENE / INV) は毎フレーム数値だけ refresh (2026-05-25)
    */
   public update(): void {
+    this.refreshShipStatus();
     if (!this.executor) return;
     const current = this.executor.getRunningPath();
     if (!pathEquals(current, this.lastRunningPath)) {
@@ -535,6 +718,10 @@ export class ProgramEditorScene extends Phaser.Scene {
     this.palette?.destroy();
     this.list?.destroy();
     this.paramEditor?.destroy();
+    for (const g of this.statBtns) g.destroy();
+    this.statBtns = [];
+    this.statTexts = [];
+    this.warningText = null;
     for (const g of this.chrome) g.destroy();
     this.chrome = [];
     this.backdrop?.destroy();

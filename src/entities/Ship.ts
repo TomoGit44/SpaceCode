@@ -13,7 +13,8 @@ export type ShipState =
   | 'moving'
   | 'mining'
   | 'depositing'
-  | 'stalled';
+  | 'stalled'   // エネルギー切れ (energy <= 0): 移動・採掘・攻撃すべて不可。クレジット補給で復帰
+  | 'downed';   // HP 0 (2026-05-25 追加): 戦闘不能・敵接触も無効。クレジット修理で復帰
 
 /**
  * Ship が 1 フレームの判断時に参照するワールド情報。
@@ -249,6 +250,17 @@ export class Ship {
   public update(delta: number, world: ShipWorld): void {
     if (this.dead) return;
 
+    // HP 0 = ダウン状態 (Phase 6 後の改修, 2026-05-25)
+    //  - behavior/移動/接触すべて停止 = 敵に踏まれてもダメージは入らない
+    //  - 復帰はクレジット修理 (`heal()` 経由) のみ
+    if (this.hp <= 0) {
+      this.hp = 0;
+      this.state = 'downed';
+      this.bodyGfx.setAlpha(0.3);
+      this.drawBars();
+      return;
+    }
+
     // エネルギー切れチェック
     if (this.energy <= 0) {
       this.energy = 0;
@@ -342,11 +354,9 @@ export class Ship {
 
   public takeDamage(amount: number): void {
     if (this.dead) return;
-    this.hp -= amount;
-    if (this.hp <= 0) {
-      this.hp = 0;
-      this.die();
-    }
+    // 2026-05-25: HP 0 では `die()` せず、ダウン状態として残す。
+    // 戦闘不能だが Inventory.shipModules は保持され、クレジット修理で復活できる。
+    this.hp = Math.max(0, this.hp - amount);
   }
 
   public refuel(): void {

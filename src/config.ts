@@ -83,6 +83,9 @@ export const SHIP = {
   attackRange: 220,          // attackNearest の射程
   refuelOnDeposit: true,     // 納品時に energy 全回復するか
   radius: 12,                // 描画基準半径
+  // 2026-05-25: 編集画面からクレジット消費で補給/修理 (常時可、ダウン/スタール復帰経路)
+  refuelCost: 20,            // エネルギー全回復のクレジット
+  repairCost: 40,            // HP 全回復 (ダウン復活含む) のクレジット
 } as const;
 
 /** 惑星 (Phase D) */

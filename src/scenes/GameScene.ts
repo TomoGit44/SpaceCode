@@ -327,22 +327,42 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  /** パネル位置 + 値を毎フレーム再計算する。 */
+  /** パネル位置 + 値を毎フレーム再計算する。HP/エネルギー 0 は赤強調。インベントリは floor。 */
   private updateStatPanel(): void {
     const s = this.selectedShip;
     if (!s || !this.statPanelContainer) return;
     // ship の上にパネル (3 行ぶん = 約 44px) を浮かべる
     this.statPanelContainer.setPosition(s.x, s.y - SHIP.radius - 50);
-    this.statPanelTexts[0]?.setText(`HP  ${Math.ceil(s.hp)}/${s.maxHp}`);
-    this.statPanelTexts[1]?.setText(`ENE ${Math.ceil(s.energy)}/${s.maxEnergy}`);
-    this.statPanelTexts[2]?.setText(`INV ${s.inventory}/${s.inventoryCap}`);
 
-    // 目印リング (薄い ally 色 + ティール) を描き直す
+    const normalColor = '#cfd6e6';
+    const alertColor = '#ff4d5a'; // COLORS.enemy
+
+    // HP: 0 で赤 (ダウン状態)
+    const hpDown = s.hp <= 0;
+    const hpText = this.statPanelTexts[0];
+    if (hpText) {
+      hpText.setText(`HP  ${Math.ceil(s.hp)}/${s.maxHp}${hpDown ? '  ⚠' : ''}`);
+      hpText.setColor(hpDown ? alertColor : normalColor);
+    }
+
+    // ENE: 0 で赤 (ストール状態)
+    const eneOut = s.energy <= 0;
+    const eneText = this.statPanelTexts[1];
+    if (eneText) {
+      eneText.setText(`ENE ${Math.ceil(s.energy)}/${s.maxEnergy}${eneOut ? '  ⚠' : ''}`);
+      eneText.setColor(eneOut ? alertColor : normalColor);
+    }
+
+    // INV: 整数で表示 (Math.floor)
+    this.statPanelTexts[2]?.setText(`INV ${Math.floor(s.inventory)}/${s.inventoryCap}`);
+
+    // 目印リング: ダウン/ストール時は赤、それ以外はティール
     if (this.selectionRing) {
+      const ringColor = hpDown || eneOut ? COLORS.enemy : COLORS.accent;
       this.selectionRing.clear();
-      this.selectionRing.lineStyle(2, COLORS.accent, 0.85);
+      this.selectionRing.lineStyle(2, ringColor, 0.85);
       this.selectionRing.strokeCircle(s.x, s.y, SHIP.radius + 5);
-      this.selectionRing.lineStyle(1, COLORS.accent, 0.3);
+      this.selectionRing.lineStyle(1, ringColor, 0.3);
       this.selectionRing.strokeCircle(s.x, s.y, SHIP.radius + 9);
     }
   }
@@ -357,6 +377,7 @@ export class GameScene extends Phaser.Scene {
       ship,
       inventory: this.inventory,
       getShips: () => this.ships,
+      economy: this.economy,
     });
     const editor = this.scene.get('ProgramEditorScene');
     editor.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {

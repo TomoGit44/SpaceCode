@@ -23,7 +23,7 @@
 
 ---
 
-## 現在のステータス (最終更新: 2026-05-24)
+## 現在のステータス (最終更新: 2026-05-25)
 
 | Phase | 内容 | 状態 |
 |---|---|---|
@@ -36,6 +36,7 @@
 | 補追 (Phase 5 後) | タワー廃止 → 基地砲塔統合 / Program 自動ループバック / 準備時間を手動開始制 | ✅ 完了 |
 | **Phase 6** | **アイテムシステム**: `Inventory` (Run 揮発) + `EffectSystem` (加算スタック) / オムニ・コア 6 / モジュール 5 / ケミカル 6 / **アイテムコード** 3 (ITEM_CODE 条件 wrapper) / `ItemInventoryScene` / **ガチャ系統** (Phase クリア + fast/tank ドロップ + `GachaOpenScene` 3 候補選択) / **ボス敵** (Phase 5 末尾、SR 確定) / **中間ドロップ** (Phase 半数撃破でケミカル N) / **編集画面装着モジュール表示** | 🔧 **Step 0-9 完了** (実プレイ後バランス調整が残作業) |
 | 補追 (Phase 6 後) | コード体系縮減: `MINE`/`DEPOSIT`/`WAIT_UNTIL_FULL` を撤廃し **`WAIT { seconds }`** に統合 (位置で挙動が決まる暗黙副作用 — 惑星近くで自動採掘 / 基地近くで自動納品+補給) | ✅ 完了 (2026-05-24) |
+| 補追 (Phase 6 後) | **ダウン状態** (HP 0 で死亡せず敵接触免疫) + **編集画面ステータス UI** (HP/ENE/INV 3 行、INV 整数化、HP/ENE 0 で赤強調) + **クレジット補給 $20 / 修理 $40** (編集画面から常時可) | ✅ 完了 (2026-05-25) |
 
 通しプレイ可能。コア体験「プログラムを組まないと Ship は動かない」を維持しつつ、Run 中の成長要素 (アイテム) を載せている最中。
 
@@ -132,7 +133,7 @@ src/
 │   ├── GameScene.ts        # メインループ。enemies/bullets/planets/ships + Inventory + EffectSystem を所有。overlayDepth でオーバーレイ入力ガード
 │   ├── GameOverScene.ts    # R リトライ / ESC メニュー
 │   ├── VictoryScene.ts     # STAGE CLEAR
-│   ├── ProgramEditorScene.ts  # 並行 active オーバーレイ。Ship クリックで起動、Program をライブ編集。ITEM_CODE 配置 + 残数管理 + 装着モジュール read-only チップ
+│   ├── ProgramEditorScene.ts  # 並行 active オーバーレイ。Ship クリックで起動、Program をライブ編集。ITEM_CODE 配置 + 残数管理 + 装着モジュール read-only チップ + Ship ステータス (HP/ENE/INV) + 補給/修理ボタン
 │   ├── ItemInventoryScene.ts  # Phase 6: 並行 active オーバーレイ。カテゴリタブ + 所持一覧 + 詳細 + 装着/使用フロー + ガチャ「開封する」
 │   └── GachaOpenScene.ts      # Phase 6 Step 6: ガチャ開封オーバーレイ。drawGacha で 3 候補 → 選択 → Inventory に追加
 ├── entities/               # ゲーム内オブジェクト (描画+状態を自分で持つ)
@@ -140,7 +141,7 @@ src/
 │   ├── Enemy.ts            # 基地へ直進, dead/reachedBase フラグ。4 種 (basic/fast/tank/boss)
 │   ├── Bullet.ts           # 対象ホーミング (基地砲塔/Ship 共用)
 │   ├── Planet.ts           # 資源源。extract API + 残量リング/バー + 60s リスポーン
-│   └── Ship.ts             # 命令的 API (moveTo/mineAt/depositAt/attackNearest/fireAt/stop) + setBehavior + id (UUID) + 可変 maxHp/maxEnergy/inventoryCap + applyMaxStats + heal + stat 参照は effects.shipStat 経由
+│   └── Ship.ts             # 命令的 API (moveTo/mineAt/depositAt/attackNearest/fireAt/stop) + setBehavior + id (UUID) + 可変 maxHp/maxEnergy/inventoryCap + applyMaxStats + heal + stat 参照は effects.shipStat 経由 + ShipState ('idle'/'moving'/'mining'/'depositing'/'stalled'/'downed')。HP 0 はダウン状態で残り敵接触免疫 (Ship.update 早期 return)
 ├── program/                # コード実行系 (7 種揃った: 初期 6 種 + ITEM_CODE)
 │   ├── Code.ts             # Discriminated union (初期 4 + ITEM_CODE = 5 種) + CodeType (MOVE_TO/WAIT/ATTACK_NEAREST/REPEAT) + createCode + codeChildren (REPEAT/ITEM_CODE 共用) + CodeStepResult
 │   ├── Program.ts          # 配列 + カーソル。path ベース API (insertAtPath/removeAtPath/...) + root scope カーソル追従

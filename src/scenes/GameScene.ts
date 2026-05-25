@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { GAME_WIDTH, GAME_HEIGHT, COLORS, ECONOMY, PLANETS, SHIP } from '../config';
+import { GAME_WIDTH, GAME_HEIGHT, COLORS, ECONOMY, PLANETS, SHIP, GAME_SPEED } from '../config';
 import { drawStarfield } from '../utils/starfield';
 import { Base } from '../entities/Base';
 import { Enemy } from '../entities/Enemy';
@@ -562,6 +562,13 @@ export class GameScene extends Phaser.Scene {
 
   update(_time: number, delta: number): void {
     if (this.terminating) return;
+
+    // 2026-05-25: ゲーム全体を GAME_SPEED 倍に減速する。
+    // ここで delta を一度スケールするだけで、全サブシステム (Base / Planets /
+    // Waves / Enemies / Ships / Bullets / Effects) が同じテンポで遅くなる。
+    // Phaser tween / camera flash / showBanner は scene 時間ベースのため
+    // この場で影響を受けず、UI フィードバックはキビキビ感を維持する。
+    delta = delta * GAME_SPEED;
 
     // 基地: 脈動 + 砲塔発射 (Phase 5 後: タワーを撤廃して基地内蔵)
     this.base.update(delta, this.enemies, this.bullets, this.effects);

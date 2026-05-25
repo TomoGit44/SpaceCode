@@ -7,6 +7,18 @@ export const GAME_WIDTH = 1280;
 export const GAME_HEIGHT = 720;
 
 /**
+ * ゲーム全体の速度倍率 (2026-05-25)。
+ *
+ * GameScene.update が `delta *= GAME_SPEED` を冒頭で適用するため、
+ * 0.5 にすると敵移動 / 船移動 / スポーン間隔 / 採掘速度 / 弾速度 /
+ * WAIT 秒数 / ATTACK 持続 / 基地砲塔発射間隔 すべてが半速になる。
+ *
+ * UI 演出 (Phaser tween / camera flash / showBanner) は scene 時間ベースで
+ * 別経路のため影響を受けない (キビキビ感を保てる)。
+ */
+export const GAME_SPEED = 0.5;
+
+/**
  * 配色 (Phase 5 で統一): 暗背景 + 高彩度アクセント (味方=青 / 敵=赤 / 資源=黄 / 基地=紫)。
  * UI コンポーネントは panel* / ui / uiDim を使う。エンティティの単発色は base/ally/enemy/resource/accent を直接参照。
  */

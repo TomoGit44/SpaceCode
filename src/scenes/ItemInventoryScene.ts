@@ -15,6 +15,7 @@ import { OMNI_CORE_TYPES, isOmniCore, omniCorePercent, makeRandomOmniCore } from
 import { MODULE_TYPES, isModule, moduleEffectText, makeRandomModule } from '../items/types/modules';
 import { CHEMICAL_TYPES, isChemical, chemicalEffectText, makeRandomChemical } from '../items/types/chemicals';
 import { isCodeGacha, isModuleGacha, isGacha, gachaItemName, makeGachaItem } from '../items/gacha';
+import { ItemCard } from '../ui/ItemCard';
 
 const FONT = 'system-ui, "Segoe UI", sans-serif';
 
@@ -41,15 +42,15 @@ const CATEGORIES: ReadonlyArray<CategoryDef> = [
   { id: 'moduleGacha', label: 'モジュールガチャ' },
 ];
 
-const IMPLEMENTED: ReadonlyArray<ItemCategory> = ['omniCore', 'module', 'chemical', 'codeGacha', 'moduleGacha'];
-
 /**
- * アイテム一覧オーバーレイ。
+ * アイテム一覧オーバーレイ (Step 3-A 再構築, 2026-05-25)。
  *
- * GameScene を pause せずに並行 active で起動する (ProgramEditorScene と同じパターン)。
- * 左: カテゴリタブ / 中央: 所持アイテム一覧 / 右: 選択アイテムの詳細・操作。
+ * 3 カラムレイアウト:
+ *   - 左 (200px): カテゴリタブ縦並び + 件数バッジ
+ *   - 中央 (560px): 4 列 × N 行 のカードグリッド (ItemCard)
+ *   - 右 (340px): 選択アイテムの詳細 (ヒーロー領域 + 説明 + アクション)
  *
- * Phase 6 Step 4 時点: オムニ・コア + モジュール + ケミカルに対応。ガチャは後続。
+ * GameScene を pause せず並行 active で起動する (ProgramEditorScene と同じパターン)。
  */
 export class ItemInventoryScene extends Phaser.Scene {
   private inventory!: Inventory;
@@ -62,13 +63,22 @@ export class ItemInventoryScene extends Phaser.Scene {
   private confirmingUse = false;
 
   private dyn: Phaser.GameObjects.GameObject[] = [];
+  private dynCards: ItemCard[] = [];
   private chrome: Phaser.GameObjects.GameObject[] = [];
   private escHandler?: () => void;
 
+  // カードレイアウト
   private cardLeft = 0;
   private cardTop = 0;
-  private readonly cardW = 980;
-  private readonly cardH = 560;
+  private readonly cardW = 1140;
+  private readonly cardH = 600;
+
+  // 各カラムの座標 (create で計算)
+  private colLeftX = 0;
+  private colCenterX = 0;
+  private colRightX = 0;
+  private readonly leftW = 200;
+  private readonly rightW = 340;
 
   constructor() {
     super({ key: 'ItemInventoryScene' });
@@ -88,6 +98,11 @@ export class ItemInventoryScene extends Phaser.Scene {
     this.cardLeft = (GAME_WIDTH - this.cardW) / 2;
     this.cardTop = (GAME_HEIGHT - this.cardH) / 2;
 
+    // カラム座標 (24px パディング + gap 16)
+    this.colLeftX = this.cardLeft + 24;
+    this.colCenterX = this.colLeftX + this.leftW + 16;
+    this.colRightX = this.cardLeft + this.cardW - 24 - this.rightW;
+
     const backdrop = this.add
       .rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x05070d, 0.55)
       .setDepth(0)
@@ -106,12 +121,21 @@ export class ItemInventoryScene extends Phaser.Scene {
     card.on('pointerdown', () => {});
     this.chrome.push(card);
 
+    // タイトル
     this.chrome.push(
       this.add
         .text(this.cardLeft + 24, this.cardTop + 16, '📦 アイテム', {
           fontFamily: FONT,
           fontSize: '20px',
           color: '#cfd6e6',
+          fontStyle: 'bold',
+        })
+        .setDepth(2),
+      this.add
+        .text(this.cardLeft + 140, this.cardTop + 22, 'INVENTORY', {
+          fontFamily: FONT,
+          fontSize: '11px',
+          color: '#6b7da0',
           fontStyle: 'bold',
         })
         .setDepth(2)
@@ -131,32 +155,57 @@ export class ItemInventoryScene extends Phaser.Scene {
 
   private render(): void {
     for (const g of this.dyn) g.destroy();
+    for (const c of this.dynCards) c.destroy();
     this.dyn = [];
+    this.dynCards = [];
     this.renderTabs();
-    this.renderList();
+    this.renderGrid();
     this.renderDetail();
   }
 
+  /** 左: カテゴリタブ (件数バッジ付き、active バー). */
   private renderTabs(): void {
-    const x = this.cardLeft + 24;
-    const w = 170;
+    const x = this.colLeftX;
+    const w = this.leftW;
     let y = this.cardTop + 60;
     for (const cat of CATEGORIES) {
       const selected = cat.id === this.selectedCategory;
+      const count = this.countForCategory(cat.id);
+      // active ハイライト (左 2px バー)
+      if (selected) {
+        this.dyn.push(
+          this.add.rectangle(x, y + 21, 2, 38, COLORS.accent, 1).setOrigin(0, 0.5).setDepth(3)
+        );
+      }
       const bg = this.add
-        .rectangle(x + w / 2, y + 19, w, 38, selected ? COLORS.accent : COLORS.panelBg, selected ? 0.28 : 1)
-        .setStrokeStyle(1, selected ? COLORS.accent : COLORS.panelBorder, selected ? 1 : 0.8)
+        .rectangle(x + w / 2, y + 21, w, 42, selected ? COLORS.accent : COLORS.panelBg, selected ? 0.12 : 1)
+        .setStrokeStyle(1, selected ? COLORS.accent : COLORS.panelBorder, selected ? 1 : 0.6)
         .setDepth(2)
         .setInteractive({ useHandCursor: true });
       const label = this.add
-        .text(x + 12, y + 19, cat.label, {
+        .text(x + 16, y + 21, cat.label, {
           fontFamily: FONT,
-          fontSize: '14px',
+          fontSize: '13px',
           color: selected ? '#3ee0c5' : '#cfd6e6',
           fontStyle: selected ? 'bold' : 'normal',
         })
         .setOrigin(0, 0.5)
         .setDepth(3);
+      const countText = this.add
+        .text(x + w - 14, y + 21, count > 0 ? `${count}` : '—', {
+          fontFamily: FONT,
+          fontSize: '12px',
+          color: count > 0 ? '#cfd6e6' : '#6b7da0',
+          fontStyle: count > 0 ? 'bold' : 'normal',
+        })
+        .setOrigin(1, 0.5)
+        .setDepth(3);
+      bg.on('pointerover', () => {
+        if (!selected) bg.setFillStyle(COLORS.panelHover, 1);
+      });
+      bg.on('pointerout', () => {
+        if (!selected) bg.setFillStyle(COLORS.panelBg, 1);
+      });
       bg.on('pointerdown', (p: Phaser.Input.Pointer) => {
         if (p.rightButtonDown()) return;
         this.selectedCategory = cat.id;
@@ -164,33 +213,142 @@ export class ItemInventoryScene extends Phaser.Scene {
         this.confirmingUse = false;
         this.render();
       });
-      this.dyn.push(bg, label);
-      y += 46;
+      this.dyn.push(bg, label, countText);
+      y += 50;
     }
   }
 
-  /** 中央: 選択カテゴリの所持アイテム一覧。 */
-  private renderList(): void {
-    const x = this.cardLeft + 24 + 170 + 16;
-    const w = 480;
-    const top = this.cardTop + 60;
-
-    if (!IMPLEMENTED.includes(this.selectedCategory)) {
-      this.addCenterNote(x + w / 2, top + 80, 'このカテゴリのアイテムは後のステップで実装予定です');
-      return;
+  private countForCategory(cat: ItemCategory): number {
+    switch (cat) {
+      case 'omniCore':    return this.inventory.items.filter((it) => isOmniCore(it.typeId)).length;
+      case 'module':      return this.inventory.items.filter((it) => isModule(it.typeId)).length;
+      case 'chemical':    return this.inventory.items.filter((it) => isChemical(it.typeId)).length;
+      case 'codeGacha':   return this.inventory.items.filter((it) => isCodeGacha(it.typeId)).length;
+      case 'moduleGacha': return this.inventory.items.filter((it) => isModuleGacha(it.typeId)).length;
+      default:            return 0;
     }
+  }
+
+  /** 中央: 4 列 × N 行 のカードグリッド。 */
+  private renderGrid(): void {
+    const gridLeft = this.colCenterX;
+    const gridTop = this.cardTop + 60;
+    const gridW = this.colRightX - gridLeft - 16; // 右カラムとの gap 16
+    const cols = 4;
+    const gap = 8;
+    const cardW = Math.floor((gridW - gap * (cols - 1)) / cols);
+    const cardH = 140;
+
+    // ヘッダー (カテゴリ名 + 件数)
     const items = this.categoryItems();
+    this.dyn.push(
+      this.add
+        .text(gridLeft, this.cardTop + 28, this.headerForCategory(), {
+          fontFamily: FONT,
+          fontSize: '15px',
+          color: '#cfd6e6',
+          fontStyle: 'bold',
+        })
+        .setDepth(2),
+      this.add
+        .text(gridLeft + 120, this.cardTop + 32, `${items.length} 件`, {
+          fontFamily: FONT,
+          fontSize: '11px',
+          color: '#6b7da0',
+        })
+        .setDepth(2)
+    );
+
     if (items.length === 0) {
-      this.addCenterNote(x + w / 2, top + 80, 'このカテゴリのアイテムを所持していません');
+      this.dyn.push(
+        this.add
+          .rectangle(gridLeft + gridW / 2, gridTop + 120, gridW, 240, COLORS.bgAlt, 0.4)
+          .setStrokeStyle(1, COLORS.panelBorder, 0.5)
+          .setDepth(2),
+        this.add
+          .text(gridLeft + gridW / 2, gridTop + 120, 'このカテゴリのアイテムを所持していません', {
+            fontFamily: FONT,
+            fontSize: '13px',
+            color: '#6b7da0',
+            align: 'center',
+            wordWrap: { width: 360 },
+          })
+          .setOrigin(0.5)
+          .setDepth(3)
+      );
       return;
     }
 
-    let y = top;
-    for (const it of items) {
-      this.makeItemRow(it, x, y, w);
-      y += 48;
-      if (y + 42 > this.cardTop + this.cardH - 56) break; // 下端のデバッグ行を侵食しない
+    // カード並べ
+    const maxRows = 3; // グリッド表示の上限
+    const maxCards = cols * maxRows;
+    for (let i = 0; i < Math.min(items.length, maxCards); i++) {
+      const it = items[i]!;
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      const x = gridLeft + col * (cardW + gap) + cardW / 2;
+      const y = gridTop + row * (cardH + gap) + cardH / 2;
+      const card = new ItemCard(this, x, y, {
+        width: cardW,
+        height: cardH,
+        rarity: it.rarity,
+        iconColor: this.iconColorFor(it.typeId),
+        name: this.displayName(it.typeId),
+        subtext: this.subtextFor(it),
+        equippedBadge: this.equippedBadgeFor(it),
+        selected: it.uid === this.selectedUid,
+        depth: 3,
+        onPointerDown: () => {
+          this.selectedUid = it.uid;
+          this.confirmingUse = false;
+          this.render();
+        },
+      });
+      this.dynCards.push(card);
     }
+    if (items.length > maxCards) {
+      this.dyn.push(
+        this.add
+          .text(gridLeft + gridW / 2, gridTop + cardH * maxRows + gap * (maxRows - 1) + 12,
+            `… ほか ${items.length - maxCards} 件 (右の詳細で個別操作)`, {
+            fontFamily: FONT,
+            fontSize: '11px',
+            color: '#6b7da0',
+          })
+          .setOrigin(0.5)
+          .setDepth(3)
+      );
+    }
+  }
+
+  private headerForCategory(): string {
+    const found = CATEGORIES.find((c) => c.id === this.selectedCategory);
+    return found?.label ?? '';
+  }
+
+  /** カード中央アイコンの色 (カテゴリ別に固定)。 */
+  private iconColorFor(typeId: string): number {
+    if (isOmniCore(typeId))    return COLORS.base;
+    if (isModule(typeId))      return COLORS.ally;
+    if (isChemical(typeId))    return COLORS.accent;
+    if (isCodeGacha(typeId))   return COLORS.raritySR;
+    if (isModuleGacha(typeId)) return COLORS.rarityL;
+    return COLORS.uiDim;
+  }
+
+  /** カード下部のサブテキスト (効果や状態)。 */
+  private subtextFor(it: ItemInstance): string {
+    if (isOmniCore(it.typeId)) return `+${omniCorePercent(it.typeId, it.rarity)}%`;
+    if (isChemical(it.typeId)) return '使い切り';
+    if (isGacha(it.typeId))    return '未開封';
+    return '';
+  }
+
+  /** モジュール装着先を「S1」「S2」形式で返す (未装着は null)。 */
+  private equippedBadgeFor(it: ItemInstance): string | null {
+    if (!isModule(it.typeId)) return null;
+    const idx = this.equippedShipIndex(it.uid);
+    return idx >= 0 ? `S${idx + 1}` : null;
   }
 
   /** 選択カテゴリに属する所持アイテム。 */
@@ -223,80 +381,17 @@ export class ItemInventoryScene extends Phaser.Scene {
     );
   }
 
-  private makeItemRow(it: ItemInstance, x: number, y: number, w: number): void {
-    const selected = it.uid === this.selectedUid;
-    const rc = RARITY_COLOR[it.rarity];
-
-    const bg = this.add
-      .rectangle(x + w / 2, y + 20, w, 42, selected ? rc : COLORS.panelBg, selected ? 0.24 : 0.85)
-      .setStrokeStyle(selected ? 2 : 1, rc, selected ? 1 : 0.7)
-      .setDepth(2)
-      .setInteractive({ useHandCursor: true });
-    bg.on('pointerdown', (p: Phaser.Input.Pointer) => {
-      if (p.rightButtonDown()) return;
-      this.selectedUid = it.uid;
-      this.confirmingUse = false;
-      this.render();
-    });
-
-    const badge = this.add
-      .text(x + 14, y + 20, RARITY_SHORT[it.rarity], {
-        fontFamily: FONT,
-        fontSize: '13px',
-        color: '#' + rc.toString(16).padStart(6, '0'),
-        fontStyle: 'bold',
-      })
-      .setOrigin(0, 0.5)
-      .setDepth(3);
-
-    const nameText = this.add
-      .text(x + 52, y + 20, this.displayName(it.typeId), {
-        fontFamily: FONT,
-        fontSize: '14px',
-        color: '#cfd6e6',
-      })
-      .setOrigin(0, 0.5)
-      .setDepth(3);
-
-    this.dyn.push(bg, badge, nameText);
-
-    // 右側: カテゴリ別の補助表示
-    let sub = '';
-    let subColor = '#6b7da0';
-    if (isModule(it.typeId)) {
-      const idx = this.equippedShipIndex(it.uid);
-      sub = idx >= 0 ? `→ 宇宙船 #${idx + 1}` : '未装着';
-      subColor = idx >= 0 ? '#3ee0c5' : '#6b7da0';
-    } else if (isOmniCore(it.typeId)) {
-      sub = `+${omniCorePercent(it.typeId, it.rarity)}%`;
-      subColor = '#3ee0c5';
-    } else if (isChemical(it.typeId)) {
-      sub = '使い切り';
-    } else if (isGacha(it.typeId)) {
-      sub = '未開封';
-      subColor = '#3ee0c5';
-    }
-    this.dyn.push(
-      this.add
-        .text(x + w - 14, y + 20, sub, {
-          fontFamily: FONT,
-          fontSize: '12px',
-          color: subColor,
-        })
-        .setOrigin(1, 0.5)
-        .setDepth(3)
-    );
-  }
-
-  /** 右: 選択アイテムの詳細とアクション。 */
+  /** 右: 選択アイテムの詳細パネル (ヒーロー領域 + 説明 + アクション)。 */
   private renderDetail(): void {
-    const x = this.cardLeft + this.cardW - 24 - 240;
-    const w = 240;
+    const x = this.colRightX;
+    const w = this.rightW;
     const top = this.cardTop + 60;
+    const h = this.cardH - 60 - 56; // 下端のデバッグ行を避ける
 
+    // パネル背景
     this.dyn.push(
       this.add
-        .rectangle(x + w / 2, top + 175, w, 350, COLORS.panelBg, 0.6)
+        .rectangle(x + w / 2, top + h / 2, w, h, COLORS.bgAlt, 0.6)
         .setStrokeStyle(1, COLORS.panelBorder, 0.8)
         .setDepth(2)
     );
@@ -308,7 +403,7 @@ export class ItemInventoryScene extends Phaser.Scene {
     if (!sel) {
       this.dyn.push(
         this.add
-          .text(x + w / 2, top + 165, 'アイテムを選択', {
+          .text(x + w / 2, top + h / 2, '↑ カードを選択してください', {
             fontFamily: FONT,
             fontSize: '13px',
             color: '#6b7da0',
@@ -319,50 +414,74 @@ export class ItemInventoryScene extends Phaser.Scene {
       return;
     }
 
+    // ヒーロー領域: 大きい六角アイコン + Rarity 表示
+    const heroH = 180;
+    const heroBg = this.add
+      .rectangle(x + w / 2, top + heroH / 2 + 2, w - 4, heroH, COLORS.bg, 0.55)
+      .setDepth(3);
+    this.dyn.push(heroBg);
+
+    // 大きい六角アイコン (decorative)
+    const heroIcon = this.add.graphics().setDepth(4);
+    const hr = 38;
+    const hcx = x + w / 2;
+    const hcy = top + heroH / 2;
+    const iconColor = this.iconColorFor(sel.typeId);
+    // 外枠
+    this.drawHex(heroIcon, hcx, hcy, hr * 1.25, COLORS.bgAlt, 0.9);
+    this.strokeHex(heroIcon, hcx, hcy, hr * 1.25, RARITY_COLOR[sel.rarity], 1.5);
+    // 内側
+    this.drawHex(heroIcon, hcx, hcy, hr * 0.9, iconColor, 0.9);
+    heroIcon.fillStyle(COLORS.highlight, 0.95);
+    heroIcon.fillCircle(hcx, hcy, hr * 0.2);
+    this.dyn.push(heroIcon);
+
     const rc = RARITY_COLOR[sel.rarity];
     this.dyn.push(
       this.add
-        .text(x + 16, top + 18, this.displayName(sel.typeId), {
+        .text(x + 16, top + heroH + 16, this.displayName(sel.typeId), {
           fontFamily: FONT,
           fontSize: '17px',
           color: '#cfd6e6',
           fontStyle: 'bold',
+          wordWrap: { width: w - 32 },
         })
-        .setDepth(3),
+        .setDepth(4),
       this.add
-        .text(x + 16, top + 46, RARITY_LABEL[sel.rarity], {
+        .text(x + 16, top + heroH + 44, RARITY_LABEL[sel.rarity], {
           fontFamily: FONT,
-          fontSize: '13px',
+          fontSize: '12px',
           color: '#' + rc.toString(16).padStart(6, '0'),
           fontStyle: 'bold',
         })
-        .setDepth(3)
+        .setDepth(4)
     );
 
-    if (isOmniCore(sel.typeId)) this.renderCoreDetail(sel, x, w, top);
-    else if (isModule(sel.typeId)) this.renderModuleDetail(sel, x, w, top);
-    else if (isChemical(sel.typeId)) this.renderChemicalDetail(sel, x, w, top);
-    else if (isGacha(sel.typeId)) this.renderGachaDetail(sel, x, w, top);
+    const detailTop = top + heroH + 70;
+    if (isOmniCore(sel.typeId)) this.renderCoreDetail(sel, x, w, detailTop);
+    else if (isModule(sel.typeId)) this.renderModuleDetail(sel, x, w, detailTop);
+    else if (isChemical(sel.typeId)) this.renderChemicalDetail(sel, x, w, detailTop);
+    else if (isGacha(sel.typeId)) this.renderGachaDetail(sel, x, w, detailTop);
   }
 
   private renderGachaDetail(it: ItemInstance, x: number, w: number, top: number): void {
     const category = isCodeGacha(it.typeId) ? 'code' : 'module';
     const note =
       category === 'code'
-        ? 'アイテムコード 3 種から 1 つを獲得します。\n選択肢のレア度はガチャのレア度に従って決まります。'
-        : 'モジュール 3 種から 1 つを獲得します。\n選択肢のレア度はガチャのレア度に従って決まります。';
+        ? 'アイテムコード 3 種から 1 つを獲得します。'
+        : 'モジュール 3 種から 1 つを獲得します。';
     this.dyn.push(
       this.add
-        .text(x + 16, top + 80, note, {
+        .text(x + 16, top, note, {
           fontFamily: FONT,
-          fontSize: '13px',
+          fontSize: '12px',
           color: '#cfd6e6',
-          lineSpacing: 6,
+          lineSpacing: 5,
           wordWrap: { width: w - 32 },
         })
-        .setDepth(3)
+        .setDepth(4)
     );
-    this.makeActionButton(x + 16, top + 188, w - 32, '開封する', COLORS.accent, () => {
+    this.makeActionButton(x + 16, top + 70, w - 32, '▶ 開封する', COLORS.accent, () => {
       this.openGacha(it);
     });
   }
@@ -386,23 +505,23 @@ export class ItemInventoryScene extends Phaser.Scene {
     const core = OMNI_CORE_TYPES[it.typeId]!;
     this.dyn.push(
       this.add
-        .text(x + 16, top + 80, `${core.descJa}\n+${omniCorePercent(it.typeId, it.rarity)}%`, {
+        .text(x + 16, top, `${core.descJa}\n\n効果: +${omniCorePercent(it.typeId, it.rarity)}%`, {
           fontFamily: FONT,
-          fontSize: '14px',
+          fontSize: '13px',
           color: '#cfd6e6',
-          lineSpacing: 6,
-          wordWrap: { width: w - 32 },
-        })
-        .setDepth(3),
-      this.add
-        .text(x + 16, top + 150, '所持しているだけで常時有効。\n同種コアの効果は加算で重なる。', {
-          fontFamily: FONT,
-          fontSize: '12px',
-          color: '#6b7da0',
           lineSpacing: 5,
           wordWrap: { width: w - 32 },
         })
-        .setDepth(3)
+        .setDepth(4),
+      this.add
+        .text(x + 16, top + 96, '所持しているだけで常時有効。\n同種コアの効果は加算で重なる。', {
+          fontFamily: FONT,
+          fontSize: '11px',
+          color: '#6b7da0',
+          lineSpacing: 4,
+          wordWrap: { width: w - 32 },
+        })
+        .setDepth(4)
     );
   }
 
@@ -410,44 +529,44 @@ export class ItemInventoryScene extends Phaser.Scene {
     const mod = MODULE_TYPES[it.typeId]!;
     this.dyn.push(
       this.add
-        .text(x + 16, top + 80, `${mod.descJa}\n\n${moduleEffectText(it.typeId, it.rarity)}`, {
+        .text(x + 16, top, `${mod.descJa}\n\n${moduleEffectText(it.typeId, it.rarity)}`, {
           fontFamily: FONT,
-          fontSize: '13px',
+          fontSize: '12px',
           color: '#cfd6e6',
-          lineSpacing: 6,
+          lineSpacing: 5,
           wordWrap: { width: w - 32 },
         })
-        .setDepth(3)
+        .setDepth(4)
     );
-    this.renderModuleActions(it, x + 16, top + 178, w - 32);
+    this.renderModuleActions(it, x + 16, top + 84, w - 32);
   }
 
   private renderChemicalDetail(it: ItemInstance, x: number, w: number, top: number): void {
     const chem = CHEMICAL_TYPES[it.typeId]!;
     this.dyn.push(
       this.add
-        .text(x + 16, top + 80, `${chem.descJa}\n\n効果: ${chemicalEffectText(it.typeId, it.rarity)}`, {
+        .text(x + 16, top, `${chem.descJa}\n\n効果: ${chemicalEffectText(it.typeId, it.rarity)}`, {
           fontFamily: FONT,
-          fontSize: '13px',
+          fontSize: '12px',
           color: '#cfd6e6',
-          lineSpacing: 6,
+          lineSpacing: 5,
           wordWrap: { width: w - 32 },
         })
-        .setDepth(3)
+        .setDepth(4)
     );
 
     const ax = x + 16;
     const aw = w - 32;
-    let ay = top + 188;
+    let ay = top + 90;
     if (this.confirmingUse) {
       this.dyn.push(
         this.add
           .text(ax, ay, '使用すると消費されます。', {
             fontFamily: FONT,
-            fontSize: '12px',
+            fontSize: '11px',
             color: '#6b7da0',
           })
-          .setDepth(3)
+          .setDepth(4)
       );
       ay += 22;
       this.makeActionButton(ax, ay, aw, '使用する', COLORS.accent, () => {
@@ -458,7 +577,7 @@ export class ItemInventoryScene extends Phaser.Scene {
         this.render();
       });
     } else {
-      this.makeActionButton(ax, ay, aw, '使用する', COLORS.accent, () => {
+      this.makeActionButton(ax, ay, aw, '▶ 使用する', COLORS.accent, () => {
         this.confirmingUse = true;
         this.render();
       });
@@ -473,12 +592,12 @@ export class ItemInventoryScene extends Phaser.Scene {
         this.add
           .text(x, y, `装着中: 宇宙船 #${idx + 1}`, {
             fontFamily: FONT,
-            fontSize: '13px',
+            fontSize: '12px',
             color: '#3ee0c5',
           })
-          .setDepth(3)
+          .setDepth(4)
       );
-      this.makeActionButton(x, y + 26, w, '取り外す', COLORS.enemy, () => {
+      this.makeActionButton(x, y + 22, w, '取り外す', COLORS.enemy, () => {
         this.detachModule(it.uid);
       });
       return;
@@ -490,11 +609,11 @@ export class ItemInventoryScene extends Phaser.Scene {
         this.add
           .text(x, y, '装着できる宇宙船がありません\n(先に宇宙船を購入してください)', {
             fontFamily: FONT,
-            fontSize: '12px',
+            fontSize: '11px',
             color: '#6b7da0',
-            lineSpacing: 5,
+            lineSpacing: 4,
           })
-          .setDepth(3)
+          .setDepth(4)
       );
       return;
     }
@@ -503,17 +622,17 @@ export class ItemInventoryScene extends Phaser.Scene {
       this.add
         .text(x, y, '装着先を選択:', {
           fontFamily: FONT,
-          fontSize: '13px',
+          fontSize: '12px',
           color: '#cfd6e6',
         })
-        .setDepth(3)
+        .setDepth(4)
     );
-    let by = y + 24;
+    let by = y + 22;
     ships.forEach((s, i) => {
       this.makeActionButton(x, by, w, `宇宙船 #${i + 1} に装着`, COLORS.ally, () => {
         this.attachModule(it.uid, s.id);
       });
-      by += 34;
+      by += 32;
     });
   }
 
@@ -627,21 +746,6 @@ export class ItemInventoryScene extends Phaser.Scene {
 
   // ─── 共通 ──────────────────────────────────────────────────
 
-  private addCenterNote(cx: number, cy: number, text: string): void {
-    this.dyn.push(
-      this.add
-        .text(cx, cy, text, {
-          fontFamily: FONT,
-          fontSize: '14px',
-          color: '#6b7da0',
-          align: 'center',
-          wordWrap: { width: 440 },
-        })
-        .setOrigin(0.5, 0)
-        .setDepth(3)
-    );
-  }
-
   private makeActionButton(
     x: number,
     y: number,
@@ -650,11 +754,11 @@ export class ItemInventoryScene extends Phaser.Scene {
     accent: number,
     onClick: () => void
   ): void {
-    const h = 28;
+    const h = 30;
     const bg = this.add
       .rectangle(x + w / 2, y + h / 2, w, h, COLORS.panelBg, 1)
-      .setStrokeStyle(1, accent, 0.8)
-      .setDepth(3)
+      .setStrokeStyle(1, accent, 0.85)
+      .setDepth(4)
       .setInteractive({ useHandCursor: true });
     const t = this.add
       .text(x + w / 2, y + h / 2, label, {
@@ -664,7 +768,7 @@ export class ItemInventoryScene extends Phaser.Scene {
         fontStyle: 'bold',
       })
       .setOrigin(0.5)
-      .setDepth(4);
+      .setDepth(5);
     bg.on('pointerover', () => bg.setFillStyle(COLORS.panelHover, 1));
     bg.on('pointerout', () => bg.setFillStyle(COLORS.panelBg, 1));
     bg.on('pointerdown', (p: Phaser.Input.Pointer) => {
@@ -697,6 +801,36 @@ export class ItemInventoryScene extends Phaser.Scene {
     this.chrome.push(bg, t);
   }
 
+  // ─── 六角ヘルパ (詳細ヒーロー用) ──────────────────
+
+  private drawHex(g: Phaser.GameObjects.Graphics, cx: number, cy: number, r: number, color: number, alpha: number): void {
+    g.fillStyle(color, alpha);
+    g.beginPath();
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2 - Math.PI / 2;
+      const px = cx + Math.cos(a) * r;
+      const py = cy + Math.sin(a) * r;
+      if (i === 0) g.moveTo(px, py);
+      else g.lineTo(px, py);
+    }
+    g.closePath();
+    g.fillPath();
+  }
+
+  private strokeHex(g: Phaser.GameObjects.Graphics, cx: number, cy: number, r: number, color: number, width: number): void {
+    g.lineStyle(width, color, 1);
+    g.beginPath();
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2 - Math.PI / 2;
+      const px = cx + Math.cos(a) * r;
+      const py = cy + Math.sin(a) * r;
+      if (i === 0) g.moveTo(px, py);
+      else g.lineTo(px, py);
+    }
+    g.closePath();
+    g.strokePath();
+  }
+
   private close(): void {
     this.scene.stop();
   }
@@ -707,8 +841,10 @@ export class ItemInventoryScene extends Phaser.Scene {
       this.escHandler = undefined;
     }
     for (const g of this.dyn) g.destroy();
+    for (const c of this.dynCards) c.destroy();
     for (const g of this.chrome) g.destroy();
     this.dyn = [];
+    this.dynCards = [];
     this.chrome = [];
   }
 }

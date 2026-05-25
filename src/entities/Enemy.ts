@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { ENEMY_TYPES, COLORS, type EnemyType, type EnemyTypeStats } from '../config';
 import { EnemyBullet } from './EnemyBullet';
+import type { Ship } from './Ship';
 import { hitEffect, bigExplosion } from '../systems/CombatFx';
 
 /**
@@ -12,9 +13,14 @@ import { hitEffect, bigExplosion } from '../systems/CombatFx';
  *   `update` が context (enemyBullets[]) を受け取り、shoot 種別は
  *   `attackRange` で停止して `fireIntervalMs` 間隔で弾を発射する。
  *   charge 種別 (basic/fast/tank/boss) は従来通り体当たり + 電気スタン演出。
+ * - **2026-05-25 後**: hunter (prefersShip:true) を追加。`update` が ships を受け取り、
+ *   船が居れば最寄り船を毎フレーム狙い、居なければ基地に向かう。船接触時は
+ *   reachedBase を立てないので、船にぶつかり続けて接触ダメージを与える。
  */
 export interface EnemyTickContext {
   enemyBullets: EnemyBullet[];
+  /** hunter (prefersShip) の動的ターゲティング用。GameScene が毎フレーム ships 配列を渡す。 */
+  ships?: ReadonlyArray<Ship>;
 }
 
 export class Enemy {
@@ -31,6 +37,11 @@ export class Enemy {
   private gfx: Phaser.GameObjects.Graphics;
   private targetX: number;
   private targetY: number;
+  /** 基地座標 (hunter で船を狩り切ったあと基地ターゲットに戻すため保持)。 */
+  private readonly baseX: number;
+  private readonly baseY: number;
+  /** 直前 tick で船を狙っていたか (船接触で reachedBase を立てないため、毎フレーム参照)。 */
+  private targetIsShip: boolean = false;
   /** shoot 種別の発射タイマー (ms 残り)。0 以下で 1 発撃って interval にリセット。 */
   private fireTimerMs: number;
 
@@ -51,6 +62,8 @@ export class Enemy {
     this.damage = this.stats.damage;
     this.targetX = baseX;
     this.targetY = baseY;
+    this.baseX = baseX;
+    this.baseY = baseY;
     // shoot 種別は射程内到達後すぐに 1 発撃てるよう初期 timer を短めに
     this.fireTimerMs = this.stats.behavior === 'shoot' ? 600 : 0;
 
@@ -113,6 +126,9 @@ export class Enemy {
         break;
       case 'sniper':
         this.drawSniper(g);
+        break;
+      case 'hunter':
+        this.drawHunter(g);
         break;
       default: {
         // 念のためのフォールバック (旧描画)
@@ -291,6 +307,43 @@ export class Enemy {
     g.fillCircle(0, 0, r * 0.35);
   }
 
+  /**
+   * hunter: 4 本腕のスター (×型クロー) + 中心の白コア。
+   * 既存敵 (三角ベース) と一目で区別できるよう、対称の×形状にした。
+   */
+  private drawHunter(g: Phaser.GameObjects.Graphics): void {
+    const r = this.stats.radius;
+    const c = this.stats.color;
+    // ハロー
+    g.fillStyle(c, 0.25);
+    g.fillCircle(0, 0, r + 7);
+    // 4 本腕: 各腕は細長い菱形 (length r*1.4, half-width r*0.35)
+    g.fillStyle(c, 1);
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2 + Math.PI / 4; // 斜め 4 方向
+      const tipX = Math.cos(a) * r * 1.4;
+      const tipY = Math.sin(a) * r * 1.4;
+      // 法線
+      const nx = -Math.sin(a);
+      const ny = Math.cos(a);
+      const mid = r * 0.55;
+      g.beginPath();
+      g.moveTo(tipX, tipY);
+      g.lineTo(Math.cos(a) * mid + nx * r * 0.32, Math.sin(a) * mid + ny * r * 0.32);
+      g.lineTo(0, 0);
+      g.lineTo(Math.cos(a) * mid - nx * r * 0.32, Math.sin(a) * mid - ny * r * 0.32);
+      g.closePath();
+      g.fillPath();
+    }
+    // 中心リング + 白コア + 中心点
+    g.lineStyle(1.4, COLORS.highlight, 0.9);
+    g.strokeCircle(0, 0, r * 0.5);
+    g.fillStyle(COLORS.highlight, 0.95);
+    g.fillCircle(0, 0, r * 0.32);
+    g.fillStyle(c, 1);
+    g.fillCircle(0, 0, r * 0.14);
+  }
+
   /** sniper: 既存維持 (Step 2 範囲外)。 */
   private drawSniper(g: Phaser.GameObjects.Graphics): void {
     const r = this.stats.radius;
@@ -319,6 +372,21 @@ export class Enemy {
    */
   public update(delta: number, ctx?: EnemyTickContext): void {
     if (this.dead || this.reachedBase) return;
+
+    // 2026-05-25 後: hunter は毎フレーム最寄り船をターゲットに更新する。
+    // 船が居なければ基地に戻す (= 基本敵と同じ動き)。
+    if (this.stats.prefersShip) {
+      const ship = ctx?.ships ? nearestAliveShip(this.x, this.y, ctx.ships) : null;
+      if (ship) {
+        this.targetX = ship.x;
+        this.targetY = ship.y;
+        this.targetIsShip = true;
+      } else {
+        this.targetX = this.baseX;
+        this.targetY = this.baseY;
+        this.targetIsShip = false;
+      }
+    }
 
     const dx = this.targetX - this.x;
     const dy = this.targetY - this.y;
@@ -354,8 +422,15 @@ export class Enemy {
 
     // ─── charge 種別 (および sniper 射程外): 基地直進 ──────
     // 基地接触判定 (sniper は damage=0 のため実害なし、charge は基地ヒット)
+    // 2026-05-25 後: hunter で船を狙っているフレームは reachedBase を立てない。
+    // 船に接触し続けて Ship.update 側の contactDps でダメージを与えるのが目的のため。
+    // 船を狩り切って基地に向かい直したら通常通り基地接触で発火する。
     if (dist <= this.stats.contactRadius) {
-      this.reachedBase = true;
+      if (!this.targetIsShip) {
+        this.reachedBase = true;
+        return;
+      }
+      // 船接触中: 移動はせず ship 側のダメージ計算に任せる (突き刺さって押す挙動)
       return;
     }
 
@@ -482,4 +557,29 @@ export function spawnElectricArc(
     ease: 'Cubic.easeOut',
     onComplete: () => g.destroy(),
   });
+}
+
+/**
+ * (x,y) から見て最寄りの生存 Ship を返す (2026-05-25 後: hunter のターゲティング用)。
+ * - dead な Ship はスキップ
+ * - HP 0 でダウン状態の Ship もスキップ (敵接触免疫のため狙う意味がない)
+ * - 居なければ null
+ */
+function nearestAliveShip(
+  x: number,
+  y: number,
+  ships: ReadonlyArray<Ship>
+): Ship | null {
+  let best: Ship | null = null;
+  let bestDist = Infinity;
+  for (const s of ships) {
+    if (s.dead) continue;
+    if (s.hp <= 0) continue; // ダウン中の船は接触ダメージが入らない (Ship.update 早期 return) ので狙わない
+    const d = Math.hypot(s.x - x, s.y - y);
+    if (d < bestDist) {
+      bestDist = d;
+      best = s;
+    }
+  }
+  return best;
 }

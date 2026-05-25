@@ -638,7 +638,8 @@ export class GameScene extends Phaser.Scene {
     this.effects.tick(delta);
 
     // 敵更新 (sniper は enemyBullets[] に弾を push する context を受け取る)
-    const enemyCtx = { enemyBullets: this.enemyBullets };
+    // 2026-05-25 後: hunter の動的ターゲティング用に ships を渡す
+    const enemyCtx = { enemyBullets: this.enemyBullets, ships: this.ships };
     for (const e of this.enemies) {
       const wasAlive = !e.dead;
       e.update(delta, enemyCtx);

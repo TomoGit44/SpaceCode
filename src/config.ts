@@ -119,9 +119,10 @@ export const PLANET = {
 
 /**
  * 敵 (Phase 4 で 3 種類化 / Phase 6 Step 7 で boss 追加 /
- * 2026-05-25 で sniper 追加 + 接触ダメ ×1.5 + 電気スタン演出)。
+ * 2026-05-25 で sniper 追加 + 接触ダメ ×1.5 + 電気スタン演出 /
+ * 2026-05-25 後で hunter 追加: 宇宙船を優先ターゲットにする charge 系)。
  */
-export type EnemyType = 'basic' | 'fast' | 'tank' | 'boss' | 'sniper';
+export type EnemyType = 'basic' | 'fast' | 'tank' | 'boss' | 'sniper' | 'hunter';
 
 /** 敵の行動様式。'charge' は基地へ直進+体当たり、'shoot' は射程内で停止+弾発射。 */
 export type EnemyBehavior = 'charge' | 'shoot';
@@ -136,6 +137,12 @@ export interface EnemyTypeStats {
   readonly color: number;         // 描画色
   readonly creditsOnKill: number; // 撃破報酬
   readonly behavior: EnemyBehavior; // 'charge' (体当たり) or 'shoot' (弾発射) — 2026-05-25 追加
+  /**
+   * 2026-05-25 後追加。true のとき宇宙船を優先ターゲットにする (charge 系)。
+   * 船が居れば最寄り船を毎フレーム狙い、居なければ基地に向かう。
+   * 船接触時に `reachedBase` を立てないため、船にぶつかり続けて接触ダメージを与える挙動になる。
+   */
+  readonly prefersShip?: boolean;
   // 以下 'shoot' 専用の任意フィールド
   readonly attackRange?: number;     // 基地までこの距離で停止して発射開始
   readonly fireIntervalMs?: number;  // 発射間隔
@@ -160,6 +167,14 @@ export const ENEMY_TYPES: Record<EnemyType, EnemyTypeStats> = {
     hp: 25, speed: 45, damage: 0, radius: 11, hitRadius: 13, contactRadius: 20,
     color: 0x44ddaa, creditsOnKill: 10, behavior: 'shoot',
     attackRange: 280, fireIntervalMs: 1800, bulletDamage: 10, bulletSpeed: 240,
+  },
+  // 2026-05-25 後: 船狩り (hunter)。宇宙船が居れば最寄り船を最優先で追尾、
+  // 居なければ基地へ直進する charge 系。船にぶつかっても reachedBase を立てず
+  // 接触ダメージを与え続ける (船を狩り切ったら基地へ流れる)。
+  hunter: {
+    hp: 28, speed: 80, damage: 18, radius: 11, hitRadius: 13, contactRadius: 22,
+    color: 0xe060ff, creditsOnKill: 12, behavior: 'charge',
+    prefersShip: true,
   },
 };
 
@@ -214,7 +229,7 @@ export interface EnemySpec {
 }
 
 // 2026-05-25: sniper を全 Phase に少量ずつ追加 (最初から登場)。
-// 数は Phase 進行で 1 → 1 → 2 → 3 → 3 と緩やかに増加。Phase 1 は遅延 6 秒で初回基本敵の後に。
+// 2026-05-25 後: hunter を Phase 2 以降に少量ずつ追加 (船を所有しているプレイヤーへの圧)。
 export const PHASES: ReadonlyArray<{ readonly enemySpecs: ReadonlyArray<EnemySpec> }> = [
   { enemySpecs: [
       { type: 'basic',  count: 5, intervalMs: 2200 },
@@ -223,21 +238,25 @@ export const PHASES: ReadonlyArray<{ readonly enemySpecs: ReadonlyArray<EnemySpe
   { enemySpecs: [
       { type: 'basic',  count: 7, intervalMs: 1900 },
       { type: 'sniper', count: 1, intervalMs: 1,    delayMs: 5000 },
+      { type: 'hunter', count: 1, intervalMs: 1,    delayMs: 7000 },
   ]},
   { enemySpecs: [
       { type: 'basic',  count: 6, intervalMs: 1800 },
       { type: 'fast',   count: 3, intervalMs: 1400, delayMs: 4000 },
       { type: 'sniper', count: 2, intervalMs: 4500, delayMs: 3000 },
+      { type: 'hunter', count: 2, intervalMs: 5000, delayMs: 5000 },
   ]},
   { enemySpecs: [
       { type: 'basic',  count: 7, intervalMs: 1600 },
       { type: 'fast',   count: 5, intervalMs: 1300, delayMs: 3500 },
       { type: 'sniper', count: 3, intervalMs: 3800, delayMs: 2500 },
+      { type: 'hunter', count: 3, intervalMs: 4500, delayMs: 4500 },
   ]},
   { enemySpecs: [
       { type: 'basic',  count: 6, intervalMs: 1500 },
       { type: 'fast',   count: 5, intervalMs: 1200, delayMs: 2500 },
       { type: 'sniper', count: 3, intervalMs: 3500, delayMs: 4000 },
+      { type: 'hunter', count: 3, intervalMs: 4000, delayMs: 3500 },
       { type: 'tank',   count: 2, intervalMs: 4000, delayMs: 6000 },
       // Phase 6 Step 7: 最終 Phase 末尾にボス 1 体。雑魚を片付け終わる頃に登場
       { type: 'boss',   count: 1, intervalMs: 1,    delayMs: 18000 },

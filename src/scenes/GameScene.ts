@@ -387,13 +387,24 @@ export class GameScene extends Phaser.Scene {
     this.statPanelTexts[2]?.setText(`INV ${Math.floor(s.inventory)}/${s.inventoryCap}`);
 
     // 目印リング: ダウン/ストール時は赤、それ以外はティール
+    // 加えて攻撃範囲 (SHIP.attackRange) を破線風の薄いリングで可視化する (2026-05-25 後)。
     if (this.selectionRing) {
       const ringColor = hpDown || eneOut ? COLORS.enemy : COLORS.accent;
       this.selectionRing.clear();
+      // 足元の細リング (船そのものの目印)
       this.selectionRing.lineStyle(2, ringColor, 0.85);
       this.selectionRing.strokeCircle(s.x, s.y, SHIP.radius + 5);
       this.selectionRing.lineStyle(1, ringColor, 0.3);
       this.selectionRing.strokeCircle(s.x, s.y, SHIP.radius + 9);
+      // 攻撃捕捉範囲 (ATTACK_NEAREST がターゲットを選ぶ距離)
+      // ダウン/ストール時はそもそも撃てないので非表示
+      if (!hpDown && !eneOut) {
+        this.selectionRing.lineStyle(2, ringColor, 0.35);
+        this.selectionRing.strokeCircle(s.x, s.y, SHIP.attackRange);
+        // 内側に低 alpha の塗りで領域感を出す
+        this.selectionRing.fillStyle(ringColor, 0.04);
+        this.selectionRing.fillCircle(s.x, s.y, SHIP.attackRange);
+      }
     }
   }
 

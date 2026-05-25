@@ -21,6 +21,15 @@ export interface GachaOpenData {
   inventory: Inventory;
   /** 開封後 (consume / cancel どちらでも) に親シーンへ再描画を促すコールバック。 */
   onClosed: () => void;
+  /**
+   * 必須モード (2026-05-25)。RewardPopupScene から起動された際に true。
+   * - backdrop タップ / ESC でキャンセル不可
+   * - 「やめる」ボタンを非表示
+   * - 確定後にアイテムボタンへ飛行する縮小フェードを追加
+   */
+  mandatory?: boolean;
+  /** mandatory 時の飛行先 (右上アイテムボタン中央)。省略時はフェードのみ。 */
+  itemBtnTarget?: { x: number; y: number };
 }
 
 /**
@@ -40,6 +49,8 @@ export class GachaOpenScene extends Phaser.Scene {
   private gacha!: ItemInstance;
   private inventory!: Inventory;
   private onClosed!: () => void;
+  private mandatory = false;
+  private itemBtnTarget?: { x: number; y: number };
 
   private candidates: GachaCandidate[] = [];
   private selectedIndex: number | null = null;
@@ -63,6 +74,8 @@ export class GachaOpenScene extends Phaser.Scene {
     this.gacha = data.gacha;
     this.inventory = data.inventory;
     this.onClosed = data.onClosed;
+    this.mandatory = data.mandatory === true;
+    this.itemBtnTarget = data.itemBtnTarget;
     this.selectedIndex = null;
     this.consumed = false;
     this.candidates = [];
@@ -81,10 +94,13 @@ export class GachaOpenScene extends Phaser.Scene {
       .rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x05070d, 0.7)
       .setDepth(0)
       .setInteractive();
-    backdrop.on('pointerdown', (p: Phaser.Input.Pointer) => {
-      if (p.rightButtonDown()) return;
-      this.close();
-    });
+    // mandatory モード時は backdrop タップでもキャンセル不可 (報酬を必ず受け取らせる)
+    if (!this.mandatory) {
+      backdrop.on('pointerdown', (p: Phaser.Input.Pointer) => {
+        if (p.rightButtonDown()) return;
+        this.close();
+      });
+    }
     this.chrome.push(backdrop);
 
     // タイトル
@@ -116,8 +132,11 @@ export class GachaOpenScene extends Phaser.Scene {
     this.renderCards();
     this.renderFooter();
 
-    this.escHandler = () => this.close();
-    this.input.keyboard?.on('keydown-ESC', this.escHandler);
+    // mandatory モード時は ESC でもキャンセル不可
+    if (!this.mandatory) {
+      this.escHandler = () => this.close();
+      this.input.keyboard?.on('keydown-ESC', this.escHandler);
+    }
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.shutdown, this);
   }
 
@@ -383,13 +402,21 @@ export class GachaOpenScene extends Phaser.Scene {
     const sel = this.selectedIndex !== null ? this.candidates[this.selectedIndex] : null;
 
     if (sel) {
-      const w = 220;
-      this.makeButton(GAME_WIDTH / 2 - w / 2 - 16, y, w, 'これを選ぶ', COLORS.accent, () => {
-        this.confirmPick();
-      });
-      this.makeButton(GAME_WIDTH / 2 + 16, y, w, 'やめる', COLORS.uiDim, () => {
-        this.close();
-      });
+      if (this.mandatory) {
+        // mandatory: 「これを選ぶ」だけを中央に大きく
+        const w = 280;
+        this.makeButton(GAME_WIDTH / 2 - w / 2, y, w, 'これを選ぶ', COLORS.accent, () => {
+          this.confirmPick();
+        });
+      } else {
+        const w = 220;
+        this.makeButton(GAME_WIDTH / 2 - w / 2 - 16, y, w, 'これを選ぶ', COLORS.accent, () => {
+          this.confirmPick();
+        });
+        this.makeButton(GAME_WIDTH / 2 + 16, y, w, 'やめる', COLORS.uiDim, () => {
+          this.close();
+        });
+      }
     } else {
       const w = 240;
       this.dyn.push(
@@ -402,9 +429,11 @@ export class GachaOpenScene extends Phaser.Scene {
           .setOrigin(0.5)
           .setDepth(4)
       );
-      this.makeButton(GAME_WIDTH / 2 - w / 2, y, w, 'やめる', COLORS.uiDim, () => {
-        this.close();
-      });
+      if (!this.mandatory) {
+        this.makeButton(GAME_WIDTH / 2 - w / 2, y, w, 'やめる', COLORS.uiDim, () => {
+          this.close();
+        });
+      }
     }
   }
 
@@ -485,15 +514,29 @@ export class GachaOpenScene extends Phaser.Scene {
       ease: 'Cubic.easeOut',
       onComplete: () => flash.destroy(),
     });
-    // カード自体を膨らませて消す
-    this.tweens.add({
-      targets: [picked.bg, picked.border],
-      scale: 1.3,
-      alpha: 0,
-      duration: 380,
-      ease: 'Cubic.easeOut',
-      onComplete: () => this.close(),
-    });
+    // mandatory + itemBtnTarget があれば、選んだカードをアイテムボタンへ飛ばす演出。
+    // それ以外は従来通り膨らませてフェードアウト。
+    if (this.mandatory && this.itemBtnTarget) {
+      this.tweens.add({
+        targets: [picked.bg, picked.border],
+        x: this.itemBtnTarget.x,
+        y: this.itemBtnTarget.y,
+        scale: 0.18,
+        alpha: 0.1,
+        duration: 540,
+        ease: 'Cubic.easeIn',
+        onComplete: () => this.close(),
+      });
+    } else {
+      this.tweens.add({
+        targets: [picked.bg, picked.border],
+        scale: 1.3,
+        alpha: 0,
+        duration: 380,
+        ease: 'Cubic.easeOut',
+        onComplete: () => this.close(),
+      });
+    }
   }
 
   // ─── 閉じる ───────────────────────────────────────────────

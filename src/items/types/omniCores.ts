@@ -82,10 +82,11 @@ export const OMNI_CORE_TYPES: Record<string, OmniCoreType> = {
   },
   // 2026-05-25: 新コア 3 種。レア度問わず固定 +50% / -50% (スターター装着前提、
   // レア度カラーは表示用に rarityPercent と切り離す)。
+  // descJa には倍率を書かない (UI 側で omniCorePercent から付与し、二重表記を防ぐ)。
   core_attack_plus: {
     id: 'core_attack_plus',
     nameJa: '強化攻撃コア',
-    descJa: '全宇宙船の攻撃力 +50%',
+    descJa: '全宇宙船の攻撃力',
     target: 'ship',
     stat: 'damagePerShot',
     rarityPercent: { N: 0.5, R: 0.5, SR: 0.5, L: 0.5 },
@@ -93,7 +94,7 @@ export const OMNI_CORE_TYPES: Record<string, OmniCoreType> = {
   core_efficiency: {
     id: 'core_efficiency',
     nameJa: '省エネコア',
-    descJa: '全宇宙船のエネルギー消費 -50%',
+    descJa: '全宇宙船のエネルギー消費',
     target: 'ship',
     stat: 'energyConsume',
     rarityPercent: { N: -0.5, R: -0.5, SR: -0.5, L: -0.5 },
@@ -101,7 +102,7 @@ export const OMNI_CORE_TYPES: Record<string, OmniCoreType> = {
   core_endurance: {
     id: 'core_endurance',
     nameJa: '耐久コア',
-    descJa: '全宇宙船の最大 HP +50%',
+    descJa: '全宇宙船の最大 HP',
     target: 'ship',
     stat: 'maxHp',
     rarityPercent: { N: 0.5, R: 0.5, SR: 0.5, L: 0.5 },

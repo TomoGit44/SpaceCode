@@ -6,6 +6,7 @@ import { GameScene } from './scenes/GameScene';
 import { ProgramEditorScene } from './scenes/ProgramEditorScene';
 import { ItemInventoryScene } from './scenes/ItemInventoryScene';
 import { GachaOpenScene } from './scenes/GachaOpenScene';
+import { RewardPopupScene } from './scenes/RewardPopupScene';
 import { GameOverScene } from './scenes/GameOverScene';
 import { VictoryScene } from './scenes/VictoryScene';
 
@@ -38,6 +39,7 @@ const config: Phaser.Types.Core.GameConfig = {
     ProgramEditorScene,
     ItemInventoryScene,
     GachaOpenScene,
+    RewardPopupScene,
     GameOverScene,
     VictoryScene,
   ],

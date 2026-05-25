@@ -14,7 +14,6 @@ import {
 // 2026-05-25: オムニ・コアは画面左上 OmniCoreStrip に移行したため、本シーンの import を撤去
 import { MODULE_TYPES, isModule, moduleEffectText, makeRandomModule } from '../items/types/modules';
 import { CHEMICAL_TYPES, isChemical, chemicalEffectText, makeRandomChemical } from '../items/types/chemicals';
-import { isCodeGacha, isModuleGacha, isGacha, gachaItemName, makeGachaItem } from '../items/gacha';
 import { ItemCard } from '../ui/ItemCard';
 
 const FONT = 'system-ui, "Segoe UI", sans-serif';
@@ -36,11 +35,11 @@ interface CategoryDef {
 
 // 2026-05-25: オムニ・コアは画面左上の OmniCoreStrip に常時表示するため、
 // アイテムメニューのタブからは撤去 (debug 獲得経路も同時に消滅)。
+// 2026-05-25 後: ガチャは即時開封 (報酬ポップアップ) に変更したため、
+// codeGacha/moduleGacha も Inventory に保管されなくなり、タブも撤去。
 const CATEGORIES: ReadonlyArray<CategoryDef> = [
   { id: 'module', label: 'モジュール' },
   { id: 'chemical', label: 'ケミカル' },
-  { id: 'codeGacha', label: 'コードガチャ' },
-  { id: 'moduleGacha', label: 'モジュールガチャ' },
 ];
 
 /**
@@ -221,11 +220,9 @@ export class ItemInventoryScene extends Phaser.Scene {
 
   private countForCategory(cat: ItemCategory): number {
     switch (cat) {
-      case 'module':      return this.inventory.items.filter((it) => isModule(it.typeId)).length;
-      case 'chemical':    return this.inventory.items.filter((it) => isChemical(it.typeId)).length;
-      case 'codeGacha':   return this.inventory.items.filter((it) => isCodeGacha(it.typeId)).length;
-      case 'moduleGacha': return this.inventory.items.filter((it) => isModuleGacha(it.typeId)).length;
-      default:            return 0; // omniCore など UI から撤去されたカテゴリ
+      case 'module':   return this.inventory.items.filter((it) => isModule(it.typeId)).length;
+      case 'chemical': return this.inventory.items.filter((it) => isChemical(it.typeId)).length;
+      default:         return 0; // omniCore / codeGacha / moduleGacha は UI から撤去
     }
   }
 
@@ -328,17 +325,14 @@ export class ItemInventoryScene extends Phaser.Scene {
 
   /** カード中央アイコンの色 (カテゴリ別に固定)。 */
   private iconColorFor(typeId: string): number {
-    if (isModule(typeId))      return COLORS.ally;
-    if (isChemical(typeId))    return COLORS.accent;
-    if (isCodeGacha(typeId))   return COLORS.raritySR;
-    if (isModuleGacha(typeId)) return COLORS.rarityL;
+    if (isModule(typeId))   return COLORS.ally;
+    if (isChemical(typeId)) return COLORS.accent;
     return COLORS.uiDim;
   }
 
   /** カード下部のサブテキスト (効果や状態)。 */
   private subtextFor(it: ItemInstance): string {
     if (isChemical(it.typeId)) return '使い切り';
-    if (isGacha(it.typeId))    return '未開封';
     return '';
   }
 
@@ -357,17 +351,10 @@ export class ItemInventoryScene extends Phaser.Scene {
     if (this.selectedCategory === 'chemical') {
       return this.inventory.items.filter((it) => isChemical(it.typeId));
     }
-    if (this.selectedCategory === 'codeGacha') {
-      return this.inventory.items.filter((it) => isCodeGacha(it.typeId));
-    }
-    if (this.selectedCategory === 'moduleGacha') {
-      return this.inventory.items.filter((it) => isModuleGacha(it.typeId));
-    }
-    return []; // omniCore はこのシーンに表示しない (左上 OmniCoreStrip 担当)
+    return []; // omniCore / codeGacha / moduleGacha はこのシーンに表示しない
   }
 
   private displayName(typeId: string): string {
-    if (isGacha(typeId)) return gachaItemName(typeId);
     return (
       MODULE_TYPES[typeId]?.nameJa ??
       CHEMICAL_TYPES[typeId]?.nameJa ??
@@ -454,48 +441,11 @@ export class ItemInventoryScene extends Phaser.Scene {
     const detailTop = top + heroH + 70;
     if (isModule(sel.typeId)) this.renderModuleDetail(sel, x, w, detailTop);
     else if (isChemical(sel.typeId)) this.renderChemicalDetail(sel, x, w, detailTop);
-    else if (isGacha(sel.typeId)) this.renderGachaDetail(sel, x, w, detailTop);
-  }
-
-  private renderGachaDetail(it: ItemInstance, x: number, w: number, top: number): void {
-    const category = isCodeGacha(it.typeId) ? 'code' : 'module';
-    const note =
-      category === 'code'
-        ? 'アイテムコード 3 種から 1 つを獲得します。'
-        : 'モジュール 3 種から 1 つを獲得します。';
-    this.dyn.push(
-      this.add
-        .text(x + 16, top, note, {
-          fontFamily: FONT,
-          fontSize: '12px',
-          color: '#cfd6e6',
-          lineSpacing: 5,
-          wordWrap: { width: w - 32 },
-        })
-        .setDepth(4)
-    );
-    this.makeActionButton(x + 16, top + 70, w - 32, '▶ 開封する', COLORS.accent, () => {
-      this.openGacha(it);
-    });
-  }
-
-  /** ガチャ開封シーンを launch する。閉じたら refresh + onChanged。 */
-  private openGacha(it: ItemInstance): void {
-    this.scene.launch('GachaOpenScene', {
-      gacha: it,
-      inventory: this.inventory,
-      onClosed: () => {
-        this.selectedUid = null;
-        this.confirmingUse = false;
-        this.onChanged();
-        this.render();
-      },
-    });
-    this.scene.bringToTop('GachaOpenScene');
   }
 
   // 2026-05-25: renderCoreDetail は OmniCoreStrip 移行に伴い撤去。
-  // 詳細表示はストリップアイコン hover のツールチップに集約。
+  // renderGachaDetail / openGacha は即時開封フロー (RewardPopupScene) 移行に伴い撤去。
+  // ガチャは Inventory に入らず、報酬ポップアップでその場で消費される。
 
   private renderModuleDetail(it: ItemInstance, x: number, w: number, top: number): void {
     const mod = MODULE_TYPES[it.typeId]!;
@@ -700,13 +650,11 @@ export class ItemInventoryScene extends Phaser.Scene {
     this.chrome.push(bg, t);
   }
 
-  /** 選択中カテゴリのアイテムを 1 個獲得する (デバッグ用、omniCore は除外)。 */
+  /** 選択中カテゴリのアイテムを 1 個獲得する (デバッグ用、module/chemical のみ)。 */
   private debugGrant(rarity: Rarity): void {
     let granted: ItemInstance | null = null;
     if (this.selectedCategory === 'module') granted = makeRandomModule(rarity);
     else if (this.selectedCategory === 'chemical') granted = makeRandomChemical(rarity);
-    else if (this.selectedCategory === 'codeGacha') granted = makeGachaItem('code', rarity);
-    else if (this.selectedCategory === 'moduleGacha') granted = makeGachaItem('module', rarity);
     if (!granted) return;
     this.inventory.items.push(granted);
     this.selectedUid = granted.uid;

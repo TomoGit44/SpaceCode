@@ -15,11 +15,11 @@ import { OmniCoreStrip } from '../ui/OmniCoreStrip';
 import type { Rarity } from '../items/itemTypes';
 import { CHEMICAL_TYPES, makeRandomChemical } from '../items/types/chemicals';
 import {
-  makeGachaItem,
   rollPhaseRewardRarity,
   phaseRewardCategory,
   type GachaCategory,
 } from '../items/gacha';
+import type { RewardPayload } from './RewardPopupScene';
 import { SpawnSystem } from '../systems/SpawnSystem';
 import { WaveSystem } from '../systems/WaveSystem';
 import { EconomySystem } from '../systems/EconomySystem';
@@ -81,6 +81,12 @@ export class GameScene extends Phaser.Scene {
 
   // 右端「アイテム」ボタンのラベル (所持総数バッジ更新用)
   private itemBtnLabel?: Phaser.GameObjects.Text;
+  // 報酬ポップアップ用にアイテムボタンの中心座標を保持 (飛行演出のゴール)
+  private itemBtnCenter: { x: number; y: number } = { x: 0, y: 0 };
+
+  // 報酬ポップアップのキュー (戦闘中ドロップが連続したときも 1 件ずつ確実に処理)
+  private rewardQueue: RewardPayload[] = [];
+  private rewardPopupActive = false;
 
   constructor() {
     super({ key: 'GameScene' });
@@ -98,6 +104,9 @@ export class GameScene extends Phaser.Scene {
     this.terminating = false;
     this.overlayDepth = 0;
     this.itemBtnLabel = undefined;
+    this.itemBtnCenter = { x: 0, y: 0 };
+    this.rewardQueue = [];
+    this.rewardPopupActive = false;
     this.phaseKillCount = 0;
     this.phaseHalfRewarded = false;
     this.selectedShip = null;
@@ -439,6 +448,7 @@ export class GameScene extends Phaser.Scene {
     const h = 44;
     const cx = GAME_WIDTH - 12 - w / 2;
     const cy = 96;
+    this.itemBtnCenter = { x: cx, y: cy };
     const bg = this.add
       .rectangle(cx, cy, w, h, COLORS.panelBg, 0.92)
       .setStrokeStyle(1, COLORS.accent, 0.7)
@@ -481,30 +491,26 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * Phase クリア報酬: カテゴリは Phase 番号で交互 (奇数=code / 偶数=module)、
-   * レア度は重み付き抽選 (R 55% / SR 30% / L 15%)。バナーで通知。
+   * Phase クリア報酬 (2026-05-25 新フロー):
+   * - カテゴリは Phase 番号で交互 (奇数=code / 偶数=module)、レア度は重み付き抽選
+   * - Inventory にガチャ個体を保管せず、RewardPopupScene を直接起動
+   *   (タップ → 即時 GachaOpenScene → 1 つ選択 → アイテムボタンへ飛行)
    */
   private grantPhaseClearGacha(phaseNumber: number): void {
     const category = phaseRewardCategory(phaseNumber);
     const rarity = rollPhaseRewardRarity();
-    const item = makeGachaItem(category, rarity);
-    this.inventory.items.push(item);
-    this.refreshItemButton();
-    const label = category === 'code' ? 'コードガチャ' : 'モジュールガチャ';
-    // Step 3-D: RewardBanner に切り替え (HUD 中央バナーは PHASE N CLEAR が既に出ているため重複しない)
-    this.rewardBanner.show({
+    this.enqueueReward({
+      kind: 'gacha',
+      category,
       rarity,
       heading: `PHASE ${phaseNumber} CLEAR`,
-      name: `${label} を獲得`,
     });
   }
 
   /**
-   * Phase 6 Step 8: 当該 Phase の累計撃破数が合計の半数以上に達したら、
-   * ケミカル N をランダムに 1 個ドロップする (Phase ごとに 1 回まで)。
-   *
-   * 「半数」は floor(total / 2) を超えた瞬間。ボスを含む特殊編成でも
-   * 単純な総数比較で十分 (Phase 5 は 14 体 → 7 体撃破で発火)。
+   * Phase 6 Step 8 (2026-05-25 新フロー):
+   * 当該 Phase の累計撃破数が合計の半数以上に達したら、ケミカル N を 1 個ドロップ。
+   * 取得演出は RewardPopupScene に統一 (タップで Inventory へ飛行)。
    */
   private checkPhaseHalfReward(): void {
     if (this.phaseHalfRewarded) return;
@@ -514,41 +520,31 @@ export class GameScene extends Phaser.Scene {
     if (this.phaseKillCount < threshold) return;
     this.phaseHalfRewarded = true;
     const chem = makeRandomChemical('N');
-    this.inventory.items.push(chem);
-    this.refreshItemButton();
-    const name = CHEMICAL_TYPES[chem.typeId]?.nameJa ?? 'ケミカル';
-    // Step 3-D: RewardBanner に切り替え
-    this.rewardBanner.show({
-      rarity: 'N',
-      accentColor: COLORS.accent,
+    this.enqueueReward({
+      kind: 'chemical',
+      chem,
       heading: '中盤ボーナス',
-      name,
     });
   }
 
   /**
-   * 敵撃破時のガチャドロップ判定。
+   * 敵撃破時のガチャドロップ判定 (2026-05-25 新フロー: ポップアップ統一)。
    * - basic: ドロップなし
    * - fast: 4% で R ガチャ
    * - tank: 12% で R ガチャ
-   * - boss: 100% で SR ガチャ確定 (Phase 6 Step 7)
-   * カテゴリは 50/50 ランダム。
+   * - boss: 100% で SR ガチャ確定
+   * カテゴリは 50/50 ランダム。すべて RewardPopupScene 経由で受け取る。
    */
   private rollEnemyDropGacha(enemy: Enemy): void {
     if (enemy.type === 'boss') {
       const category: GachaCategory = Math.random() < 0.5 ? 'code' : 'module';
-      const item = makeGachaItem(category, 'SR');
-      this.inventory.items.push(item);
-      this.refreshItemButton();
-      const label = category === 'code' ? 'コードガチャ' : 'モジュールガチャ';
-      // Step 3-D: RewardBanner に切り替え (フラッシュは演出のため維持)
-      this.rewardBanner.show({
+      this.cameras.main.flash(280, 160, 123, 255, true);
+      this.enqueueReward({
+        kind: 'gacha',
+        category,
         rarity: 'SR',
         heading: 'BOSS DROP',
-        name: `${label} を獲得`,
-        displayMs: 2200,
       });
-      this.cameras.main.flash(280, 160, 123, 255, true);
       return;
     }
     let chance = 0;
@@ -557,17 +553,43 @@ export class GameScene extends Phaser.Scene {
     if (chance <= 0) return;
     if (Math.random() >= chance) return;
     const category: GachaCategory = Math.random() < 0.5 ? 'code' : 'module';
-    const item = makeGachaItem(category, 'R');
-    this.inventory.items.push(item);
-    this.refreshItemButton();
-    const label = category === 'code' ? 'コードガチャ' : 'モジュールガチャ';
-    // Step 3-D: RewardBanner に切り替え
-    this.rewardBanner.show({
+    this.enqueueReward({
+      kind: 'gacha',
+      category,
       rarity: 'R',
-      heading: 'DROP',
-      name: `${label} を獲得`,
-      displayMs: 1400,
+      heading: enemy.type === 'tank' ? 'TANK DROP' : 'FAST DROP',
     });
+  }
+
+  /**
+   * 報酬ポップアップキューに追加し、表示中でなければ即起動する (2026-05-25)。
+   * 複数の報酬が同時発生した場合 (例: ボス撃破 + 半数ボーナス) も 1 件ずつ順番に表示。
+   */
+  private enqueueReward(payload: RewardPayload): void {
+    this.rewardQueue.push(payload);
+    this.tryStartNextReward();
+  }
+
+  private tryStartNextReward(): void {
+    if (this.terminating) return;
+    if (this.rewardPopupActive) return;
+    const next = this.rewardQueue.shift();
+    if (!next) return;
+    this.rewardPopupActive = true;
+    this.overlayDepth += 1;
+    this.scene.launch('RewardPopupScene', {
+      reward: next,
+      inventory: this.inventory,
+      itemBtnTarget: this.itemBtnCenter,
+      onClosed: () => {
+        this.rewardPopupActive = false;
+        this.overlayDepth -= 1;
+        this.refreshItemButton();
+        // 次の報酬があれば連続表示
+        this.tryStartNextReward();
+      },
+    });
+    this.scene.bringToTop('RewardPopupScene');
   }
 
   /** ケミカル使用効果を適用する (ItemInventoryScene から呼ばれる)。 */
@@ -616,6 +638,10 @@ export class GameScene extends Phaser.Scene {
     // Phaser tween (バナーイージング、開始ボタン脈動、シーンフェード) は
     // `scene.time` ベースで別経路のため、この return に影響されず動き続ける。
     if (this.waves.getState() === 'preparing') return;
+
+    // 2026-05-25: 報酬ポップアップ表示中もゲームを凍結する。
+    // 戦闘中ドロップ (fast/tank/boss) でもプレイヤーが必ず受け取れるようにするため。
+    if (this.rewardPopupActive) return;
 
     // 2026-05-25: ゲーム全体を GAME_SPEED 倍に減速する。
     // ここで delta を一度スケールするだけで、全サブシステム (Base / Planets /
@@ -787,10 +813,12 @@ export class GameScene extends Phaser.Scene {
 
   private cleanup(): void {
     // オーバーレイを閉じてから GameScene を終了する
-    for (const key of ['ProgramEditorScene', 'ItemInventoryScene', 'GachaOpenScene']) {
+    for (const key of ['ProgramEditorScene', 'ItemInventoryScene', 'GachaOpenScene', 'RewardPopupScene']) {
       if (this.scene.isActive(key)) this.scene.stop(key);
     }
     this.overlayDepth = 0;
+    this.rewardPopupActive = false;
+    this.rewardQueue = [];
 
     // 選択 Ship のステータスパネル / リングを破棄
     this.setSelectedShip(null);

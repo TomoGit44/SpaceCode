@@ -23,6 +23,7 @@ import { SpawnSystem } from '../systems/SpawnSystem';
 import { WaveSystem } from '../systems/WaveSystem';
 import { EconomySystem } from '../systems/EconomySystem';
 import { HUD } from '../ui/HUD';
+import { RewardBanner } from '../ui/RewardBanner';
 import { ShopPanel, type ShopAction } from '../ui/ShopPanel';
 
 const FONT = 'system-ui, "Segoe UI", sans-serif';
@@ -48,6 +49,7 @@ export class GameScene extends Phaser.Scene {
   private waves!: WaveSystem;
   private economy!: EconomySystem;
   private hud!: HUD;
+  private rewardBanner!: RewardBanner; // Step 3-D: 報酬専用バナー (HUD と並存)
   private shop!: ShopPanel;
 
   // Phase 6: アイテムシステム。Inventory は Run 毎にここで作り直す = リセット
@@ -129,8 +131,9 @@ export class GameScene extends Phaser.Scene {
     this.inventory = new Inventory();
     this.effects = new EffectSystem(this.inventory);
 
-    // HUD
+    // HUD + 報酬バナー (Step 3-D: 別経路で並存)
     this.hud = new HUD(this, this.base.maxHp);
+    this.rewardBanner = new RewardBanner(this);
     this.hud.setHp(this.base.hp);
     this.hud.setCredits(this.economy.credits);
     this.hud.setPhase(0, this.waves.getTotalPhases());
@@ -470,7 +473,12 @@ export class GameScene extends Phaser.Scene {
     this.inventory.items.push(item);
     this.refreshItemButton();
     const label = category === 'code' ? 'コードガチャ' : 'モジュールガチャ';
-    this.hud.showBanner(`報酬: ${rarity} ${label} を獲得`, 1400);
+    // Step 3-D: RewardBanner に切り替え (HUD 中央バナーは PHASE N CLEAR が既に出ているため重複しない)
+    this.rewardBanner.show({
+      rarity,
+      heading: `PHASE ${phaseNumber} CLEAR`,
+      name: `${label} を獲得`,
+    });
   }
 
   /**
@@ -491,7 +499,13 @@ export class GameScene extends Phaser.Scene {
     this.inventory.items.push(chem);
     this.refreshItemButton();
     const name = CHEMICAL_TYPES[chem.typeId]?.nameJa ?? 'ケミカル';
-    this.hud.showBanner(`中盤ボーナス: ${name} を獲得`, 1300);
+    // Step 3-D: RewardBanner に切り替え
+    this.rewardBanner.show({
+      rarity: 'N',
+      accentColor: COLORS.accent,
+      heading: '中盤ボーナス',
+      name,
+    });
   }
 
   /**
@@ -509,7 +523,13 @@ export class GameScene extends Phaser.Scene {
       this.inventory.items.push(item);
       this.refreshItemButton();
       const label = category === 'code' ? 'コードガチャ' : 'モジュールガチャ';
-      this.hud.showBanner(`ボス撃破! SR ${label} を獲得`, 1600);
+      // Step 3-D: RewardBanner に切り替え (フラッシュは演出のため維持)
+      this.rewardBanner.show({
+        rarity: 'SR',
+        heading: 'BOSS DROP',
+        name: `${label} を獲得`,
+        displayMs: 2200,
+      });
       this.cameras.main.flash(280, 160, 123, 255, true);
       return;
     }
@@ -523,7 +543,13 @@ export class GameScene extends Phaser.Scene {
     this.inventory.items.push(item);
     this.refreshItemButton();
     const label = category === 'code' ? 'コードガチャ' : 'モジュールガチャ';
-    this.hud.showBanner(`ドロップ: R ${label}`, 1100);
+    // Step 3-D: RewardBanner に切り替え
+    this.rewardBanner.show({
+      rarity: 'R',
+      heading: 'DROP',
+      name: `${label} を獲得`,
+      displayMs: 1400,
+    });
   }
 
   /** ケミカル使用効果を適用する (ItemInventoryScene から呼ばれる)。 */
@@ -765,5 +791,6 @@ export class GameScene extends Phaser.Scene {
     this.shop?.destroy();
     this.waves?.destroy();
     this.economy?.destroy();
+    this.rewardBanner?.destroy();
   }
 }

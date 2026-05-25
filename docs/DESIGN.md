@@ -95,6 +95,7 @@
 | 補追 (Phase 6 後) | コード体系縮減: `MINE` / `DEPOSIT` / `WAIT_UNTIL_FULL` を撤廃し `WAIT { seconds }` に統合 (位置で挙動が決まる暗黙副作用) | ✅ 完了 (2026-05-24) |
 | 補追 (Phase 6 後) | **ダウン状態** (HP 0 で死亡せず敵接触免疫) + 編集画面のステータス表示 + クレジット補給 $20 / 修理 $40 | ✅ 完了 (2026-05-25) |
 | 補追 (Phase 6 後) | **ゲーム全体 0.5x 減速** (`GAME_SPEED = 0.5`、GameScene.update で delta スケール) — UI 演出は scene 時間ベースで維持 | ✅ 完了 (2026-05-25) |
+| 補追 (Phase 6 後) | **準備時間中はゲーム凍結** (GameScene.update を `state === 'preparing'` で早期 return、Ship/敵/弾/惑星/Effects すべて停止) | ✅ 完了 (2026-05-25) |
 
 旧 Phase A-D の進捗詳細は `PROGRESS.md` の履歴節に保存。**旧 Phase E は新 Phase 1+2+3 に再分配された**。旧 Phase F = 新 Phase 4、旧 Phase G = 新 Phase 5。Phase 6 は MVP 達成後の拡張で、コア体験 (コードを組まないと動かない) を保ったまま **Run 中の成長要素** を載せる試み。
 

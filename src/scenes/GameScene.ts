@@ -563,6 +563,13 @@ export class GameScene extends Phaser.Scene {
   update(_time: number, delta: number): void {
     if (this.terminating) return;
 
+    // 2026-05-25: 準備時間中 (Phase 開始ボタン待ち) はゲーム全体を凍結する。
+    // ここで早期 return することで Ship/敵/弾/惑星/Effects がすべて停止し、
+    // プレイヤーはプログラム編集・アイテム装着・船購入に集中できる。
+    // Phaser tween (バナーイージング、開始ボタン脈動、シーンフェード) は
+    // `scene.time` ベースで別経路のため、この return に影響されず動き続ける。
+    if (this.waves.getState() === 'preparing') return;
+
     // 2026-05-25: ゲーム全体を GAME_SPEED 倍に減速する。
     // ここで delta を一度スケールするだけで、全サブシステム (Base / Planets /
     // Waves / Enemies / Ships / Bullets / Effects) が同じテンポで遅くなる。

@@ -39,6 +39,7 @@
 | 補追 (Phase 6 後) | **ダウン状態** (HP 0 で死亡せず敵接触免疫) + **編集画面ステータス UI** (HP/ENE/INV 3 行、INV 整数化、HP/ENE 0 で赤強調) + **クレジット補給 $20 / 修理 $40** (編集画面から常時可) | ✅ 完了 (2026-05-25) |
 | 補追 (Phase 6 後) | **ゲーム全体 0.5x 減速** (`GAME_SPEED = 0.5`、GameScene.update で delta スケール、UI 演出は維持) | ✅ 完了 (2026-05-25) |
 | 補追 (Phase 6 後) | **準備時間中はゲーム凍結** (Ship/敵/弾/惑星/Effects すべて停止、UI 演出と入力は維持) | ✅ 完了 (2026-05-25) |
+| 補追 (Phase 6 後) | **遠距離敵 sniper** + **体当たり敵強化 (×1.5 + 電気スタン演出)** + **体当たりモジュール `mod_ram`** (衝角ブレード、contactDps + 移動速度マイナス) | ✅ 完了 (2026-05-25) |
 
 通しプレイ可能。コア体験「プログラムを組まないと Ship は動かない」を維持しつつ、Run 中の成長要素 (アイテム) を載せている最中。
 
@@ -140,7 +141,8 @@ src/
 │   └── GachaOpenScene.ts      # Phase 6 Step 6: ガチャ開封オーバーレイ。drawGacha で 3 候補 → 選択 → Inventory に追加
 ├── entities/               # ゲーム内オブジェクト (描画+状態を自分で持つ)
 │   ├── Base.ts             # 基地 HP, takeDamage, heal, 脈動 + 回転リング + 内蔵砲塔 (射程リング表示 + 射撃。火力は effects.baseStat 経由)
-│   ├── Enemy.ts            # 基地へ直進, dead/reachedBase フラグ。4 種 (basic/fast/tank/boss)
+│   ├── Enemy.ts            # 基地へ直進 or 射程内停止+弾発射 (behavior='charge'|'shoot')。5 種 (basic/fast/tank/boss/sniper)。spawnElectricArc helper も同居
+│   ├── EnemyBullet.ts      # sniper の弾。基地座標を直線追従、hitsBase で衝突判定
 │   ├── Bullet.ts           # 対象ホーミング (基地砲塔/Ship 共用)
 │   ├── Planet.ts           # 資源源。extract API + 残量リング/バー + 60s リスポーン
 │   └── Ship.ts             # 命令的 API (moveTo/mineAt/depositAt/attackNearest/fireAt/stop) + setBehavior + id (UUID) + 可変 maxHp/maxEnergy/inventoryCap + applyMaxStats + heal + stat 参照は effects.shipStat 経由 + ShipState ('idle'/'moving'/'mining'/'depositing'/'stalled'/'downed')。HP 0 はダウン状態で残り敵接触免疫 (Ship.update 早期 return)
@@ -196,7 +198,7 @@ src/
 - **基地 (Base)**: 中央固定。HP=100。0 でゲームオーバー。資源納品先。**Phase 5 後: 固定砲塔を内蔵** — 射程 260 / 12 ダメ × 1.25Hz、`BASE_TURRET` で集約。射程リングが常時可視化される。
 - **タワー (廃止)**: Phase 5 後にタワーは撤廃され、自動迎撃は基地砲塔に統合された。`Tower` クラス・ShopPanel の「タワー」ボタン・設置モードは無い。
 - **宇宙船**: 命令的 API (`moveTo/mineAt/depositAt/attackNearest/fireAt/stop`) + `ShipBehavior` 差し替え。HP 30 / エネ 100 / コスト $70 / インベントリ 20 (Phase 6 でモジュール装着により最大値が動的変動)。Phase 3 で cooldown 自動発射を撤廃 (連射は `REPEAT { ATTACK_NEAREST }` で表現)。Phase 4 で射撃エネルギー消費を追加 (5/shot)。
-- **敵 4 種 (Phase 4 + 6)**: `basic` (HP 20 / 速度 60 / $5) / `fast` (HP 12 / 速度 95 / $7、オレンジ) / `tank` (HP 55 / 速度 38 / $14、濃赤) / **`boss` (HP 200 / 速度 30 / $50、紫、Phase 5 末尾のみ 1 体)**。Phase 1-2 basic、Phase 3-4 basic+fast、Phase 5 全種混在 + ボス。
+- **敵 5 種 (Phase 4 + 6 + 2026-05-25)**: `basic` (HP 20 / 速度 60 / 体当たり 15 / $5) / `fast` (HP 12 / 速度 95 / 体当たり 12 / $7、オレンジ) / `tank` (HP 55 / 速度 38 / 体当たり 22 / $14、濃赤) / **`boss` (HP 200 / 速度 30 / 体当たり 45 / $50、紫、Phase 5 末尾のみ 1 体、撃破で SR ガチャ確定)** / **`sniper` (HP 25 / 速度 45 / 弾ダメ 10、ミント緑、射程 280 で停止 + 1.8s ごと発射、全 Phase に 1〜3 体)**。体当たり敵は接触時に電気スタン稲妻演出 (シアン + 白、~110ms)。船接触 DPS は 12 (sniper の damage=0 で素通り)。
 - **資源**: 惑星 2 個 (220,200)/(1060,540) から採掘 → 基地納品で資源 1:お金 2 変換。**枯渇 60s でリスポーン**。
 - **エネルギー**: 宇宙船のみ。移動中 2/s 消費 + 射撃 5/shot 消費。0 で停止 (stalled)。基地納品で全回復。
 - **永続化なし (Phase 6 で撤廃)**: Inventory も Program も localStorage 保存しない。Game Over / Victory / Menu 復帰で Run リセット。Phase 4 の `spacecode.shipTemplate` は廃止

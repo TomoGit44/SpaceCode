@@ -117,31 +117,55 @@ export const PLANET = {
   respawnMs: 60000,     // Phase 4: 枯渇後この時間で resources が全回復
 } as const;
 
-/** 敵 (Phase 4 で 3 種類化 / Phase 6 Step 7 で boss 追加) */
-export type EnemyType = 'basic' | 'fast' | 'tank' | 'boss';
+/**
+ * 敵 (Phase 4 で 3 種類化 / Phase 6 Step 7 で boss 追加 /
+ * 2026-05-25 で sniper 追加 + 接触ダメ ×1.5 + 電気スタン演出)。
+ */
+export type EnemyType = 'basic' | 'fast' | 'tank' | 'boss' | 'sniper';
+
+/** 敵の行動様式。'charge' は基地へ直進+体当たり、'shoot' は射程内で停止+弾発射。 */
+export type EnemyBehavior = 'charge' | 'shoot';
 
 export interface EnemyTypeStats {
   readonly hp: number;
   readonly speed: number;        // px/s
-  readonly damage: number;        // 基地接触時のダメージ
+  readonly damage: number;        // 基地接触時のダメージ (charge のみ) / contactDps もこれと連動
   readonly radius: number;        // 描画半径
   readonly hitRadius: number;     // 当たり判定 (弾)
   readonly contactRadius: number; // 基地への接触距離 (BASE.radius + α)
   readonly color: number;         // 描画色
   readonly creditsOnKill: number; // 撃破報酬
+  readonly behavior: EnemyBehavior; // 'charge' (体当たり) or 'shoot' (弾発射) — 2026-05-25 追加
+  // 以下 'shoot' 専用の任意フィールド
+  readonly attackRange?: number;     // 基地までこの距離で停止して発射開始
+  readonly fireIntervalMs?: number;  // 発射間隔
+  readonly bulletDamage?: number;    // 弾ダメージ
+  readonly bulletSpeed?: number;     // 弾速 px/s
 }
 
+/**
+ * 2026-05-25 改修:
+ *   - 体当たり敵 (basic/fast/tank/boss) の `damage` を ×1.5 (電気スタンガン演出と整合)
+ *   - sniper 追加 (新行動 'shoot': 距離 280 で停止して 1.8s ごとに弾発射)
+ */
 export const ENEMY_TYPES: Record<EnemyType, EnemyTypeStats> = {
-  basic: { hp: 20,  speed: 60, damage: 10, radius: 10, hitRadius: 12, contactRadius: 24, color: 0xff4d5a, creditsOnKill: 5  },
-  fast:  { hp: 12,  speed: 95, damage: 8,  radius: 8,  hitRadius: 10, contactRadius: 22, color: 0xff9040, creditsOnKill: 7  },
-  tank:  { hp: 55,  speed: 38, damage: 15, radius: 14, hitRadius: 16, contactRadius: 28, color: 0xb01828, creditsOnKill: 14 },
+  basic:  { hp: 20,  speed: 60, damage: 15, radius: 10, hitRadius: 12, contactRadius: 24, color: 0xff4d5a, creditsOnKill: 5,  behavior: 'charge' },
+  fast:   { hp: 12,  speed: 95, damage: 12, radius: 8,  hitRadius: 10, contactRadius: 22, color: 0xff9040, creditsOnKill: 7,  behavior: 'charge' },
+  tank:   { hp: 55,  speed: 38, damage: 22, radius: 14, hitRadius: 16, contactRadius: 28, color: 0xb01828, creditsOnKill: 14, behavior: 'charge' },
   // Phase 6 Step 7: Stage クリア直前のボス。HP 高め / 速度遅め / ダメ大。撃破で SR ガチャ確定 (GameScene 側)。
-  boss:  { hp: 200, speed: 30, damage: 30, radius: 22, hitRadius: 26, contactRadius: 38, color: 0xa07bff, creditsOnKill: 50 },
+  boss:   { hp: 200, speed: 30, damage: 45, radius: 22, hitRadius: 26, contactRadius: 38, color: 0xa07bff, creditsOnKill: 50, behavior: 'charge' },
+  // 2026-05-25: 遠距離狙撃手。基地まで 280px で停止 → 1.8 秒ごとに弾を直線発射。
+  // 体当たり攻撃しないが、基地に弾が当たるとダメージ。船は素通り (バランス簡略化)。
+  sniper: {
+    hp: 25, speed: 45, damage: 0, radius: 11, hitRadius: 13, contactRadius: 20,
+    color: 0x44ddaa, creditsOnKill: 10, behavior: 'shoot',
+    attackRange: 280, fireIntervalMs: 1800, bulletDamage: 10, bulletSpeed: 240,
+  },
 };
 
-/** 敵 → 宇宙船 接触ダメージ (Phase D) */
+/** 敵 → 宇宙船 接触ダメージ (Phase D) — 2026-05-25 で 8 → 12 dps に bump (×1.5 整合) */
 export const ENEMY_VS_SHIP = {
-  contactDps: 8, // 接触持続中の DPS
+  contactDps: 12, // 接触持続中の DPS (charge 種別のみ実質ダメージ。sniper は damage=0 で無効化)
 } as const;
 
 /** Phase B のスポーン */
@@ -189,22 +213,33 @@ export interface EnemySpec {
   readonly delayMs?: number;
 }
 
+// 2026-05-25: sniper を全 Phase に少量ずつ追加 (最初から登場)。
+// 数は Phase 進行で 1 → 1 → 2 → 3 → 3 と緩やかに増加。Phase 1 は遅延 6 秒で初回基本敵の後に。
 export const PHASES: ReadonlyArray<{ readonly enemySpecs: ReadonlyArray<EnemySpec> }> = [
-  { enemySpecs: [{ type: 'basic', count: 5,  intervalMs: 2200 }] },
-  { enemySpecs: [{ type: 'basic', count: 7,  intervalMs: 1900 }] },
   { enemySpecs: [
-      { type: 'basic', count: 6, intervalMs: 1800 },
-      { type: 'fast',  count: 3, intervalMs: 1400, delayMs: 4000 },
+      { type: 'basic',  count: 5, intervalMs: 2200 },
+      { type: 'sniper', count: 1, intervalMs: 1,    delayMs: 6000 },
   ]},
   { enemySpecs: [
-      { type: 'basic', count: 7, intervalMs: 1600 },
-      { type: 'fast',  count: 5, intervalMs: 1300, delayMs: 3500 },
+      { type: 'basic',  count: 7, intervalMs: 1900 },
+      { type: 'sniper', count: 1, intervalMs: 1,    delayMs: 5000 },
   ]},
   { enemySpecs: [
-      { type: 'basic', count: 6, intervalMs: 1500 },
-      { type: 'fast',  count: 5, intervalMs: 1200, delayMs: 2500 },
-      { type: 'tank',  count: 2, intervalMs: 4000, delayMs: 6000 },
+      { type: 'basic',  count: 6, intervalMs: 1800 },
+      { type: 'fast',   count: 3, intervalMs: 1400, delayMs: 4000 },
+      { type: 'sniper', count: 2, intervalMs: 4500, delayMs: 3000 },
+  ]},
+  { enemySpecs: [
+      { type: 'basic',  count: 7, intervalMs: 1600 },
+      { type: 'fast',   count: 5, intervalMs: 1300, delayMs: 3500 },
+      { type: 'sniper', count: 3, intervalMs: 3800, delayMs: 2500 },
+  ]},
+  { enemySpecs: [
+      { type: 'basic',  count: 6, intervalMs: 1500 },
+      { type: 'fast',   count: 5, intervalMs: 1200, delayMs: 2500 },
+      { type: 'sniper', count: 3, intervalMs: 3500, delayMs: 4000 },
+      { type: 'tank',   count: 2, intervalMs: 4000, delayMs: 6000 },
       // Phase 6 Step 7: 最終 Phase 末尾にボス 1 体。雑魚を片付け終わる頃に登場
-      { type: 'boss',  count: 1, intervalMs: 1,    delayMs: 18000 },
+      { type: 'boss',   count: 1, intervalMs: 1,    delayMs: 18000 },
   ]},
 ];

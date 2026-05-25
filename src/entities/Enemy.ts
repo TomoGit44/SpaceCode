@@ -1,12 +1,21 @@
 import Phaser from 'phaser';
 import { ENEMY_TYPES, COLORS, type EnemyType, type EnemyTypeStats } from '../config';
+import { EnemyBullet } from './EnemyBullet';
 
 /**
  * 敵 (Enemy)。出現位置から基地へ直進する単純AI。
- * Phase 4 で 3 種類化 (basic / fast / tank)。stats は `ENEMY_TYPES[type]` 経由。
  *
- * 描画: 色付き三角 (進行方向を向く) + コア。
+ * - Phase 4: 3 種類化 (basic / fast / tank)
+ * - Phase 6 Step 7: boss 追加
+ * - **2026-05-25**: sniper (behavior='shoot') を追加。
+ *   `update` が context (enemyBullets[]) を受け取り、shoot 種別は
+ *   `attackRange` で停止して `fireIntervalMs` 間隔で弾を発射する。
+ *   charge 種別 (basic/fast/tank/boss) は従来通り体当たり + 電気スタン演出。
  */
+export interface EnemyTickContext {
+  enemyBullets: EnemyBullet[];
+}
+
 export class Enemy {
   public x: number;
   public y: number;
@@ -21,6 +30,8 @@ export class Enemy {
   private gfx: Phaser.GameObjects.Graphics;
   private targetX: number;
   private targetY: number;
+  /** shoot 種別の発射タイマー (ms 残り)。0 以下で 1 発撃って interval にリセット。 */
+  private fireTimerMs: number;
 
   constructor(
     scene: Phaser.Scene,
@@ -39,6 +50,8 @@ export class Enemy {
     this.damage = this.stats.damage;
     this.targetX = baseX;
     this.targetY = baseY;
+    // shoot 種別は射程内到達後すぐに 1 発撃てるよう初期 timer を短めに
+    this.fireTimerMs = this.stats.behavior === 'shoot' ? 600 : 0;
 
     this.gfx = scene.add.graphics();
     this.redraw();
@@ -72,6 +85,12 @@ export class Enemy {
       g.strokeCircle(0, 0, stats.radius + 8);
       g.lineStyle(1, COLORS.highlight, 0.4);
       g.strokeCircle(0, 0, stats.radius + 2);
+    } else if (this.type === 'sniper') {
+      // sniper: 外周 + 砲身を意識した薄い長方形 + 中心リング (2026-05-25)
+      g.fillStyle(stats.color, 0.2);
+      g.fillCircle(0, 0, stats.radius + 6);
+      g.lineStyle(1, stats.color, 0.7);
+      g.strokeCircle(0, 0, stats.radius + 2);
     } else {
       // 外側のグロー
       g.fillStyle(stats.color, 0.18);
@@ -85,21 +104,58 @@ export class Enemy {
     g.lineTo(-stats.radius * 0.7, stats.radius * 0.8);
     g.closePath();
     g.fillPath();
+    // sniper: 砲身を細い長方形で前方に伸ばす
+    if (this.type === 'sniper') {
+      g.fillStyle(stats.color, 1);
+      g.fillRect(stats.radius - 1, -2, stats.radius * 0.9, 4);
+    }
     // コア (tank は濃いめ、fast は白っぽく速度感を強調、boss は強コア)
     const coreAlpha = this.type === 'fast' ? 1 : 0.85;
     g.fillStyle(COLORS.highlight, coreAlpha);
     g.fillCircle(0, 0, stats.radius * (this.type === 'boss' ? 0.35 : 0.25));
   }
 
-  /** delta は ms */
-  public update(delta: number): void {
+  /**
+   * delta は ms。`ctx` は shoot 種別だけが弾を push するための配列を渡す。
+   * charge 種別 (basic/fast/tank/boss) は ctx を使わない。
+   */
+  public update(delta: number, ctx?: EnemyTickContext): void {
     if (this.dead || this.reachedBase) return;
 
     const dx = this.targetX - this.x;
     const dy = this.targetY - this.y;
     const dist = Math.hypot(dx, dy);
 
-    // 基地接触判定
+    // ─── shoot 種別: 射程内で停止して弾を発射 ───────────────
+    if (this.stats.behavior === 'shoot' && this.stats.attackRange) {
+      // 進行方向 (基地向き) は常に更新 (停止していても砲身が基地を向く)
+      this.gfx.setRotation(dist > 0 ? Math.atan2(dy, dx) : 0);
+      if (dist <= this.stats.attackRange) {
+        // 停止 + 定期発射
+        this.fireTimerMs -= delta;
+        if (this.fireTimerMs <= 0 && ctx) {
+          ctx.enemyBullets.push(
+            new EnemyBullet(
+              this.gfx.scene,
+              this.x,
+              this.y,
+              this.targetX,
+              this.targetY,
+              this.stats.bulletDamage ?? 10,
+              this.stats.bulletSpeed ?? 240
+            )
+          );
+          // マズルフラッシュ (短い円が拡大して消える)
+          this.spawnMuzzleFlash();
+          this.fireTimerMs = this.stats.fireIntervalMs ?? 1800;
+        }
+        return; // 移動しない
+      }
+      // 射程外: 通常通り基地に近づく
+    }
+
+    // ─── charge 種別 (および sniper 射程外): 基地直進 ──────
+    // 基地接触判定 (sniper は damage=0 のため実害なし、charge は基地ヒット)
     if (dist <= this.stats.contactRadius) {
       this.reachedBase = true;
       return;
@@ -113,6 +169,23 @@ export class Enemy {
 
     this.gfx.setPosition(this.x, this.y);
     this.gfx.setRotation(Math.atan2(ny, nx));
+  }
+
+  /** sniper 発射時の砲口フラッシュ。 */
+  private spawnMuzzleFlash(): void {
+    const scene = this.gfx.scene;
+    const flash = scene.add.graphics();
+    flash.fillStyle(this.stats.color, 0.7);
+    flash.fillCircle(0, 0, this.stats.radius * 0.9);
+    flash.setPosition(this.x, this.y);
+    scene.tweens.add({
+      targets: flash,
+      scale: 1.8,
+      alpha: 0,
+      duration: 180,
+      ease: 'Cubic.easeOut',
+      onComplete: () => flash.destroy(),
+    });
   }
 
   public takeDamage(amount: number): void {
@@ -150,4 +223,57 @@ export class Enemy {
     this.gfx.destroy();
     this.dead = true;
   }
+}
+
+/**
+ * 電気スタン演出: from→to 間にジグザグの白/シアン稲妻を 1 本描く。
+ * 80ms でフェードアウト。Ship 接触ダメージや基地ヒット時に呼ぶ (2026-05-25)。
+ */
+export function spawnElectricArc(
+  scene: Phaser.Scene,
+  fromX: number,
+  fromY: number,
+  toX: number,
+  toY: number
+): void {
+  const g = scene.add.graphics();
+  g.setDepth(8);
+  const segments = 6;
+  const dx = toX - fromX;
+  const dy = toY - fromY;
+  const len = Math.hypot(dx, dy);
+  if (len < 1) return;
+  const nx = dx / len;
+  const ny = dy / len;
+  // 法線
+  const px = -ny;
+  const py = nx;
+  const points: Array<{ x: number; y: number }> = [];
+  points.push({ x: fromX, y: fromY });
+  for (let i = 1; i < segments; i++) {
+    const t = i / segments;
+    const cx = fromX + dx * t;
+    const cy = fromY + dy * t;
+    const jitter = (Math.random() - 0.5) * 14; // 法線方向にゆらぎ
+    points.push({ x: cx + px * jitter, y: cy + py * jitter });
+  }
+  points.push({ x: toX, y: toY });
+  // 太い外側 (シアン) + 細い内側 (白)
+  g.lineStyle(3, 0x44e0ff, 0.55);
+  g.beginPath();
+  g.moveTo(points[0]!.x, points[0]!.y);
+  for (let i = 1; i < points.length; i++) g.lineTo(points[i]!.x, points[i]!.y);
+  g.strokePath();
+  g.lineStyle(1.2, 0xffffff, 0.95);
+  g.beginPath();
+  g.moveTo(points[0]!.x, points[0]!.y);
+  for (let i = 1; i < points.length; i++) g.lineTo(points[i]!.x, points[i]!.y);
+  g.strokePath();
+  scene.tweens.add({
+    targets: g,
+    alpha: 0,
+    duration: 110,
+    ease: 'Cubic.easeOut',
+    onComplete: () => g.destroy(),
+  });
 }

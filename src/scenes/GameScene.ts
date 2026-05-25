@@ -2,8 +2,9 @@ import Phaser from 'phaser';
 import { GAME_WIDTH, GAME_HEIGHT, COLORS, ECONOMY, PLANETS, SHIP, GAME_SPEED } from '../config';
 import { drawStarfield } from '../utils/starfield';
 import { Base } from '../entities/Base';
-import { Enemy } from '../entities/Enemy';
+import { Enemy, spawnElectricArc } from '../entities/Enemy';
 import { Bullet } from '../entities/Bullet';
+import { EnemyBullet } from '../entities/EnemyBullet';
 import { Planet } from '../entities/Planet';
 import { Ship } from '../entities/Ship';
 import { Executor } from '../program/Executor';
@@ -39,6 +40,7 @@ export class GameScene extends Phaser.Scene {
   private base!: Base;
   private enemies: Enemy[] = [];
   private bullets: Bullet[] = [];
+  private enemyBullets: EnemyBullet[] = []; // 2026-05-25: sniper が発射する弾
   private planets: Planet[] = [];
   private ships: Ship[] = [];
 
@@ -85,6 +87,7 @@ export class GameScene extends Phaser.Scene {
     // 状態リセット (Phaser はインスタンスを再利用するため明示リセット)
     this.enemies = [];
     this.bullets = [];
+    this.enemyBullets = [];
     this.planets = [];
     this.ships = [];
     this.terminating = false;
@@ -589,15 +592,31 @@ export class GameScene extends Phaser.Scene {
     // Phase 6: 装着アイテム効果の時間管理 (時限バフ等。Step 1 は no-op)
     this.effects.tick(delta);
 
-    // 敵更新
+    // 敵更新 (sniper は enemyBullets[] に弾を push する context を受け取る)
+    const enemyCtx = { enemyBullets: this.enemyBullets };
     for (const e of this.enemies) {
       const wasAlive = !e.dead;
-      e.update(delta);
+      e.update(delta, enemyCtx);
       if (e.reachedBase && wasAlive && !e.dead) {
         this.base.takeDamage(e.damage);
         this.hud.setHp(this.base.hp);
+        // 2026-05-25: 体当たり (charge 種別) で電気スタン演出 + カメラ shake
+        if (e.stats.behavior === 'charge') {
+          spawnElectricArc(this, e.x, e.y, this.base.x, this.base.y);
+        }
         e.consumeOnBaseHit();
         this.cameras.main.shake(120, 0.005);
+      }
+    }
+
+    // 2026-05-25: 敵弾 (sniper の弾)
+    for (const b of this.enemyBullets) {
+      b.update(delta);
+      if (!b.dead && b.hitsBase(this.base.x, this.base.y, this.base.radius)) {
+        this.base.takeDamage(b.getDamage());
+        this.hud.setHp(this.base.hp);
+        this.cameras.main.shake(80, 0.003);
+        b.destroy();
       }
     }
 
@@ -646,6 +665,7 @@ export class GameScene extends Phaser.Scene {
     // 廃棄
     this.enemies = this.enemies.filter((e) => !e.dead);
     this.bullets = this.bullets.filter((b) => !b.dead);
+    this.enemyBullets = this.enemyBullets.filter((b) => !b.dead);
     // Phase 6: 破壊された Ship の装着モジュールはインベントリへ戻す
     const survivors: Ship[] = [];
     for (const s of this.ships) {
@@ -735,9 +755,11 @@ export class GameScene extends Phaser.Scene {
     for (const b of this.bullets) b.destroy();
     for (const p of this.planets) p.destroy();
     for (const s of this.ships) s.destroy();
+    for (const b of this.enemyBullets) b.destroy();
     this.base?.destroy();
     this.enemies = [];
     this.bullets = [];
+    this.enemyBullets = [];
     this.planets = [];
     this.ships = [];
     this.shop?.destroy();

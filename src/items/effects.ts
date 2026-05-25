@@ -110,6 +110,28 @@ export class EffectSystem {
     return Math.max(0, Math.round(sum));
   }
 
+  /**
+   * 指定 Ship の体当たり DPS (モジュール `mod_ram` 等の `contactDps` 合計、2026-05-25)。
+   * 装着なしなら 0 → 体当たりダメージなし。Ship.update が delta/1000 を掛けて使う。
+   */
+  public shipContactDps(ship: Ship): number {
+    let sum = 0;
+    const uids = this.inventory.shipModules[ship.id];
+    if (!uids) return 0;
+    for (const uid of uids) {
+      const it = this.inventory.items.find((i) => i.uid === uid);
+      if (!it) continue;
+      const mt = MODULE_TYPES[it.typeId];
+      if (!mt) continue;
+      for (const eff of mt.effects) {
+        if (eff.stat === 'contactDps' && eff.kind === 'flat') {
+          sum += eff.rarityValue[it.rarity];
+        }
+      }
+    }
+    return Math.max(0, sum);
+  }
+
   /** 基地 stat に装着効果を適用した値。 */
   public baseStat(stat: BaseStat, base: number): number {
     return base * (1 + this.omniPercent('base', stat));

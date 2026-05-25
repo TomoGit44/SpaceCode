@@ -3,6 +3,7 @@ import { COLORS, SHIP, ENEMY_VS_SHIP } from '../config';
 import type { Base } from './Base';
 import type { Planet } from './Planet';
 import type { Enemy } from './Enemy';
+import { spawnElectricArc } from './Enemy';
 import { Bullet } from './Bullet';
 import type { EconomySystem } from '../systems/EconomySystem';
 import type { EffectSystem } from '../items/effects';
@@ -331,13 +332,27 @@ export class Ship {
       }
     }
 
-    // 敵接触ダメージ
+    // 敵接触: 被ダメージ + 体当たりモジュール装着時の反撃 (2026-05-25)
+    // - charge 種別の接触はスタンガン演出付き
+    // - sniper (damage=0) は接触してもダメージ無し (体当たり攻撃しないので接触演出も省略)
+    const myContactDps = world.effects.shipContactDps(this);
     for (const e of world.enemies) {
       if (e.dead) continue;
       const d = Math.hypot(e.x - this.x, e.y - this.y);
       if (d <= SHIP.contactRadius + 8) {
-        this.takeDamage(ENEMY_VS_SHIP.contactDps * (delta / 1000));
-        if (this.dead) return;
+        // 1. 被ダメージ (charge 種別のみ実害、stats.damage=0 の sniper は無効化)
+        if (e.stats.behavior === 'charge') {
+          this.takeDamage(ENEMY_VS_SHIP.contactDps * (delta / 1000));
+          // 電気スタン演出 (毎フレーム描かず確率で発火 — フレーム連発を防ぐ)
+          if (Math.random() < 0.18) {
+            spawnElectricArc(this.scene, e.x, e.y, this.x, this.y);
+          }
+          if (this.dead) return;
+        }
+        // 2. 体当たりモジュール: 装着していれば敵にダメージ
+        if (myContactDps > 0) {
+          e.takeDamage(myContactDps * (delta / 1000));
+        }
       }
     }
 

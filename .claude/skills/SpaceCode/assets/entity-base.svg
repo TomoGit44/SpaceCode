@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200" aria-label="SpaceCode Base">
+  
+  <circle cx="100" cy="100" r="92" fill="none" stroke="#3ee0c5" stroke-width="1" opacity="0.18"></circle>
+  <circle cx="100" cy="100" r="92" fill="none" stroke="#3ee0c5" stroke-width="2" opacity="0.32" stroke-dasharray="6 6"></circle>
+  
+  <circle cx="100" cy="100" r="42" fill="#a07bff" opacity="0.18"></circle>
+  
+  <circle cx="100" cy="100" r="36" fill="none" stroke="#5a3ec9" stroke-width="2" opacity="0.85"></circle>
+  
+  <g stroke="#5a3ec9" stroke-width="3" opacity="1">
+    <line x1="100" y1="60" x2="100" y2="68"></line>
+    <line x1="100" y1="132" x2="100" y2="140"></line>
+    <line x1="60" y1="100" x2="68" y2="100"></line>
+    <line x1="132" y1="100" x2="140" y2="100"></line>
+  </g>
+  
+  <circle cx="100" cy="100" r="28" fill="#a07bff"></circle>
+  
+  <circle cx="100" cy="100" r="11" fill="#3ee0c5"></circle>
+  
+  <g stroke="#ffffff" stroke-width="2" opacity="0.9" stroke-linecap="butt">
+    <line x1="84" y1="100" x2="116" y2="100"></line>
+    <line x1="100" y1="84" x2="100" y2="116"></line>
+  </g>
+  
+  <rect x="100" y="97" width="22" height="6" fill="#ffffff" opacity="0.95"></rect>
+  <rect x="120" y="96" width="4" height="8" fill="#3ee0c5"></rect>
+</svg>

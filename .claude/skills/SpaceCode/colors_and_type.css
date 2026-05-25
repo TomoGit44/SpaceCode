@@ -1,0 +1,254 @@
+/* ============================================================
+   SpaceCode Design Tokens
+   Source: github.com/TomoGit44/SpaceCode @ src/config.ts (COLORS)
+   ============================================================ */
+
+/* -- Google Fonts ------------------------------------------- */
+/* Noto Sans JP: Japanese fallback that matches the game's
+                 system-ui look across OSes.
+   JetBrains Mono: code specimens (game itself uses sans for
+                 code rows, but mono helps in marketing/docs).
+   Space Grotesk: extended display face for non-game surfaces.
+*/
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;700&display=swap');
+
+:root {
+  /* ─── COLORS ─────────────────────────────────────────────── */
+  /* Canvas */
+  --bg:            #05070d;
+  --bg-alt:        #0a1020;
+  --star-dim:      #1a2540;
+  --star-bright:   #6b7da0;
+
+  /* Allyship — each color = one semantic role */
+  --base:          #a07bff;  /* purple. only the Base */
+  --base-ring:     #5a3ec9;  /* purple, deeper */
+  --ally:          #4ea1ff;  /* blue. friendly ship, primary CTA */
+  --enemy:         #ff4d5a;  /* red. hostile, destructive */
+  --enemy-fast:    #ff9040;  /* orange. fast enemy variant */
+  --enemy-tank:    #b01828;  /* dark red. tank enemy variant */
+  --resource:      #ffd24a;  /* gold. credits, planets, legendary */
+  --accent:        #3ee0c5;  /* teal. active, success, highlight */
+  --highlight:     #ffffff;  /* white. core dots */
+
+  /* UI */
+  --ui:            #cfd6e6;  /* body text */
+  --ui-dim:        #6b7da0;  /* secondary text, labels */
+
+  /* Panels */
+  --panel-bg:      #1a2540;
+  --panel-hover:   #223151;
+  --panel-border:  #3a4a6a;
+
+  /* Planets (entity) */
+  --planet-body:   #8a6f1f;
+  --planet-mark:   #6b551a;
+
+  /* Rarities (item system) */
+  --rarity-n:      #9aa4ba;  /* normal — gray */
+  --rarity-r:      #4ea1ff;  /* rare — reuses ally blue */
+  --rarity-sr:     #c66cff;  /* super rare — magenta */
+  --rarity-l:      #ffd24a;  /* legendary — reuses resource gold */
+
+  /* ─── TYPE ───────────────────────────────────────────────── */
+  /* The game uses system-ui literally. We honor that and only
+     supplement with Noto Sans JP for cross-OS Japanese parity. */
+  --font-sans:     system-ui, "Segoe UI", "Noto Sans JP", sans-serif;
+  --font-mono:     "JetBrains Mono", ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace;
+  --font-display:  "Space Grotesk", system-ui, "Segoe UI", "Noto Sans JP", sans-serif;
+
+  /* Type scale (matches game canvas, 1280×720) */
+  --type-display:    96px;   /* GameOver / Victory */
+  --type-display-2:  88px;   /* title screen */
+  --type-banner:     56px;   /* center phase banner */
+  --type-h1:         22px;   /* primary button label, prompt */
+  --type-h2:         20px;   /* HUD value (credits, phase) */
+  --type-h3:         18px;   /* HP value */
+  --type-body:       14px;   /* default body, button labels, code rows */
+  --type-meta:       13px;   /* headers, hints */
+  --type-caption:    12px;   /* sub-hints, footer, dim labels */
+  --type-micro:      11px;   /* tiny captions */
+
+  /* Weights — bold is a state, not a flourish */
+  --weight-regular:  400;
+  --weight-medium:   500;
+  --weight-bold:     700;
+  --weight-black:    900;   /* only for the display face */
+
+  /* Line height */
+  --lh-tight:  1.1;
+  --lh-snug:   1.3;
+  --lh-body:   1.5;
+
+  /* ─── SPACING ────────────────────────────────────────────── */
+  /* base unit 4px */
+  --s-1:  4px;
+  --s-2:  8px;
+  --s-3:  12px;
+  --s-4:  16px;
+  --s-5:  24px;
+  --s-6:  32px;
+  --s-7:  48px;
+  --s-8:  64px;
+
+  --row-height:   36px;   /* program editor row */
+  --row-gap:      4px;
+  --indent:       18px;   /* per nesting level */
+  --card-pad:     24px;
+  --col-gap:      16px;
+
+  /* ─── RADIUS / BORDERS ───────────────────────────────────── */
+  /* Hard corners are the rule. 0 in-canvas; 2px allowed on web. */
+  --radius-canvas:    0;
+  --radius-web:       2px;
+  --stroke-thin:      1px;
+  --stroke-emphasis:  2px;
+
+  /* ─── ALPHA LEVERS ───────────────────────────────────────── */
+  --a-halo:         0.18;
+  --a-halo-planet:  0.12;
+  --a-range-faint:  0.18;
+  --a-range-dash:   0.32;
+  --a-backdrop:     0.55;
+  --a-panel-bg:     0.85;
+  --a-panel-card:   0.97;
+  --a-selected:     0.22;
+  --a-running:      0.16;
+  --a-disabled:     0.45;
+  --a-stroke-soft:  0.4;
+  --a-stroke-mid:   0.7;
+  --a-stroke-hard:  1.0;
+
+  /* ─── MOTION ─────────────────────────────────────────────── */
+  --ease-out:   cubic-bezier(0.22, 1, 0.36, 1);     /* Cubic.easeOut */
+  --ease-back:  cubic-bezier(0.34, 1.56, 0.64, 1);  /* Back.easeOut */
+  --ease-sine:  cubic-bezier(0.45, 0, 0.55, 1);     /* Sine.easeInOut */
+
+  --dur-flash:   160ms;
+  --dur-fast:    220ms;
+  --dur-fade:    320ms;
+  --dur-entrance: 420ms;
+  --dur-scene:   380ms;
+  --dur-pulse:   720ms;
+  --dur-rotate-base:    12000ms;
+  --dur-rotate-planet:  18000ms;
+}
+
+/* ============================================================
+   Semantic helpers — use these in components, not raw colors
+   ============================================================ */
+
+/* Base page surface */
+.surface-bg     { background: var(--bg); }
+.surface-panel  { background: var(--bg-alt); }
+.surface-card   { background: rgba(10, 16, 32, var(--a-panel-card)); }
+
+.text-ui        { color: var(--ui); }
+.text-dim       { color: var(--ui-dim); }
+.text-accent    { color: var(--accent); }
+.text-ally      { color: var(--ally); }
+.text-enemy     { color: var(--enemy); }
+.text-resource  { color: var(--resource); }
+.text-base      { color: var(--base); }
+
+/* Typography roles */
+.t-display {
+  font-family: var(--font-display);
+  font-size:   var(--type-display);
+  font-weight: var(--weight-bold);
+  line-height: var(--lh-tight);
+  letter-spacing: -0.02em;
+}
+.t-banner {
+  font-family: var(--font-sans);
+  font-size:   var(--type-banner);
+  font-weight: var(--weight-bold);
+  line-height: var(--lh-tight);
+}
+.t-h1 {
+  font-family: var(--font-sans);
+  font-size:   var(--type-h1);
+  font-weight: var(--weight-bold);
+  line-height: var(--lh-snug);
+}
+.t-h2 {
+  font-family: var(--font-sans);
+  font-size:   var(--type-h2);
+  font-weight: var(--weight-bold);
+  line-height: var(--lh-snug);
+}
+.t-h3 {
+  font-family: var(--font-sans);
+  font-size:   var(--type-h3);
+  font-weight: var(--weight-bold);
+  line-height: var(--lh-snug);
+}
+.t-body {
+  font-family: var(--font-sans);
+  font-size:   var(--type-body);
+  font-weight: var(--weight-regular);
+  line-height: var(--lh-body);
+}
+.t-meta {
+  font-family: var(--font-sans);
+  font-size:   var(--type-meta);
+  font-weight: var(--weight-regular);
+  color: var(--ui-dim);
+}
+.t-caption {
+  font-family: var(--font-sans);
+  font-size:   var(--type-caption);
+  font-weight: var(--weight-regular);
+  color: var(--ui-dim);
+}
+.t-mono {
+  font-family: var(--font-mono);
+  font-size:   var(--type-body);
+  font-weight: var(--weight-regular);
+}
+
+/* Common component primitives ------------------------------- */
+
+/* Button — the SpaceCode default. 1px stroke, hover-fill, no radius bigger than 2px */
+.sc-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 16px;
+  background: var(--panel-bg);
+  border: var(--stroke-thin) solid var(--ally);
+  border-color: color-mix(in srgb, var(--ally) 70%, transparent);
+  border-radius: var(--radius-web);
+  color: var(--ui);
+  font-family: var(--font-sans);
+  font-size: var(--type-body);
+  font-weight: var(--weight-bold);
+  cursor: pointer;
+  transition: background var(--dur-flash) var(--ease-out);
+}
+.sc-button:hover  { background: var(--panel-hover); }
+.sc-button:disabled,
+.sc-button[aria-disabled="true"] {
+  opacity: var(--a-disabled);
+  color: var(--ui-dim);
+  border-color: color-mix(in srgb, var(--ui-dim) 50%, transparent);
+  cursor: not-allowed;
+}
+.sc-button--danger  { border-color: color-mix(in srgb, var(--enemy) 70%, transparent); }
+.sc-button--success { border-color: color-mix(in srgb, var(--accent) 70%, transparent); }
+.sc-button--ally    { border-color: color-mix(in srgb, var(--ally) 70%, transparent); }
+
+/* Halo — the SpaceCode signature glow */
+.sc-halo {
+  position: relative;
+  isolation: isolate;
+}
+.sc-halo::before {
+  content: "";
+  position: absolute;
+  inset: -10px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: var(--a-halo);
+  z-index: -1;
+}

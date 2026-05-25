@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>SpaceCode — Redesign hub</title>
+  <link rel="stylesheet" href="../../../colors_and_type.css"/>
+  <link rel="stylesheet" href="styles.css"/>
+  <style>
+    .hub {
+      position: absolute; inset: 48px 0 0 0;
+      padding: 32px 48px;
+      box-sizing: border-box;
+      overflow: hidden;
+    }
+
+    .hub-head {
+      display: flex; align-items: baseline; gap: 16px;
+      margin-bottom: 6px;
+    }
+    .hub-head h1 {
+      margin: 0;
+      font-family: var(--font-display);
+      font-size: 38px; font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    .hub-head .sub {
+      font-family: var(--font-mono); font-size: 12px;
+      color: var(--ui-dim); letter-spacing: 0.08em;
+    }
+    .hub-intro {
+      max-width: 760px;
+      font-size: 14px; color: var(--ui-dim);
+      line-height: 1.7;
+      margin-bottom: 32px;
+    }
+    .hub-intro b { color: var(--ui); font-weight: 700; }
+    .hub-intro .accent { color: var(--accent); }
+
+    .hub-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 18px;
+      margin-bottom: 32px;
+    }
+
+    .demo-card {
+      position: relative;
+      background: rgba(10, 16, 32, 0.55);
+      border: 1px solid var(--panel-border);
+      text-decoration: none;
+      color: inherit;
+      overflow: hidden;
+      transition: transform 220ms var(--ease-out), border-color 220ms var(--ease-out);
+      display: flex; flex-direction: column;
+    }
+    .demo-card:hover {
+      transform: translateY(-3px);
+      border-color: var(--accent);
+      box-shadow: 0 8px 24px rgba(5, 7, 13, 0.6);
+    }
+
+    .demo-card .thumb {
+      position: relative;
+      height: 220px;
+      background:
+        radial-gradient(circle at 50% 50%, rgba(20, 30, 60, 0.55), transparent 70%),
+        rgba(5, 7, 13, 0.5);
+      display: flex; align-items: center; justify-content: center;
+      overflow: hidden;
+    }
+    .demo-card .thumb::before {
+      content: ""; position: absolute; inset: 0;
+      background-image: url('../../../assets/starfield.svg');
+      background-size: 200px 200px; background-repeat: repeat;
+      opacity: 0.45;
+    }
+    .demo-card .thumb > * { position: relative; z-index: 2; }
+
+    .demo-card .body {
+      padding: 18px 20px 20px;
+    }
+    .demo-card .num {
+      font-family: var(--font-mono); font-size: 11px;
+      color: var(--accent); letter-spacing: 0.18em;
+      margin-bottom: 6px;
+    }
+    .demo-card h3 {
+      margin: 0 0 8px;
+      font-size: 19px; font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+    .demo-card p {
+      margin: 0;
+      font-size: 12px; color: var(--ui-dim);
+      line-height: 1.6;
+    }
+    .demo-card .tags {
+      display: flex; gap: 6px; flex-wrap: wrap;
+      margin-top: 12px;
+    }
+    .demo-card .tag {
+      font-family: var(--font-mono); font-size: 10px;
+      color: var(--ui-dim);
+      padding: 2px 8px;
+      border: 1px solid var(--panel-border);
+      letter-spacing: 0.06em;
+    }
+
+    .hub-notes {
+      max-width: 900px;
+      font-size: 13px; color: var(--ui-dim);
+      line-height: 1.7;
+      border-top: 1px solid var(--panel-border);
+      padding-top: 20px;
+    }
+    .hub-notes h4 {
+      margin: 0 0 8px;
+      font-size: 12px; color: var(--ui);
+      font-family: var(--font-mono);
+      letter-spacing: 0.1em; text-transform: uppercase;
+    }
+    .hub-notes ul { margin: 0 0 14px; padding-left: 18px; }
+    .hub-notes li { margin: 4px 0; }
+    .hub-notes .pill {
+      display: inline-block;
+      padding: 1px 8px;
+      background: rgba(62, 224, 197, 0.12);
+      border: 1px solid rgba(62, 224, 197, 0.5);
+      color: var(--accent);
+      font-family: var(--font-mono); font-size: 11px;
+      margin-right: 4px;
+    }
+
+    .hub-back {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 12px; color: var(--ui-dim);
+      text-decoration: none;
+      font-family: var(--font-mono);
+      letter-spacing: 0.06em;
+    }
+    .hub-back:hover { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <div class="r2-host">
+    <div class="r2-stage" id="stage">
+      <div class="r2-bar">
+        <span class="crumb">Redesign · 全体ビジュアル刷新</span>
+        <span class="sep"></span>
+        <a class="hub-back" href="../index.html">← 既存 UI kit</a>
+        <span class="hint" style="margin-left:auto;">各カードをクリックして詳細を確認</span>
+      </div>
+
+      <div class="r2-starfield"></div>
+
+      <div class="hub">
+        <div class="hub-head">
+          <h1>SpaceCode Redesign</h1>
+          <span class="sub">v2 · 全体ビジュアル刷新案</span>
+        </div>
+        <div class="hub-intro">
+          現状の「冷たい計器盤」テイストを保ちつつ、戦闘・エンティティ・アイテム周りの 3 領域を <b class="accent">7/10 の演出強度</b> で底上げ。
+          5 色配色 (Base=紫 / Ally=青 / Enemy=赤 / Resource=金 / Accent=ティール) は維持しつつ、
+          グロー・パーティクル・衝撃波・ロータリー要素を追加。<b>各領域 1 案決め打ち</b>でまとめています。
+        </div>
+
+        <div class="hub-grid">
+
+          <!-- ─── Card 01: Combat ──────────────────────── -->
+          <a class="demo-card" href="combat.html">
+            <div class="thumb">
+              <svg viewBox="-120 -90 240 180" width="280" height="200">
+                <defs>
+                  <radialGradient id="hubBaseHalo" cx="0" cy="0" r="0.5">
+                    <stop offset="0%" stop-color="#a07bff" stop-opacity="0.55"/>
+                    <stop offset="100%" stop-color="#a07bff" stop-opacity="0"/>
+                  </radialGradient>
+                </defs>
+                <!-- enemy on left -->
+                <g transform="translate(-95, -10)">
+                  <circle r="22" fill="#ff4d5a" opacity="0.15"/>
+                  <polygon points="14,0 -10,-11 -10,11" fill="#ff4d5a"/>
+                  <circle cx="0" cy="0" r="2.5" fill="#ffffff"/>
+                </g>
+                <!-- bullet trail -->
+                <circle cx="-50" cy="-8" r="3" fill="#3ee0c5" opacity="0.3"/>
+                <circle cx="-32" cy="-6" r="4" fill="#3ee0c5" opacity="0.5"/>
+                <circle cx="-12" cy="-3" r="5" fill="#3ee0c5" opacity="0.85"/>
+                <circle cx="-12" cy="-3" r="9" fill="#3ee0c5" opacity="0.3" filter="blur(2px)"/>
+                <!-- base on right -->
+                <g transform="translate(40, 0)">
+                  <circle r="46" fill="url(#hubBaseHalo)"/>
+                  <circle r="38" fill="none" stroke="#5a3ec9" stroke-width="2" opacity="0.85"
+                          stroke-dasharray="10 6"/>
+                  <polygon points="0,-22 19,-11 19,11 0,22 -19,11 -19,-11"
+                           fill="#1a1235" stroke="#a07bff" stroke-width="1.5"/>
+                  <circle r="9" fill="#3ee0c5"/>
+                  <circle r="3" fill="#ffffff"/>
+                  <!-- barrel + flash -->
+                  <rect x="-22" y="-3" width="16" height="2.5" fill="#cfd6e6"/>
+                  <rect x="-22" y="1" width="16" height="2.5" fill="#cfd6e6"/>
+                  <circle cx="-26" cy="0" r="6" fill="#ffffff" opacity="0.95"/>
+                  <circle cx="-26" cy="0" r="11" fill="#3ee0c5" opacity="0.7" filter="blur(2px)"/>
+                </g>
+                <!-- damage number -->
+                <text x="-90" y="-38" font-family="Space Grotesk" font-size="20" font-weight="700"
+                      fill="#ff4d5a" text-anchor="middle"
+                      style="filter: drop-shadow(0 0 4px rgba(255,77,90,0.8));">12</text>
+              </svg>
+            </div>
+            <div class="body">
+              <div class="num">01 · COMBAT</div>
+              <h3>射撃 · 弾 · 着弾エフェクト</h3>
+              <p>マズルフラッシュ 3 層、グローを纏った弾と残像トレイル、衝撃波 + パーティクル + ダメージ数字 + シェイクの着弾演出。tank / fast / basic で着弾反応に差。</p>
+              <div class="tags">
+                <span class="tag">マズルフラッシュ</span>
+                <span class="tag">弾道トレイル</span>
+                <span class="tag">着弾SHK</span>
+                <span class="tag">DMG ナンバー</span>
+              </div>
+            </div>
+          </a>
+
+          <!-- ─── Card 02: Entities ────────────────────── -->
+          <a class="demo-card" href="entities.html">
+            <div class="thumb">
+              <svg viewBox="-160 -70 320 140" width="280" height="160">
+                <defs>
+                  <radialGradient id="hubShipHalo" cx="0" cy="0" r="0.5">
+                    <stop offset="0%" stop-color="#4ea1ff" stop-opacity="0.65"/>
+                    <stop offset="100%" stop-color="#4ea1ff" stop-opacity="0"/>
+                  </radialGradient>
+                  <radialGradient id="hubBaseHalo2" cx="0" cy="0" r="0.5">
+                    <stop offset="0%" stop-color="#a07bff" stop-opacity="0.55"/>
+                    <stop offset="100%" stop-color="#a07bff" stop-opacity="0"/>
+                  </radialGradient>
+                  <radialGradient id="hubTankHalo" cx="0" cy="0" r="0.5">
+                    <stop offset="0%" stop-color="#b01828" stop-opacity="0.7"/>
+                    <stop offset="100%" stop-color="#b01828" stop-opacity="0"/>
+                  </radialGradient>
+                </defs>
+                <!-- ship -->
+                <g transform="translate(-120, 0)">
+                  <circle r="22" fill="url(#hubShipHalo)"/>
+                  <ellipse cx="-15" cy="0" rx="9" ry="2" fill="#4ea1ff" opacity="0.6"/>
+                  <polygon points="14,0 -8,-9 -3,0 -8,9" fill="#4ea1ff"/>
+                  <polygon points="-8,-9 -12,-12 -3,-7" fill="#4ea1ff" opacity="0.85"/>
+                  <polygon points="-8,9 -12,12 -3,7" fill="#4ea1ff" opacity="0.85"/>
+                  <circle cx="2" cy="0" r="2.5" fill="#3ee0c5"/>
+                </g>
+                <!-- base center -->
+                <g transform="translate(0, 0)">
+                  <circle r="48" fill="url(#hubBaseHalo2)"/>
+                  <circle r="42" fill="none" stroke="#5a3ec9" stroke-width="2" opacity="0.8"
+                          stroke-dasharray="14 7"/>
+                  <polygon points="0,-22 19,-11 19,11 0,22 -19,11 -19,-11"
+                           fill="#1a1235" stroke="#a07bff" stroke-width="1.5"/>
+                  <circle r="9" fill="#3ee0c5"/>
+                </g>
+                <!-- enemies -->
+                <g transform="translate(80, -28)">
+                  <circle r="18" fill="#ff4d5a" opacity="0.18"/>
+                  <polygon points="12,0 -8,-10 -8,10" fill="#ff4d5a"/>
+                  <polygon points="-8,-10 -12,-14 -4,-8" fill="#ff4d5a" opacity="0.85"/>
+                  <polygon points="-8,10 -12,14 -4,8" fill="#ff4d5a" opacity="0.85"/>
+                </g>
+                <g transform="translate(80, 28)">
+                  <circle r="14" fill="#ff9040" opacity="0.18"/>
+                  <rect x="-22" y="-1" width="14" height="1.4" fill="#ff9040" opacity="0.6"/>
+                  <polygon points="12,0 -8,-7 -2,0 -8,7" fill="#ff9040"/>
+                </g>
+                <g transform="translate(125, 0)">
+                  <circle r="26" fill="url(#hubTankHalo)"/>
+                  <polygon points="18,0 -12,-14 -12,14" fill="none" stroke="#b01828" stroke-width="1.5" opacity="0.85"/>
+                  <polygon points="14,0 -10,-11 -10,11" fill="#b01828"/>
+                  <circle cx="0" cy="0" r="3" fill="#ff4d5a"/>
+                </g>
+              </svg>
+            </div>
+            <div class="body">
+              <div class="num">02 · ENTITIES</div>
+              <h3>Base · Ship · 敵 3 種</h3>
+              <p>Base はヘックスコア + 8 セグメント外輪 + 内側カウンター輪。Ship は推進炎付きの戦闘機シルエット。敵 3 種は claws / 残像 / 装甲リングで一目で区別可能に。</p>
+              <div class="tags">
+                <span class="tag">基地</span>
+                <span class="tag">宇宙船</span>
+                <span class="tag">basic / fast / tank</span>
+              </div>
+            </div>
+          </a>
+
+          <!-- ─── Card 03: Items ───────────────────────── -->
+          <a class="demo-card" href="items.html">
+            <div class="thumb">
+              <svg viewBox="-130 -70 260 140" width="280" height="160">
+                <defs>
+                  <radialGradient id="hubItemL" cx="0" cy="0" r="0.5">
+                    <stop offset="0%" stop-color="#ffd24a" stop-opacity="1"/>
+                    <stop offset="100%" stop-color="#ffd24a" stop-opacity="0"/>
+                  </radialGradient>
+                </defs>
+                <!-- 3 hex item cards -->
+                <g transform="translate(-80, 0)">
+                  <rect x="-32" y="-46" width="64" height="92" fill="rgba(10,16,32,0.92)" stroke="#9aa4ba" stroke-width="1"/>
+                  <text x="-24" y="-32" font-family="JetBrains Mono" font-size="8" font-weight="700" fill="#9aa4ba">N</text>
+                  <polygon points="0,-30 19,-15 19,15 0,30 -19,15 -19,-15" fill="rgba(10,16,32,0.7)" stroke="#9aa4ba" stroke-width="1.2"/>
+                  <circle r="12" fill="#9aa4ba"/>
+                  <circle r="6" fill="#0a1020"/>
+                  <text x="0" y="40" font-family="system-ui" font-size="8" font-weight="700" text-anchor="middle" fill="#cfd6e6">N · コア</text>
+                </g>
+                <g transform="translate(0, 0)">
+                  <rect x="-34" y="-48" width="68" height="96" fill="rgba(10,16,32,0.95)" stroke="#c66cff" stroke-width="2"/>
+                  <text x="-26" y="-34" font-family="JetBrains Mono" font-size="8" font-weight="700" fill="#c66cff">SR</text>
+                  <polygon points="0,-30 19,-15 19,15 0,30 -19,15 -19,-15" fill="rgba(10,16,32,0.7)" stroke="#c66cff" stroke-width="1.2"/>
+                  <circle r="12" fill="#c66cff"/>
+                  <circle r="6" fill="#0a1020"/>
+                  <circle r="2.5" fill="#ffffff"/>
+                  <text x="0" y="40" font-family="system-ui" font-size="8" font-weight="700" text-anchor="middle" fill="#cfd6e6">SR · フェイザー</text>
+                </g>
+                <g transform="translate(80, 0)">
+                  <rect x="-34" y="-48" width="68" height="96" fill="rgba(10,16,32,0.95)" stroke="#ffd24a" stroke-width="2"
+                        filter="drop-shadow(0 0 8px rgba(255,210,74,0.4))"/>
+                  <text x="-26" y="-34" font-family="JetBrains Mono" font-size="8" font-weight="700" fill="#ffd24a">L</text>
+                  <circle r="22" fill="url(#hubItemL)" opacity="0.5"/>
+                  <polygon points="0,-30 19,-15 19,15 0,30 -19,15 -19,-15" fill="rgba(10,16,32,0.7)" stroke="#ffd24a" stroke-width="1.2"/>
+                  <circle r="12" fill="#ffd24a"/>
+                  <circle r="6" fill="#0a1020"/>
+                  <circle r="2.5" fill="#ffffff"/>
+                  <text x="0" y="40" font-family="system-ui" font-size="8" font-weight="700" text-anchor="middle" fill="#cfd6e6">L · オムニ</text>
+                </g>
+              </svg>
+            </div>
+            <div class="body">
+              <div class="num">03 · ITEM SYSTEM</div>
+              <h3>インベントリ · ガチャ · 装着演出</h3>
+              <p>カードグリッド型インベントリ + レア度別装飾 (SR は回転光彩 / L は黄金粒子)、ガチャ抽選シーン、取得バナー、艦周りに装着スロットを表示。</p>
+              <div class="tags">
+                <span class="tag">Inventory</span>
+                <span class="tag">Gacha</span>
+                <span class="tag">Banner</span>
+                <span class="tag">Equip slots</span>
+              </div>
+            </div>
+          </a>
+        </div>
+
+        <div class="hub-notes">
+          <h4>設計上の前提</h4>
+          <ul>
+            <li><span class="pill">配色</span> 既存 5 色を維持。新色追加なし。彩度のみ調整。</li>
+            <li><span class="pill">演出</span> 7/10 — グロー (filter: drop-shadow) + パーティクル + 衝撃波 + 短い余韻。爆発は 3 層リング。</li>
+            <li><span class="pill">実装</span> HTML/CSS/SVG/JS のみ。Phaser 本体への移植は別途検討 (グロー → BlurFX / radialGradient → makeFilledTextureShape)。</li>
+            <li><span class="pill">スコープ</span> 各領域 1 案決め打ち。レビュー後に絞り込み・微調整。</li>
+          </ul>
+          <h4>次のステップ</h4>
+          <ul>
+            <li>各画面のレビュー → 採用部分の確定</li>
+            <li>採用案について Phaser (`src/`) へのマッピング文書を作成</li>
+            <li>必要なら細部 (色味、タイミング、密度) の調整版を 1〜2 ターン</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function fitStage() {
+      const stage = document.getElementById('stage');
+      function fit() {
+        const sx = window.innerWidth / 1280;
+        const sy = window.innerHeight / 720;
+        const s = Math.min(sx, sy);
+        stage.style.transform = `scale(${s})`;
+        stage.style.left = ((window.innerWidth - 1280 * s) / 2) + 'px';
+        stage.style.top  = ((window.innerHeight - 720 * s) / 2) + 'px';
+      }
+      fit();
+      window.addEventListener('resize', fit);
+    })();
+  </script>
+</body>
+</html>

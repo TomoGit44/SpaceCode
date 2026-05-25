@@ -1,0 +1,467 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>SpaceCode — Entity gallery</title>
+  <link rel="stylesheet" href="../../../colors_and_type.css"/>
+  <link rel="stylesheet" href="styles.css"/>
+  <style>
+    .gal {
+      position: absolute; inset: 48px 0 0 0;
+      padding: 28px 32px; box-sizing: border-box;
+      overflow: hidden;
+    }
+
+    .gal-grid {
+      display: grid;
+      grid-template-columns: 1.4fr 1fr 1fr 1fr 1.4fr;
+      grid-template-rows: 1fr;
+      gap: 16px;
+      height: 100%;
+    }
+    .gal-cell {
+      background: rgba(10, 16, 32, 0.55);
+      border: 1px solid var(--panel-border);
+      padding: 16px;
+      display: flex; flex-direction: column;
+      position: relative;
+      overflow: hidden;
+    }
+    .gal-cell .header {
+      display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px;
+    }
+    .gal-cell h3 {
+      margin: 0; font-size: 17px; font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+    .gal-cell .sub {
+      font-family: var(--font-mono); font-size: 10px;
+      color: var(--ui-dim); letter-spacing: 0.08em; text-transform: uppercase;
+    }
+    .gal-cell .desc {
+      font-size: 12px; color: var(--ui-dim); line-height: 1.55;
+      margin-bottom: 12px;
+    }
+    .gal-cell .stage {
+      flex: 1;
+      display: flex; align-items: center; justify-content: center;
+      background:
+        radial-gradient(circle at 50% 50%, rgba(20, 30, 60, 0.55), transparent 70%),
+        rgba(5, 7, 13, 0.45);
+      border-radius: 0;
+      position: relative;
+      overflow: hidden;
+    }
+    .gal-cell .stage::before {
+      content: "";
+      position: absolute; inset: 0;
+      background-image: url('../../../assets/starfield.svg');
+      background-size: 200px 200px; background-repeat: repeat;
+      opacity: 0.4;
+    }
+
+    .stats {
+      position: absolute; left: 12px; bottom: 12px; right: 12px;
+      font-family: var(--font-mono); font-size: 10px;
+      color: var(--ui); letter-spacing: 0.04em;
+      display: grid; grid-template-columns: 1fr 1fr; gap: 4px 14px;
+      z-index: 2;
+    }
+    .stats .k { color: var(--ui-dim); }
+    .stats .v { color: var(--ui); text-align: right; }
+
+    /* color-coded header dot */
+    .dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      display: inline-block; margin-right: 4px; vertical-align: 0;
+    }
+
+    /* layout: single row */
+
+    /* Small caption above stats */
+    .gal-cell .caption {
+      position: absolute; left: 12px; bottom: 52px;
+      font-size: 11px; color: var(--accent);
+      font-family: var(--font-mono); letter-spacing: 0.06em;
+    }
+
+    /* ─── ENTITIES (SVG sized to cell stage area) ─── */
+
+    /* Reused animations from styles.css: r2-rotate, r2-rotate-ccw, r2-pulse-soft, r2-pulse-glow */
+
+    /* Ship thrust pulse */
+    @keyframes thrustFlick {
+      0%, 100% { opacity: 0.4; transform: scaleX(0.8); }
+      50%      { opacity: 0.95; transform: scaleX(1.15); }
+    }
+    .thrust { animation: thrustFlick 280ms ease-in-out infinite; transform-origin: right center; }
+
+    /* Fast enemy slight scuttle */
+    @keyframes scuttle {
+      0%, 100% { transform: translateX(0); }
+      50%      { transform: translateX(-3px); }
+    }
+    .scuttle { animation: scuttle 260ms ease-in-out infinite; }
+
+    /* Tank breathing — slow heavy */
+    @keyframes heavyBreath {
+      0%, 100% { transform: scale(1); }
+      50%      { transform: scale(1.025); }
+    }
+    .heavy-breath { animation: heavyBreath 2400ms ease-in-out infinite; transform-origin: center; }
+
+    /* Inset comparison: old vs new mini-thumbnails in some cells */
+    .compare {
+      position: absolute; right: 12px; top: 12px;
+      display: flex; align-items: center; gap: 8px;
+      font-family: var(--font-mono); font-size: 9px;
+      color: var(--ui-dim); letter-spacing: 0.08em;
+      z-index: 3;
+    }
+    .compare .thumb {
+      width: 28px; height: 28px;
+      border: 1px solid var(--panel-border);
+      background: rgba(5, 7, 13, 0.6);
+      display: flex; align-items: center; justify-content: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="r2-host">
+    <div class="r2-stage" id="stage">
+      <div class="r2-bar">
+        <span class="crumb"><a href="index.html">← Redesign hub</a></span>
+        <span class="sep"></span>
+        <span class="title">02 · Entity gallery</span>
+        <span class="hint">5 種それぞれの新デザイン + 旧版との比較</span>
+      </div>
+
+      <div class="gal">
+        <div class="gal-grid">
+
+          <!-- ─────────────── BASE (tall, leftmost) ─────────────── -->
+          <div class="gal-cell cell-base">
+            <div class="header">
+              <h3><span class="dot" style="background:#a07bff;"></span>基地</h3>
+              <span class="sub">BASE · 中央固定 · HP 100</span>
+            </div>
+            <div class="desc">
+              ヘクスコア + 8 セグメント外輪 (時計回り) + 内側カウンター輪 + 中央コアパルス + 双砲身。射程リングは点線。
+            </div>
+            <div class="compare">
+              <div class="thumb">
+                <svg viewBox="-30 -30 60 60" width="22" height="22">
+                  <circle r="22" fill="#a07bff" opacity="0.18"/>
+                  <circle r="18" fill="none" stroke="#5a3ec9" stroke-width="1"/>
+                  <circle r="14" fill="#a07bff"/>
+                  <circle r="6" fill="#3ee0c5"/>
+                </svg>
+              </div>
+              <span>OLD</span>
+            </div>
+            <div class="stage">
+              <svg viewBox="-150 -150 300 300" width="300" height="300">
+                <defs>
+                  <radialGradient id="gBaseHalo" cx="0" cy="0" r="0.5">
+                    <stop offset="0%" stop-color="#a07bff" stop-opacity="0.55"/>
+                    <stop offset="60%" stop-color="#a07bff" stop-opacity="0.10"/>
+                    <stop offset="100%" stop-color="#a07bff" stop-opacity="0"/>
+                  </radialGradient>
+                  <filter id="gBaseGlow" x="-50%" y="-50%" width="200%" height="200%">
+                    <feGaussianBlur stdDeviation="2"/>
+                  </filter>
+                </defs>
+
+                <!-- range ring -->
+                <circle r="135" fill="none" stroke="#3ee0c5" stroke-width="1" opacity="0.18"/>
+                <circle r="135" fill="none" stroke="#3ee0c5" stroke-width="1.5" opacity="0.36"
+                        stroke-dasharray="6 8"/>
+
+                <!-- halo -->
+                <circle r="90" fill="url(#gBaseHalo)"/>
+
+                <!-- floating panels (orbit) -->
+                <g style="animation: r2-rotate 20s linear infinite; transform-origin: 0 0; transform-box: view-box;">
+                  <rect x="68" y="-3" width="10" height="6" fill="#a07bff" opacity="0.6"/>
+                  <rect x="-78" y="-3" width="10" height="6" fill="#a07bff" opacity="0.6"/>
+                  <rect x="-3" y="68" width="6" height="10" fill="#a07bff" opacity="0.6"/>
+                  <rect x="-3" y="-78" width="6" height="10" fill="#a07bff" opacity="0.6"/>
+                </g>
+
+                <!-- outer rotating segmented ring -->
+                <g style="animation: r2-rotate 16s linear infinite; transform-origin: 0 0; transform-box: view-box;">
+                  <g stroke="#5a3ec9" stroke-width="3" fill="none">
+                    <path d="M -49 0 A 49 49 0 0 1 -35 -35" opacity="0.9"/>
+                    <path d="M -25 -42 A 49 49 0 0 1 0 -49" opacity="0.9"/>
+                    <path d="M 10 -48 A 49 49 0 0 1 35 -35" opacity="0.9"/>
+                    <path d="M 42 -25 A 49 49 0 0 1 49 0" opacity="0.9"/>
+                    <path d="M 49 10 A 49 49 0 0 1 35 35" opacity="0.9"/>
+                    <path d="M 25 42 A 49 49 0 0 1 0 49" opacity="0.9"/>
+                    <path d="M -10 48 A 49 49 0 0 1 -35 35" opacity="0.9"/>
+                    <path d="M -42 25 A 49 49 0 0 1 -49 0" opacity="0.9"/>
+                  </g>
+                  <g fill="#a07bff">
+                    <circle cx="0" cy="-54" r="3"/>
+                    <circle cx="38" cy="-38" r="3"/>
+                    <circle cx="54" cy="0" r="3"/>
+                    <circle cx="38" cy="38" r="3"/>
+                    <circle cx="0" cy="54" r="3"/>
+                    <circle cx="-38" cy="38" r="3"/>
+                    <circle cx="-54" cy="0" r="3"/>
+                    <circle cx="-38" cy="-38" r="3"/>
+                  </g>
+                </g>
+
+                <!-- inner counter-rotating ring -->
+                <g style="animation: r2-rotate-ccw 24s linear infinite; transform-origin: 0 0; transform-box: view-box;">
+                  <circle r="34" fill="none" stroke="#a07bff" stroke-width="1.3" opacity="0.55"
+                          stroke-dasharray="2 5"/>
+                </g>
+
+                <!-- hex body -->
+                <polygon points="0,-30 26,-15 26,15 0,30 -26,15 -26,-15"
+                         fill="#1a1235" stroke="#a07bff" stroke-width="1.8" opacity="0.95"/>
+                <polygon points="0,-21 18,-10.5 18,10.5 0,21 -18,10.5 -18,-10.5"
+                         fill="#a07bff" opacity="0.45"/>
+
+                <!-- energy cross arms -->
+                <g stroke="#ffffff" stroke-width="1.2" opacity="0.7" stroke-linecap="round">
+                  <line x1="-26" y1="0" x2="26" y2="0"/>
+                  <line x1="0" y1="-26" x2="0" y2="26"/>
+                </g>
+
+                <!-- core -->
+                <circle r="11" fill="#3ee0c5" style="animation: r2-pulse-glow 1600ms ease-in-out infinite;"/>
+                <circle r="4" fill="#ffffff"/>
+
+                <!-- dual barrels (point right) -->
+                <g transform="rotate(0)">
+                  <circle r="9" fill="#0a1020" stroke="#a07bff" stroke-width="1.2"/>
+                  <rect x="6" y="-5" width="18" height="3" fill="#cfd6e6" opacity="0.95"/>
+                  <rect x="6" y="2" width="18" height="3" fill="#cfd6e6" opacity="0.95"/>
+                  <rect x="22" y="-6" width="3" height="5" fill="#3ee0c5"/>
+                  <rect x="22" y="1" width="3" height="5" fill="#3ee0c5"/>
+                </g>
+              </svg>
+            </div>
+            <div class="caption">▼ 旧版より「司令塔」感が出るよう密度を上げた</div>
+            <div class="stats">
+              <span class="k">HP</span><span class="v">100</span>
+              <span class="k">射程</span><span class="v">260px</span>
+              <span class="k">弾速度</span><span class="v">12dmg @ 1.25Hz</span>
+              <span class="k">追加要素</span><span class="v">セグメント輪 / 双砲</span>
+            </div>
+          </div>
+
+          <!-- ─────────────── SHIP ─────────────── -->
+          <div class="gal-cell cell-ship">
+            <div class="header">
+              <h3><span class="dot" style="background:#4ea1ff;"></span>宇宙船</h3>
+              <span class="sub">SHIP · $70</span>
+            </div>
+            <div class="desc">
+              アングル化した戦闘機シルエット + ウィングチップ + コックピット + 推進炎 (走行中のみ)。
+            </div>
+            <div class="stage">
+              <svg viewBox="-60 -60 120 120" width="160" height="160">
+                <defs>
+                  <radialGradient id="gShipHalo" cx="0" cy="0" r="0.5">
+                    <stop offset="0%" stop-color="#4ea1ff" stop-opacity="0.6"/>
+                    <stop offset="100%" stop-color="#4ea1ff" stop-opacity="0"/>
+                  </radialGradient>
+                  <linearGradient id="thrustGrad" x1="0" y1="0" x2="-1" y2="0">
+                    <stop offset="0%" stop-color="#ffffff" stop-opacity="0.95"/>
+                    <stop offset="40%" stop-color="#4ea1ff" stop-opacity="0.8"/>
+                    <stop offset="100%" stop-color="#4ea1ff" stop-opacity="0"/>
+                  </linearGradient>
+                </defs>
+                <circle r="34" fill="url(#gShipHalo)"/>
+                <!-- thrust trail -->
+                <g class="thrust">
+                  <ellipse cx="-26" cy="0" rx="20" ry="5" fill="url(#thrustGrad)"/>
+                  <ellipse cx="-19" cy="0" rx="10" ry="2.5" fill="#ffffff" opacity="0.9"/>
+                </g>
+                <!-- body -->
+                <polygon points="22,0 -12,-13 -5,0 -12,13" fill="#4ea1ff"/>
+                <!-- wing tips -->
+                <polygon points="-12,-13 -18,-18 -5,-10" fill="#4ea1ff" opacity="0.85"/>
+                <polygon points="-12,13 -18,18 -5,10" fill="#4ea1ff" opacity="0.85"/>
+                <!-- inner detail (wing line) -->
+                <line x1="-3" y1="-3" x2="-3" y2="3" stroke="#1a2540" stroke-width="1.5"/>
+                <!-- cockpit -->
+                <circle cx="3" cy="0" r="4" fill="#3ee0c5"/>
+                <circle cx="3" cy="0" r="1.5" fill="#ffffff"/>
+                <!-- nose marker -->
+                <rect x="18" y="-0.8" width="6" height="1.6" fill="#ffffff"/>
+                <!-- orbiting status dots (HP/E/Inv) -->
+                <g style="animation: r2-rotate 8s linear infinite; transform-origin: 0 0; transform-box: view-box;">
+                  <circle cx="32" cy="0" r="2" fill="#3ee0c5"/>
+                  <circle cx="-22" cy="-22" r="2" fill="#4ea1ff"/>
+                  <circle cx="-22" cy="22" r="2" fill="#ffd24a"/>
+                </g>
+              </svg>
+            </div>
+            <div class="caption">▼ 推進炎で動きを示唆</div>
+            <div class="stats">
+              <span class="k">HP</span><span class="v">30</span>
+              <span class="k">エネ</span><span class="v">100</span>
+              <span class="k">射程</span><span class="v">180px</span>
+              <span class="k">在庫</span><span class="v">20</span>
+            </div>
+          </div>
+
+          <!-- ─────────────── ENEMY: basic ─────────────── -->
+          <div class="gal-cell cell-basic">
+            <div class="header">
+              <h3><span class="dot" style="background:#ff4d5a;"></span>basic</h3>
+              <span class="sub">敵 · 通常 · HP 20</span>
+            </div>
+            <div class="desc">
+              標準の三角 + 後方クロー。コアアイ (白) で「視線がこちらを向く」感。脈動アニメ。
+            </div>
+            <div class="stage">
+              <svg viewBox="-50 -50 100 100" width="140" height="140">
+                <defs>
+                  <radialGradient id="gBasicHalo" cx="0" cy="0" r="0.5">
+                    <stop offset="0%" stop-color="#ff4d5a" stop-opacity="0.65"/>
+                    <stop offset="100%" stop-color="#ff4d5a" stop-opacity="0"/>
+                  </radialGradient>
+                </defs>
+                <g style="animation: r2-pulse-soft 1400ms ease-in-out infinite; transform-origin: 0 0; transform-box: view-box;">
+                  <circle r="32" fill="url(#gBasicHalo)"/>
+                  <polygon points="20,0 -14,-15 -14,15" fill="#ff4d5a"/>
+                  <polygon points="-14,-15 -20,-22 -7,-12" fill="#ff4d5a" opacity="0.9"/>
+                  <polygon points="-14,15 -20,22 -7,12" fill="#ff4d5a" opacity="0.9"/>
+                  <circle cx="0" cy="0" r="4" fill="#ffffff" opacity="0.92"/>
+                  <circle cx="0" cy="0" r="1.6" fill="#ff4d5a"/>
+                </g>
+              </svg>
+            </div>
+            <div class="caption">▼ 旧 = ただの三角だった</div>
+            <div class="stats">
+              <span class="k">HP</span><span class="v">20</span>
+              <span class="k">速度</span><span class="v">60</span>
+              <span class="k">$</span><span class="v">5</span>
+              <span class="k">出現</span><span class="v">Phase 1+</span>
+            </div>
+          </div>
+
+          <!-- ─────────────── ENEMY: fast ─────────────── -->
+          <div class="gal-cell cell-fast">
+            <div class="header">
+              <h3><span class="dot" style="background:#ff9040;"></span>fast</h3>
+              <span class="sub">敵 · 速 · HP 12</span>
+            </div>
+            <div class="desc">
+              細身でスウェプトバック気味。残像 (3 本のスピードライン) で動的に見せる。常時微振動。
+            </div>
+            <div class="stage">
+              <svg viewBox="-50 -50 100 100" width="140" height="140">
+                <defs>
+                  <radialGradient id="gFastHalo" cx="0" cy="0" r="0.5">
+                    <stop offset="0%" stop-color="#ff9040" stop-opacity="0.7"/>
+                    <stop offset="100%" stop-color="#ff9040" stop-opacity="0"/>
+                  </radialGradient>
+                  <linearGradient id="gSpeed" x1="0" y1="0" x2="-1" y2="0">
+                    <stop offset="0%" stop-color="#ff9040" stop-opacity="0.85"/>
+                    <stop offset="100%" stop-color="#ff9040" stop-opacity="0"/>
+                  </linearGradient>
+                </defs>
+                <circle r="26" fill="url(#gFastHalo)"/>
+                <g class="scuttle">
+                  <!-- speed lines -->
+                  <rect x="-38" y="-1" width="22" height="1.5" fill="url(#gSpeed)"/>
+                  <rect x="-32" y="-7" width="16" height="1.5" fill="url(#gSpeed)"/>
+                  <rect x="-32" y="7" width="16" height="1.5" fill="url(#gSpeed)"/>
+                  <!-- body -->
+                  <polygon points="22,0 -12,-10 -3,0 -12,10" fill="#ff9040"/>
+                  <polygon points="-12,-10 -16,-13 -5,-7" fill="#ff9040" opacity="0.7"/>
+                  <polygon points="-12,10 -16,13 -5,7" fill="#ff9040" opacity="0.7"/>
+                  <rect x="20" y="-0.7" width="8" height="1.4" fill="#ffffff"/>
+                  <circle cx="0" cy="0" r="2.5" fill="#ffffff"/>
+                </g>
+              </svg>
+            </div>
+            <div class="caption">▼ 残像でスピード感を視覚化</div>
+            <div class="stats">
+              <span class="k">HP</span><span class="v">12</span>
+              <span class="k">速度</span><span class="v">95</span>
+              <span class="k">$</span><span class="v">7</span>
+              <span class="k">出現</span><span class="v">Phase 3+</span>
+            </div>
+          </div>
+
+          <!-- ─────────────── ENEMY: tank (tall) ─────────────── -->
+          <div class="gal-cell cell-tank">
+            <div class="header">
+              <h3><span class="dot" style="background:#b01828;"></span>tank</h3>
+              <span class="sub">敵 · 重装甲 · HP 55</span>
+            </div>
+            <div class="desc">
+              二重の三角アウトライン (装甲) + 内部装甲セグメント + プレートボルト + シールド点線リング。重低音 (heavy-breath) の脈動。
+            </div>
+            <div class="stage">
+              <svg viewBox="-70 -70 140 140" width="240" height="240">
+                <defs>
+                  <radialGradient id="gTankHalo" cx="0" cy="0" r="0.5">
+                    <stop offset="0%" stop-color="#b01828" stop-opacity="0.7"/>
+                    <stop offset="100%" stop-color="#b01828" stop-opacity="0"/>
+                  </radialGradient>
+                </defs>
+                <g class="heavy-breath">
+                  <circle r="48" fill="url(#gTankHalo)"/>
+                  <!-- shield ring rotates -->
+                  <circle r="42" fill="none" stroke="#ff4d5a" stroke-width="1.2" opacity="0.4"
+                          stroke-dasharray="4 5"
+                          style="animation: r2-rotate 8s linear infinite; transform-origin: 0 0; transform-box: view-box;"/>
+                  <!-- outer armor outline -->
+                  <polygon points="34,0 -24,-28 -24,28" fill="none" stroke="#b01828" stroke-width="2" opacity="0.85"/>
+                  <!-- main body -->
+                  <polygon points="28,0 -20,-22 -20,22" fill="#b01828"/>
+                  <!-- inner segments -->
+                  <polygon points="20,0 -13,-14 -13,14" fill="#7a0f1c"/>
+                  <!-- plate bolts -->
+                  <circle cx="-9" cy="-13" r="2.2" fill="#cfd6e6" opacity="0.7"/>
+                  <circle cx="-9" cy="13" r="2.2" fill="#cfd6e6" opacity="0.7"/>
+                  <circle cx="6" cy="0" r="2.2" fill="#cfd6e6" opacity="0.7"/>
+                  <!-- core -->
+                  <circle cx="0" cy="0" r="5" fill="#ff4d5a"/>
+                  <circle cx="0" cy="0" r="2" fill="#ffffff" opacity="0.9"/>
+                  <!-- armor highlights (top + bottom edges) -->
+                  <line x1="28" y1="0" x2="-20" y2="-22" stroke="#ff4d5a" stroke-width="0.8" opacity="0.7"/>
+                  <line x1="28" y1="0" x2="-20" y2="22" stroke="#ff4d5a" stroke-width="0.8" opacity="0.7"/>
+                </g>
+              </svg>
+            </div>
+            <div class="caption">▼ シールド点線 + プレート構造で「重い」を演出</div>
+            <div class="stats">
+              <span class="k">HP</span><span class="v">55</span>
+              <span class="k">速度</span><span class="v">38</span>
+              <span class="k">$</span><span class="v">14</span>
+              <span class="k">出現</span><span class="v">Phase 5</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function fitStage() {
+      const stage = document.getElementById('stage');
+      function fit() {
+        const sx = window.innerWidth / 1280;
+        const sy = window.innerHeight / 720;
+        const s = Math.min(sx, sy);
+        stage.style.transform = `scale(${s})`;
+        stage.style.left = ((window.innerWidth - 1280 * s) / 2) + 'px';
+        stage.style.top  = ((window.innerHeight - 720 * s) / 2) + 'px';
+      }
+      fit();
+      window.addEventListener('resize', fit);
+    })();
+  </script>
+</body>
+</html>

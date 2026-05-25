@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>REPEAT scope brackets (Scratch-style indent)</title>
+<link rel="stylesheet" href="../colors_and_type.css"/>
+<style>
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ui);
+    font-family: var(--font-sans);
+    padding: 18px 20px;
+    box-sizing: border-box;
+  }
+  .meta { color: var(--ui-dim); font-size: 11px; font-family: var(--font-mono); margin-top: 10px; }
+</style>
+</head>
+<body>
+
+<style>
+  .code-row {
+    display:flex; align-items:center; height:32px; padding: 0 8px;
+    background: var(--panel-bg); border: 1px solid var(--panel-border);
+    font-family: var(--font-sans); font-size: 13px; color: var(--ui);
+  }
+  .repeat-row {
+    background: color-mix(in srgb, var(--accent) 8%, var(--panel-bg));
+    border-color: color-mix(in srgb, var(--accent) 70%, transparent);
+    font-weight: 700;
+  }
+  .nested { position:relative; padding-left: 26px; margin-top: 4px; }
+  .nested::before {
+    content:""; position:absolute; left:8px; top:0; bottom:14px;
+    width:2px; background: var(--accent); opacity: 0.55;
+  }
+  .nested::after {
+    content:""; position:absolute; left:8px; bottom:14px;
+    width:14px; height:2px; background: var(--accent); opacity: 0.55;
+  }
+  .gap-4 > * + * { margin-top: 4px; }
+</style>
+<div class="gap-4">
+  <div class="code-row repeat-row">繰り返し × 5</div>
+  <div class="nested gap-4">
+    <div class="code-row">攻撃 (最寄り)</div>
+    <div class="code-row">移動 → 基地</div>
+  </div>
+</div>
+<div class="meta">2px teal vertical line + 14px close line. one indent step = 18px.</div>
+
+</body></html>

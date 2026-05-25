@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Halo & glow recipe</title>
+<link rel="stylesheet" href="../colors_and_type.css"/>
+<style>
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ui);
+    font-family: var(--font-sans);
+    padding: 18px 20px;
+    box-sizing: border-box;
+  }
+  .stack > * + * { margin-top: 12px; }
+  .row { display: flex; gap: 10px; align-items: center; }
+  .row.wrap { flex-wrap: wrap; }
+  .meta { color: var(--ui-dim); font-size: 11px; font-family: var(--font-mono); }
+  code { font-family: var(--font-mono); font-size: 11px; color: var(--ui-dim); }
+</style>
+</head>
+<body>
+
+<div style="display:flex; align-items:center; justify-content:space-around; padding:14px 0; height: 120px;">
+  
+    <div style="position:relative; width:100px; display:flex; flex-direction:column; align-items:center; gap:6px;">
+      <div style="position:relative; width:84px; height:84px; display:flex; align-items:center; justify-content:center;">
+        <div style="position:absolute; inset:0; border-radius:50%; background:var(--base); opacity:0.18;"></div>
+        <div style="width:24px; height:24px; border-radius:50%; background:var(--base); position:relative; z-index:1;"></div>
+      </div>
+      <div style="font-size:11px; font-family:var(--font-mono); color:var(--ui-dim);">Base</div>
+    </div>
+    <div style="position:relative; width:100px; display:flex; flex-direction:column; align-items:center; gap:6px;">
+      <div style="position:relative; width:44px; height:44px; display:flex; align-items:center; justify-content:center;">
+        <div style="position:absolute; inset:0; border-radius:50%; background:var(--ally); opacity:0.18;"></div>
+        <div style="width:24px; height:24px; border-radius:50%; background:var(--ally); position:relative; z-index:1;"></div>
+      </div>
+      <div style="font-size:11px; font-family:var(--font-mono); color:var(--ui-dim);">Ship</div>
+    </div>
+    <div style="position:relative; width:100px; display:flex; flex-direction:column; align-items:center; gap:6px;">
+      <div style="position:relative; width:40px; height:40px; display:flex; align-items:center; justify-content:center;">
+        <div style="position:absolute; inset:0; border-radius:50%; background:var(--enemy); opacity:0.18;"></div>
+        <div style="width:20px; height:20px; border-radius:50%; background:var(--enemy); position:relative; z-index:1;"></div>
+      </div>
+      <div style="font-size:11px; font-family:var(--font-mono); color:var(--ui-dim);">Enemy</div>
+    </div>
+    <div style="position:relative; width:100px; display:flex; flex-direction:column; align-items:center; gap:6px;">
+      <div style="position:relative; width:92px; height:92px; display:flex; align-items:center; justify-content:center;">
+        <div style="position:absolute; inset:0; border-radius:50%; background:var(--resource); opacity:0.18;"></div>
+        <div style="width:60px; height:60px; border-radius:50%; background:var(--resource); position:relative; z-index:1;"></div>
+      </div>
+      <div style="font-size:11px; font-family:var(--font-mono); color:var(--ui-dim);">Planet</div>
+    </div>
+</div>
+<div class="meta" style="margin-top:4px;">halo = same-color fill, α 0.12–0.18, drawn behind body. one signature.</div>
+
+</body></html>

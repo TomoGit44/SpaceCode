@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Banners & status text</title>
+<link rel="stylesheet" href="../colors_and_type.css"/>
+<style>
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ui);
+    font-family: var(--font-sans);
+    padding: 18px 20px;
+    box-sizing: border-box;
+  }
+  .meta { color: var(--ui-dim); font-size: 11px; font-family: var(--font-mono); margin-top: 10px; }
+</style>
+</head>
+<body>
+
+<style>
+  .banner-row { display: flex; flex-direction: column; gap: 14px; align-items:center; padding: 18px 0; }
+  .banner-lg {
+    font-size: 36px; font-weight: 700; line-height: 1;
+  }
+  .banner-md { font-size: 18px; }
+  .keybind {
+    display: inline-block; padding: 0 8px; margin: 0 4px;
+    border: 1px solid var(--panel-border); color: var(--ui);
+    font-family: var(--font-mono); font-size: 12px; line-height: 22px;
+  }
+</style>
+<div class="banner-row">
+  <div class="banner-lg" style="color: var(--accent);">▶ PHASE 3 / 5 開始</div>
+  <div class="banner-lg" style="color: var(--enemy);">GAME OVER</div>
+  <div class="banner-lg" style="color: var(--accent);">STAGE CLEAR</div>
+  <div class="banner-md" style="color: var(--ui-dim);">
+    <span class="keybind">R</span> リトライ
+    <span class="keybind">ESC</span> メニューに戻る
+  </div>
+</div>
+
+</body></html>

@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Core palette</title>
+<link rel="stylesheet" href="../colors_and_type.css"/>
+<style>
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ui);
+    font-family: var(--font-sans);
+    padding: 18px 20px;
+    box-sizing: border-box;
+  }
+  .stack > * + * { margin-top: 12px; }
+  .row { display: flex; gap: 10px; align-items: center; }
+  .row.wrap { flex-wrap: wrap; }
+  .meta { color: var(--ui-dim); font-size: 11px; font-family: var(--font-mono); }
+  code { font-family: var(--font-mono); font-size: 11px; color: var(--ui-dim); }
+</style>
+</head>
+<body>
+
+<div style="display:grid; grid-template-columns: repeat(7, 1fr); gap:10px;">
+  
+    <div style="background:#05070d; border:1px solid var(--panel-border); height:90px; display:flex; flex-direction:column; justify-content:flex-end; padding:8px;">
+      <div style="font-weight:700; font-size:12px; color:#cfd6e6;">bg</div>
+      <div style="font-family:var(--font-mono); font-size:10px; color:#6b7da0; opacity:0.85;">#05070d</div>
+    </div>
+    <div style="background:#0a1020; border:1px solid var(--panel-border); height:90px; display:flex; flex-direction:column; justify-content:flex-end; padding:8px;">
+      <div style="font-weight:700; font-size:12px; color:#cfd6e6;">bg-alt</div>
+      <div style="font-family:var(--font-mono); font-size:10px; color:#6b7da0; opacity:0.85;">#0a1020</div>
+    </div>
+    <div style="background:#1a2540; border:1px solid var(--panel-border); height:90px; display:flex; flex-direction:column; justify-content:flex-end; padding:8px;">
+      <div style="font-weight:700; font-size:12px; color:#cfd6e6;">panel-bg</div>
+      <div style="font-family:var(--font-mono); font-size:10px; color:#6b7da0; opacity:0.85;">#1a2540</div>
+    </div>
+    <div style="background:#223151; border:1px solid var(--panel-border); height:90px; display:flex; flex-direction:column; justify-content:flex-end; padding:8px;">
+      <div style="font-weight:700; font-size:12px; color:#cfd6e6;">panel-hover</div>
+      <div style="font-family:var(--font-mono); font-size:10px; color:#6b7da0; opacity:0.85;">#223151</div>
+    </div>
+    <div style="background:#3a4a6a; border:1px solid var(--panel-border); height:90px; display:flex; flex-direction:column; justify-content:flex-end; padding:8px;">
+      <div style="font-weight:700; font-size:12px; color:#cfd6e6;">panel-border</div>
+      <div style="font-family:var(--font-mono); font-size:10px; color:#6b7da0; opacity:0.85;">#3a4a6a</div>
+    </div>
+    <div style="background:#6b7da0; border:1px solid var(--panel-border); height:90px; display:flex; flex-direction:column; justify-content:flex-end; padding:8px;">
+      <div style="font-weight:700; font-size:12px; color:#05070d;">ui-dim</div>
+      <div style="font-family:var(--font-mono); font-size:10px; color:#0a1020; opacity:0.85;">#6b7da0</div>
+    </div>
+    <div style="background:#cfd6e6; border:1px solid var(--panel-border); height:90px; display:flex; flex-direction:column; justify-content:flex-end; padding:8px;">
+      <div style="font-weight:700; font-size:12px; color:#05070d;">ui</div>
+      <div style="font-family:var(--font-mono); font-size:10px; color:#0a1020; opacity:0.85;">#cfd6e6</div>
+    </div>
+</div>
+
+</body></html>

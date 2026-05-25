@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Program code row (the editor primitive)</title>
+<link rel="stylesheet" href="../colors_and_type.css"/>
+<style>
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ui);
+    font-family: var(--font-sans);
+    padding: 18px 20px;
+    box-sizing: border-box;
+  }
+  .meta { color: var(--ui-dim); font-size: 11px; font-family: var(--font-mono); margin-top: 10px; }
+</style>
+</head>
+<body>
+
+<style>
+  .code-row {
+    display:flex; align-items:center; height:36px;
+    padding: 0 8px; gap: 8px;
+    background: var(--panel-bg); opacity: 0.95;
+    border: 1px solid var(--panel-border);
+    font-family: var(--font-sans); font-size: 14px; color: var(--ui);
+  }
+  .code-row.running {
+    background: color-mix(in srgb, var(--accent) 16%, var(--panel-bg));
+    border-color: color-mix(in srgb, var(--accent) 70%, transparent);
+  }
+  .code-row.selected {
+    background: color-mix(in srgb, var(--ally) 22%, var(--panel-bg));
+    border-color: var(--ally); border-width: 2px;
+  }
+  .code-row.repeat {
+    background: color-mix(in srgb, var(--accent) 8%, var(--panel-bg));
+    border-color: color-mix(in srgb, var(--accent) 70%, transparent);
+    font-weight: 700;
+  }
+  .cursor { color: var(--accent); font-weight: 700; }
+  .actions { margin-left:auto; display:flex; gap:6px; }
+  .a-btn {
+    width:24px; height:24px; display:flex; align-items:center; justify-content:center;
+    background: var(--panel-bg); border:1px solid color-mix(in srgb, var(--ally) 70%, transparent);
+    color: var(--ui); font-size:13px; font-weight:700; cursor:pointer;
+  }
+  .stack > * + * { margin-top: 4px; }
+</style>
+<div class="stack">
+  <div class="code-row">移動 → 惑星A
+    <div class="actions"><div class="a-btn">▲</div><div class="a-btn">▼</div><div class="a-btn">✕</div></div>
+  </div>
+  <div class="code-row running"><span class="cursor">▶</span> 採掘: 惑星A
+    <div class="actions"><div class="a-btn">▲</div><div class="a-btn">▼</div><div class="a-btn">✕</div></div>
+  </div>
+  <div class="code-row selected">移動 → 基地
+    <div class="actions"><div class="a-btn">▲</div><div class="a-btn">▼</div><div class="a-btn">✕</div></div>
+  </div>
+  <div class="code-row repeat">繰り返し × 3
+    <div class="actions"><div class="a-btn">▲</div><div class="a-btn">▼</div><div class="a-btn">✕</div></div>
+  </div>
+</div>
+<div class="meta">default · running (teal fill) · selected (ally fill, 2px stroke) · repeat (italic-bold accent stroke)</div>
+
+</body></html>

@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Radius & strokes</title>
+<link rel="stylesheet" href="../colors_and_type.css"/>
+<style>
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ui);
+    font-family: var(--font-sans);
+    padding: 18px 20px;
+    box-sizing: border-box;
+  }
+  .stack > * + * { margin-top: 12px; }
+  .row { display: flex; gap: 10px; align-items: center; }
+  .row.wrap { flex-wrap: wrap; }
+  .meta { color: var(--ui-dim); font-size: 11px; font-family: var(--font-mono); }
+  code { font-family: var(--font-mono); font-size: 11px; color: var(--ui-dim); }
+</style>
+</head>
+<body>
+
+<div class="stack">
+  <div class="row wrap" style="gap:12px;">
+    <div style="background:var(--panel-bg); border:1px solid var(--ally); padding:10px 16px; font-size:12px;">radius 0 · canvas</div>
+    <div style="background:var(--panel-bg); border:1px solid var(--ally); border-radius:2px; padding:10px 16px; font-size:12px;">radius 2 · web max</div>
+  </div>
+  <div class="row wrap" style="gap:12px; margin-top:8px;">
+    <div style="background:var(--panel-bg); border:1px solid color-mix(in srgb, var(--ally) 40%, transparent); padding:10px 16px; font-size:12px;">stroke α 0.4</div>
+    <div style="background:var(--panel-bg); border:1px solid color-mix(in srgb, var(--ally) 70%, transparent); padding:10px 16px; font-size:12px;">stroke α 0.7 · default</div>
+    <div style="background:var(--panel-bg); border:1px solid var(--ally); padding:10px 16px; font-size:12px;">stroke α 1.0 · selected</div>
+  </div>
+  <div class="row wrap" style="gap:12px; margin-top:8px;">
+    <div style="background:var(--panel-bg); border:1px solid var(--ally); padding:10px 16px; font-size:12px;">1px default</div>
+    <div style="background:var(--panel-bg); border:2px solid var(--ally); padding:10px 16px; font-size:12px;">2px emphasis</div>
+  </div>
+</div>
+
+</body></html>

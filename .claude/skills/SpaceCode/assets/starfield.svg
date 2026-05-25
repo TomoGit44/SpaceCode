@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200" aria-label="Starfield">
+  <rect width="200" height="200" fill="#05070d"></rect>
+  <circle cx="177.2" cy="163.5" r="0.8" fill="#1a2540" opacity="0.55"></circle>
+  <circle cx="154.0" cy="112.4" r="0.8" fill="#1a2540" opacity="0.55"></circle>
+  <circle cx="119.2" cy="10.8" r="0.8" fill="#1a2540" opacity="0.55"></circle>
+  <circle cx="156.2" cy="142.1" r="0.8" fill="#1a2540" opacity="0.55"></circle>
+  <circle cx="148.2" cy="189.5" r="0.8" fill="#1a2540" opacity="0.55"></circle>
+  <circle cx="178.7" cy="36.5" r="1.4" fill="#6b7da0" opacity="0.9"></circle>
+  <circle cx="131.0" cy="166.4" r="1.4" fill="#6b7da0" opacity="0.9"></circle>
+  <circle cx="88.3" cy="62.5" r="0.8" fill="#1a2540" opacity="0.55"></circle>
+  <circle cx="134.1" cy="8.1" r="0.8" fill="#1a2540" opacity="0.55"></circle>
+  <circle cx="151.6" cy="86.6" r="0.8" fill="#1a2540" opacity="0.55"></circle>
+  <circle cx="24.3" cy="181.3" r="0.8" fill="#1a2540" opacity="0.55"></circle>
+  <circle cx="35.3" cy="175.5" r="0.8" fill="#1a2540" opacity="0.55"></circle>
+  <circle cx="68.1" cy="152.6" r="0.8" fill="#1a2540" opacity="0.55"></circle>
+  <circle cx="6.0" cy="195.9" r="0.8" fill="#1a2540" opacity="0.55"></circle>
+  <circle cx="132.4" cy="188.8" r="0.8" fill="#1a2540" opacity="0.55"></circle>
+  <circle cx="130.5" cy="14.5" r="1.4" fill="#6b7da0" opacity="0.9"></circle>
+  <circle cx="83.6" cy="156.4" r="0.8" fill="#1a2540" opacity="0.55"></circle>
+  <circle cx="75.2" cy="97.9" r="1.4" fill="#6b7da0" opacity="0.9"></circle>
+</svg>

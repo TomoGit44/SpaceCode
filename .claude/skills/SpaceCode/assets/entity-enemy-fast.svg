@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120" aria-label="Enemy: fast">
+  <circle cx="60" cy="60" r="32" fill="#ff9040" opacity="0.18"></circle>
+  <polygon points="84.00,60.00 43.20,40.80 43.20,79.20" fill="#ff9040"></polygon>
+  <circle cx="60" cy="60" r="6" fill="#ffffff" opacity="0.9"></circle>
+</svg>

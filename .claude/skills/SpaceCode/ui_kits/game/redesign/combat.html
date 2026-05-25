@@ -1,0 +1,676 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>SpaceCode — Combat lab</title>
+  <link rel="stylesheet" href="../../../colors_and_type.css"/>
+  <link rel="stylesheet" href="styles.css"/>
+  <style>
+    /* ─── Shared SVG filter glow defs are inlined per-shot ─── */
+
+    /* ─── Lab playfield ────────────────────────────────── */
+    .lab {
+      position: absolute; inset: 48px 0 0 0;
+      overflow: hidden;
+    }
+
+    /* Base turret */
+    .lab-base { position: absolute; left: 50%; top: 52%; transform: translate(-50%, -50%); width: 260px; height: 260px; }
+    .lab-base svg { display: block; }
+
+    /* Ship */
+    .lab-ship { position: absolute; width: 70px; height: 70px; }
+
+    /* Enemy slots */
+    .lab-enemy { position: absolute; width: 70px; height: 70px; cursor: crosshair; }
+    .lab-enemy.shake-on  { animation: r2-shake 240ms var(--ease-out); }
+    .lab-enemy.shake-on-strong { animation: r2-shake-strong 380ms var(--ease-out); }
+
+    /* HP bars over enemies */
+    .lab-hpbar {
+      position: absolute; left: 0; right: 0; top: -10px;
+      height: 3px; background: rgba(255,255,255,0.08);
+    }
+    .lab-hpbar > div { height: 100%; transition: width 220ms var(--ease-out); }
+
+    /* Sidebar */
+    .lab-side {
+      position: absolute; right: 16px; top: 64px; bottom: 16px;
+      width: 280px;
+      display: flex; flex-direction: column; gap: 14px;
+      z-index: 30;
+    }
+    .lab-side .r2-panel {
+      padding-bottom: 12px;
+    }
+    .lab-side .r2-btn { width: 100%; margin-bottom: 6px; }
+    .lab-side .body { padding: 10px 14px 0; font-size: 12px; color: var(--ui-dim); line-height: 1.55; }
+
+    /* Caption tags */
+    .lab-cap {
+      position: absolute;
+      font-family: var(--font-mono); font-size: 10px;
+      color: var(--ui-dim); letter-spacing: 0.06em; text-transform: uppercase;
+      white-space: nowrap;
+      pointer-events: none;
+    }
+
+    /* Recoil */
+    @keyframes r2-recoil-x {
+      0% { transform: translate(0,0); }
+      30% { transform: translate(-6px, 0); }
+      100% { transform: translate(0,0); }
+    }
+    .recoil { animation: r2-recoil-x 220ms var(--ease-out); }
+
+    /* Toast */
+    .lab-toast {
+      position: absolute; bottom: 16px; left: 16px;
+      max-width: 360px;
+      background: rgba(10,16,32,0.92);
+      border: 1px solid var(--panel-border);
+      padding: 10px 14px;
+      font-size: 12px; color: var(--ui);
+      z-index: 40;
+    }
+    .lab-toast .key { color: var(--accent); font-family: var(--font-mono); }
+  </style>
+</head>
+<body>
+  <div class="r2-host">
+    <div class="r2-stage" id="stage">
+      <div class="r2-bar">
+        <span class="crumb"><a href="index.html">← Redesign hub</a></span>
+        <span class="sep"></span>
+        <span class="title">01 · Combat lab</span>
+        <span class="hint">射撃 → <kbd>F</kbd> · 全弾 → <kbd>Space</kbd> · リセット → <kbd>R</kbd></span>
+      </div>
+
+      <div class="r2-starfield"></div>
+
+      <div class="lab" id="lab">
+        <!-- Base turret (player) -->
+        <div class="lab-base" id="base">
+          <svg viewBox="-130 -130 260 260" width="260" height="260">
+            <defs>
+              <radialGradient id="baseHaloG" cx="0" cy="0" r="0.5">
+                <stop offset="0%" stop-color="#a07bff" stop-opacity="0.55"/>
+                <stop offset="60%" stop-color="#a07bff" stop-opacity="0.10"/>
+                <stop offset="100%" stop-color="#a07bff" stop-opacity="0"/>
+              </radialGradient>
+              <filter id="baseGlow" x="-50%" y="-50%" width="200%" height="200%">
+                <feGaussianBlur stdDeviation="3"/>
+              </filter>
+            </defs>
+
+            <!-- range ring (dashed) -->
+            <circle r="120" fill="none" stroke="#3ee0c5" stroke-width="1" opacity="0.2"/>
+            <circle r="120" fill="none" stroke="#3ee0c5" stroke-width="1.5" opacity="0.4"
+                    stroke-dasharray="4 6"/>
+
+            <!-- soft halo -->
+            <circle r="80" fill="url(#baseHaloG)"/>
+
+            <!-- 8-segment rotating ring -->
+            <g style="animation: r2-rotate 16s linear infinite; transform-origin: 0 0; transform-box: view-box;">
+              <g stroke="#5a3ec9" stroke-width="2.5" fill="none">
+                <path d="M -42 0 A 42 42 0 0 1 -30 -30" opacity="0.85"/>
+                <path d="M -22 -36 A 42 42 0 0 1 0 -42" opacity="0.85"/>
+                <path d="M 8 -41 A 42 42 0 0 1 30 -30" opacity="0.85"/>
+                <path d="M 36 -22 A 42 42 0 0 1 42 0" opacity="0.85"/>
+                <path d="M 42 8 A 42 42 0 0 1 30 30" opacity="0.85"/>
+                <path d="M 22 36 A 42 42 0 0 1 0 42" opacity="0.85"/>
+                <path d="M -8 41 A 42 42 0 0 1 -30 30" opacity="0.85"/>
+                <path d="M -36 22 A 42 42 0 0 1 -42 0" opacity="0.85"/>
+              </g>
+              <!-- node markers at segment gaps -->
+              <g fill="#a07bff">
+                <circle cx="0" cy="-46" r="2.5"/>
+                <circle cx="33" cy="-33" r="2.5"/>
+                <circle cx="46" cy="0" r="2.5"/>
+                <circle cx="33" cy="33" r="2.5"/>
+                <circle cx="0" cy="46" r="2.5"/>
+                <circle cx="-33" cy="33" r="2.5"/>
+                <circle cx="-46" cy="0" r="2.5"/>
+                <circle cx="-33" cy="-33" r="2.5"/>
+              </g>
+            </g>
+
+            <!-- inner counter-rotating ring -->
+            <g style="animation: r2-rotate-ccw 24s linear infinite; transform-origin: 0 0; transform-box: view-box;">
+              <circle r="30" fill="none" stroke="#a07bff" stroke-width="1.2" opacity="0.55"
+                      stroke-dasharray="2 5"/>
+            </g>
+
+            <!-- hex body -->
+            <polygon points="0,-26 22,-13 22,13 0,26 -22,13 -22,-13"
+                     fill="#1a1235" stroke="#a07bff" stroke-width="1.5" opacity="0.95"/>
+            <polygon points="0,-18 15.5,-9 15.5,9 0,18 -15.5,9 -15.5,-9"
+                     fill="#a07bff" opacity="0.5"/>
+
+            <!-- pulsing core -->
+            <circle r="10" fill="#3ee0c5"
+                    style="animation: r2-pulse-glow 1600ms ease-in-out infinite;"/>
+            <circle r="3.5" fill="#ffffff"/>
+
+            <!-- energy cross arms -->
+            <g stroke="#ffffff" stroke-width="1" opacity="0.7" stroke-linecap="round">
+              <line x1="-22" y1="0" x2="22" y2="0"/>
+              <line x1="0" y1="-22" x2="0" y2="22"/>
+            </g>
+
+            <!-- turret mount + dual barrels -->
+            <g id="barrelGroup">
+              <circle r="8" fill="#0a1020" stroke="#a07bff" stroke-width="1"/>
+              <rect x="-1.5" y="-12" width="3" height="22" fill="#cfd6e6" opacity="0.95"/>
+              <rect x="-2" y="8" width="4" height="6" fill="#3ee0c5"/>
+              <!-- side accents -->
+              <rect x="-7" y="-2" width="3" height="4" fill="#a07bff" opacity="0.8"/>
+              <rect x="4" y="-2" width="3" height="4" fill="#a07bff" opacity="0.8"/>
+            </g>
+          </svg>
+        </div>
+        <div class="lab-cap" style="left:50%; top: calc(52% + 145px); transform: translateX(-50%);">基地 · Base</div>
+
+        <!-- Ship (player ship, supplements base attacks) -->
+        <div class="lab-ship" id="ship" style="left: 38%; top: 32%;">
+          <svg viewBox="-35 -35 70 70" width="70" height="70">
+            <defs>
+              <radialGradient id="shipHaloG" cx="0" cy="0" r="0.5">
+                <stop offset="0%" stop-color="#4ea1ff" stop-opacity="0.65"/>
+                <stop offset="100%" stop-color="#4ea1ff" stop-opacity="0"/>
+              </radialGradient>
+              <filter id="shipGlow" x="-50%" y="-50%" width="200%" height="200%">
+                <feGaussianBlur stdDeviation="1.5"/>
+              </filter>
+            </defs>
+            <circle r="22" fill="url(#shipHaloG)"/>
+            <!-- thrust trail -->
+            <g id="thrustTrail" opacity="0">
+              <ellipse cx="-18" cy="0" rx="10" ry="3.5" fill="#4ea1ff" opacity="0.6"/>
+              <ellipse cx="-13" cy="0" rx="6" ry="2.5" fill="#ffffff" opacity="0.7"/>
+            </g>
+            <!-- body — angular fighter -->
+            <polygon points="14,0 -8,-9 -3,0 -8,9" fill="#4ea1ff"/>
+            <!-- wing tips -->
+            <polygon points="-8,-9 -12,-13 -3,-7" fill="#4ea1ff" opacity="0.85"/>
+            <polygon points="-8,9 -12,13 -3,7" fill="#4ea1ff" opacity="0.85"/>
+            <!-- cockpit -->
+            <circle cx="2" cy="0" r="2.5" fill="#3ee0c5"/>
+            <circle cx="2" cy="0" r="1" fill="#ffffff"/>
+            <!-- nose marker -->
+            <rect x="11" y="-0.5" width="4" height="1" fill="#ffffff"/>
+          </svg>
+        </div>
+        <div class="lab-cap" style="left: 38%; top: calc(32% + 42px); transform: translateX(-50%);">宇宙船 · Ship</div>
+
+        <!-- Enemies — three variants -->
+        <div class="lab-enemy" id="e-basic" style="left: 14%; top: 18%;" data-hp="20" data-max="20" data-type="basic">
+          <div class="lab-hpbar"><div style="width:100%; background:#3ee0c5;"></div></div>
+          <svg viewBox="-35 -35 70 70" width="70" height="70">
+            <defs>
+              <radialGradient id="eBasicHalo" cx="0" cy="0" r="0.5">
+                <stop offset="0%" stop-color="#ff4d5a" stop-opacity="0.65"/>
+                <stop offset="100%" stop-color="#ff4d5a" stop-opacity="0"/>
+              </radialGradient>
+            </defs>
+            <circle r="22" fill="url(#eBasicHalo)" style="animation: r2-pulse-soft 1400ms ease-in-out infinite;"/>
+            <g style="animation: r2-pulse-soft 1400ms ease-in-out infinite;">
+              <polygon points="14,0 -10,-11 -10,11" fill="#ff4d5a"/>
+              <!-- side claws -->
+              <polygon points="-10,-11 -14,-15 -5,-9" fill="#ff4d5a" opacity="0.9"/>
+              <polygon points="-10,11 -14,15 -5,9" fill="#ff4d5a" opacity="0.9"/>
+              <!-- core eye -->
+              <circle cx="0" cy="0" r="3" fill="#ffffff" opacity="0.85"/>
+              <circle cx="0" cy="0" r="1.2" fill="#ff4d5a"/>
+            </g>
+          </svg>
+        </div>
+        <div class="lab-cap" style="left: 14%; top: calc(18% + 42px); transform: translateX(-50%);">basic · HP 20</div>
+
+        <div class="lab-enemy" id="e-fast" style="left: 14%; top: 78%;" data-hp="12" data-max="12" data-type="fast">
+          <div class="lab-hpbar"><div style="width:100%; background:#3ee0c5;"></div></div>
+          <svg viewBox="-35 -35 70 70" width="70" height="70">
+            <defs>
+              <radialGradient id="eFastHalo" cx="0" cy="0" r="0.5">
+                <stop offset="0%" stop-color="#ff9040" stop-opacity="0.7"/>
+                <stop offset="100%" stop-color="#ff9040" stop-opacity="0"/>
+              </radialGradient>
+              <linearGradient id="speedLine" x1="0" y1="0" x2="-1" y2="0">
+                <stop offset="0%" stop-color="#ff9040" stop-opacity="0.8"/>
+                <stop offset="100%" stop-color="#ff9040" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+            <circle r="18" fill="url(#eFastHalo)"/>
+            <!-- speed lines extending back -->
+            <g opacity="0.85">
+              <rect x="-26" y="-1" width="16" height="1" fill="url(#speedLine)"/>
+              <rect x="-22" y="-5" width="12" height="1" fill="url(#speedLine)"/>
+              <rect x="-22" y="5" width="12" height="1" fill="url(#speedLine)"/>
+            </g>
+            <!-- narrow, swept body -->
+            <polygon points="16,0 -8,-7 -2,0 -8,7" fill="#ff9040"/>
+            <polygon points="-8,-7 -12,-9 -3,-5" fill="#ff9040" opacity="0.7"/>
+            <polygon points="-8,7 -12,9 -3,5" fill="#ff9040" opacity="0.7"/>
+            <!-- piercing tip -->
+            <rect x="15" y="-0.5" width="6" height="1" fill="#ffffff"/>
+            <circle cx="0" cy="0" r="2" fill="#ffffff"/>
+          </svg>
+        </div>
+        <div class="lab-cap" style="left: 14%; top: calc(78% + 42px); transform: translateX(-50%);">fast · HP 12 · 速 95</div>
+
+        <div class="lab-enemy" id="e-tank" style="left: 64%; top: 48%; width: 96px; height: 96px;" data-hp="55" data-max="55" data-type="tank">
+          <div class="lab-hpbar" style="left:8px; right:8px; top:-12px; height:4px;"><div style="width:100%; background:#3ee0c5;"></div></div>
+          <svg viewBox="-48 -48 96 96" width="96" height="96">
+            <defs>
+              <radialGradient id="eTankHalo" cx="0" cy="0" r="0.5">
+                <stop offset="0%" stop-color="#b01828" stop-opacity="0.7"/>
+                <stop offset="100%" stop-color="#b01828" stop-opacity="0"/>
+              </radialGradient>
+            </defs>
+            <circle r="30" fill="url(#eTankHalo)" style="animation: r2-pulse-soft 2200ms ease-in-out infinite;"/>
+            <!-- shield ring (faint) -->
+            <circle r="26" fill="none" stroke="#ff4d5a" stroke-width="1" opacity="0.35"
+                    stroke-dasharray="3 4"
+                    style="animation: r2-rotate 8s linear infinite; transform-origin: 0 0; transform-box: view-box;"/>
+            <!-- outer armor plating (rotated outline) -->
+            <polygon points="22,0 -16,-19 -16,19" fill="none" stroke="#b01828" stroke-width="1.5" opacity="0.9"/>
+            <!-- main body -->
+            <polygon points="18,0 -13,-15 -13,15" fill="#b01828"/>
+            <!-- inner armor segments -->
+            <polygon points="12,0 -8,-9 -8,9" fill="#7a0f1c"/>
+            <!-- 2 plate bolts -->
+            <circle cx="-6" cy="-8" r="1.5" fill="#cfd6e6" opacity="0.6"/>
+            <circle cx="-6" cy="8" r="1.5" fill="#cfd6e6" opacity="0.6"/>
+            <!-- core -->
+            <circle cx="0" cy="0" r="3.5" fill="#ff4d5a"/>
+            <circle cx="0" cy="0" r="1.5" fill="#ffffff" opacity="0.9"/>
+          </svg>
+        </div>
+        <div class="lab-cap" style="left: 64%; top: calc(48% + 58px); transform: translateX(-50%);">tank · HP 55 · 重装甲</div>
+
+        <!-- effect layer -->
+        <div id="fx" style="position:absolute; inset:0; pointer-events:none;"></div>
+      </div>
+
+      <!-- Side controls -->
+      <div class="lab-side">
+        <div class="r2-panel">
+          <div class="r2-panel-title">射撃テスト</div>
+          <div class="body" style="padding-bottom: 8px;">
+            敵をクリック → 基地砲塔が射撃 + マズルフラッシュ + 弾道 + 着弾エフェクト。
+          </div>
+          <div style="padding: 6px 12px 0;">
+            <button class="r2-btn r2-btn--accent" onclick="fireAt('e-basic', 'turret')">▶ 基地 → basic</button>
+            <button class="r2-btn" onclick="fireAt('e-fast', 'turret')">▶ 基地 → fast</button>
+            <button class="r2-btn r2-btn--danger" onclick="fireAt('e-tank', 'turret')">▶ 基地 → tank</button>
+            <button class="r2-btn" onclick="shipFireAt('e-tank')">▶ Ship → tank</button>
+            <button class="r2-btn r2-btn--gold" onclick="volley()">▶ 全機一斉射 (volley)</button>
+            <button class="r2-btn" onclick="resetEnemies()">↻ HP リセット</button>
+          </div>
+        </div>
+
+        <div class="r2-panel">
+          <div class="r2-panel-title">エフェクト凡例</div>
+          <div class="body">
+            <div style="display:grid; grid-template-columns: 16px 1fr; gap:8px; align-items:center; margin-bottom:6px;">
+              <div style="width:10px; height:10px; border-radius:50%; background:#3ee0c5; box-shadow:0 0 10px #3ee0c5;"></div>
+              <span>基地砲塔弾 — エネルギーボルト · 大</span>
+            </div>
+            <div style="display:grid; grid-template-columns: 16px 1fr; gap:8px; align-items:center; margin-bottom:6px;">
+              <div style="width:8px; height:8px; border-radius:50%; background:#4ea1ff; box-shadow:0 0 8px #4ea1ff;"></div>
+              <span>宇宙船弾 — プラズマ · 小</span>
+            </div>
+            <div style="display:grid; grid-template-columns: 16px 1fr; gap:8px; align-items:center; margin-bottom:6px;">
+              <div style="width:12px; height:12px; border-radius:50%; background:#ff4d5a; box-shadow:0 0 10px #ff4d5a;"></div>
+              <span>敵弾 (将来) — 警戒の赤</span>
+            </div>
+            <div style="margin-top:8px; color:var(--ui-dim); font-size:11px; line-height:1.5;">
+              tank 命中時は <span style="color:var(--enemy);">強震動</span> + 装甲スパーク多め。fast はスパーク少なめ。basic は標準。
+            </div>
+          </div>
+        </div>
+
+        <div class="r2-panel">
+          <div class="r2-panel-title">変更点 (vs 現状)</div>
+          <div class="body">
+            • マズルフラッシュ: 3 層 (core / halo / 4-rays) + 衝撃波リング<br/>
+            • 弾: glow フィルタ + 軌跡 (尾を引く)<br/>
+            • 着弾: スパーク + 衝撃波 + ダメージ数字 + シェイク<br/>
+            • 砲塔: 8 セグメントリング + 反対回りインナー + ヘックスコア
+          </div>
+        </div>
+      </div>
+
+      <div class="lab-toast">
+        <span class="key">F</span> 押下で「基地 → 最寄り敵」自動射撃 ·
+        <span class="key">Space</span> で全機 volley ·
+        <span class="key">R</span> でリセット ·
+        敵クリックで直接射撃
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ─── Letterbox scaling ────────────────────────────────
+    (function fitStage() {
+      const stage = document.getElementById('stage');
+      function fit() {
+        const sx = window.innerWidth / 1280;
+        const sy = window.innerHeight / 720;
+        const s = Math.min(sx, sy);
+        stage.style.transform = `scale(${s})`;
+        stage.style.left = ((window.innerWidth - 1280 * s) / 2) + 'px';
+        stage.style.top  = ((window.innerHeight - 720 * s) / 2) + 'px';
+      }
+      fit();
+      window.addEventListener('resize', fit);
+    })();
+
+    // ─── Geometry helpers ────────────────────────────────
+    const fxLayer = document.getElementById('fx');
+    const lab = document.getElementById('lab');
+
+    function center(el) {
+      const r = el.getBoundingClientRect();
+      const labR = lab.getBoundingClientRect();
+      return { x: (r.left - labR.left + r.width / 2) / (labR.width / 1280),
+               y: (r.top  - labR.top  + r.height / 2) / (labR.height / 672) };
+    }
+    // lab is 672 high (720 - 48 toolbar). center() returns coords in lab's logical space.
+
+    function spawn(html, parent = fxLayer) {
+      const tpl = document.createElement('div');
+      tpl.innerHTML = html.trim();
+      const node = tpl.firstChild;
+      parent.appendChild(node);
+      return node;
+    }
+
+    function disposeAfter(el, ms) {
+      setTimeout(() => { if (el && el.parentNode) el.parentNode.removeChild(el); }, ms);
+    }
+
+    // ─── Muzzle flash (3 layers + rays + shockwave) ─────
+    function muzzleFlash(x, y, angle, color = '#3ee0c5') {
+      const wrapper = spawn(`<div style="position:absolute; left:${x}px; top:${y}px; width:0; height:0; transform: rotate(${angle}rad);"></div>`);
+      // Core
+      spawn(`<div class="r2-muzzle" style="
+        width: 28px; height: 28px; border-radius: 50%;
+        background: radial-gradient(circle, #ffffff 0%, ${color} 50%, transparent 100%);
+        filter: blur(0.5px);
+        animation: r2-mz-core 220ms cubic-bezier(0.22,1,0.36,1) forwards;
+      "></div>`, wrapper);
+      // Halo
+      spawn(`<div class="r2-muzzle" style="
+        width: 44px; height: 44px; border-radius: 50%;
+        background: radial-gradient(circle, ${color}aa 0%, ${color}33 60%, transparent 100%);
+        animation: r2-mz-halo 320ms cubic-bezier(0.22,1,0.36,1) forwards;
+      "></div>`, wrapper);
+      // Shockwave ring (white outline)
+      spawn(`<div class="r2-shock" style="
+        width: 38px; height: 38px; border-radius: 50%;
+        border: 2px solid ${color}; box-sizing: border-box;
+        animation: r2-shock 540ms cubic-bezier(0.22,1,0.36,1) forwards;
+      "></div>`, wrapper);
+      // 4 directional rays
+      for (let i = 0; i < 4; i++) {
+        const a = (i * Math.PI) / 2;
+        spawn(`<div class="r2-ray" style="
+          position:absolute; left:50%; top:50%;
+          width: 2px; height: 22px;
+          background: linear-gradient(${color}, transparent);
+          transform: translate(-50%, -50%) rotate(${a}rad) translateY(-14px);
+          transform-origin: 50% 14px;
+          animation: r2-ray 220ms cubic-bezier(0.22,1,0.36,1) forwards;
+        "></div>`, wrapper);
+      }
+      disposeAfter(wrapper, 600);
+    }
+
+    // ─── Bullet (animated translate to target) ──────────
+    function fireBullet(fromX, fromY, toX, toY, kind = 'turret') {
+      const cls = kind === 'turret' ? 'turret' : (kind === 'ally' ? 'ally' : 'enemy');
+      const bullet = spawn(`<div class="r2-bullet ${cls}" style="left:${fromX}px; top:${fromY}px;"></div>`);
+      const dx = toX - fromX, dy = toY - fromY;
+      const dist = Math.hypot(dx, dy);
+      const speed = kind === 'turret' ? 1900 : 2400; // px/sec
+      const duration = Math.max(80, dist / speed * 1000);
+
+      // Trail: spawn fading copies behind at intervals
+      const trailInt = setInterval(() => {
+        const r = bullet.getBoundingClientRect();
+        const labR = lab.getBoundingClientRect();
+        const tx = (r.left - labR.left + r.width / 2) / (labR.width / 1280);
+        const ty = (r.top - labR.top + r.height / 2) / (labR.height / 672);
+        const tail = spawn(`<div class="r2-bullet ${cls}" style="
+          left:${tx}px; top:${ty}px; opacity: 0.55;
+          transition: opacity 260ms linear, transform 260ms linear;
+        "></div>`);
+        requestAnimationFrame(() => {
+          tail.style.opacity = '0';
+          tail.style.transform = 'translate(-50%, -50%) scale(0.4)';
+        });
+        disposeAfter(tail, 320);
+      }, 20);
+
+      // Animate the bullet
+      bullet.style.transition = `transform ${duration}ms linear`;
+      requestAnimationFrame(() => {
+        bullet.style.transform = `translate(${dx - 0}px, ${dy - 0}px) translate(-50%, -50%)`;
+      });
+      // Actually we need to animate in terms of left/top because of the -50% trick.
+      // Use a simpler RAF animation:
+      const start = performance.now();
+      function step(now) {
+        const t = Math.min(1, (now - start) / duration);
+        bullet.style.left = (fromX + dx * t) + 'px';
+        bullet.style.top  = (fromY + dy * t) + 'px';
+        if (t < 1) requestAnimationFrame(step);
+        else {
+          clearInterval(trailInt);
+          disposeAfter(bullet, 0);
+        }
+      }
+      bullet.style.transition = '';
+      requestAnimationFrame(step);
+
+      return duration;
+    }
+
+    // ─── Hit effect (shockwave + sparks + damage number + shake) ─
+    function hitEffect(target, damage, kind = 'basic') {
+      const c = center(target);
+      const x = c.x, y = c.y;
+
+      const sparkCount = kind === 'tank' ? 12 : (kind === 'fast' ? 5 : 8);
+      const sparkColor = kind === 'tank' ? '#ffd24a' : '#ffffff';
+      const sparkRange = kind === 'tank' ? [22, 38] : (kind === 'fast' ? [12, 24] : [16, 30]);
+
+      // Impact white flash
+      spawn(`<div class="r2-muzzle" style="
+        position:absolute; left:${x}px; top:${y}px;
+        width: 36px; height: 36px; border-radius: 50%;
+        background: radial-gradient(circle, #ffffff 0%, #ffffff66 50%, transparent 100%);
+        animation: r2-mz-core 220ms cubic-bezier(0.22,1,0.36,1) forwards;
+      "></div>`);
+
+      // Shockwave ring
+      spawn(`<div class="r2-shock" style="
+        position:absolute; left:${x}px; top:${y}px;
+        width: 30px; height: 30px; border-radius: 50%;
+        border: 2px solid #ffffff;
+        animation: r2-shock 540ms cubic-bezier(0.22,1,0.36,1) forwards;
+      "></div>`);
+
+      // Sparks
+      for (let i = 0; i < sparkCount; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const d = sparkRange[0] + Math.random() * (sparkRange[1] - sparkRange[0]);
+        const dx = Math.cos(a) * d, dy = Math.sin(a) * d;
+        spawn(`<div class="r2-particle" style="
+          left:${x}px; top:${y}px;
+          background: ${sparkColor};
+          width: ${kind === 'tank' ? 3 : 2}px; height: ${kind === 'tank' ? 3 : 2}px;
+          --dx: ${dx}px; --dy: ${dy}px;
+          animation-duration: ${kind === 'tank' ? 600 : 420}ms;
+        "></div>`);
+      }
+
+      // Damage number
+      const isCrit = damage >= 25;
+      spawn(`<div class="r2-dmg${isCrit ? ' crit' : ''}" style="left:${x}px; top:${y - 12}px;">${damage}</div>`);
+
+      // Shake target
+      target.classList.remove('shake-on', 'shake-on-strong');
+      void target.offsetWidth; // restart animation
+      target.classList.add(kind === 'tank' ? 'shake-on-strong' : 'shake-on');
+
+      // Apply damage
+      const cur = +target.dataset.hp - damage;
+      const max = +target.dataset.max;
+      target.dataset.hp = Math.max(0, cur);
+      const bar = target.querySelector('.lab-hpbar > div');
+      const ratio = Math.max(0, cur / max);
+      bar.style.width = (ratio * 100) + '%';
+      bar.style.background = ratio > 0.5 ? '#3ee0c5' : ratio > 0.25 ? '#ffd24a' : '#ff4d5a';
+
+      // Death
+      if (cur <= 0) {
+        target.style.transition = 'opacity 280ms ease-out, transform 280ms ease-out';
+        target.style.opacity = '0';
+        target.style.transform = 'scale(1.8)';
+        // Big explosion
+        bigExplosion(x, y, kind);
+      }
+
+      disposeAfter(target.parentNode, 1500);
+    }
+
+    function bigExplosion(x, y, kind) {
+      const color = kind === 'tank' ? '#ff4d5a' : (kind === 'fast' ? '#ff9040' : '#ff4d5a');
+      // Multi-ring shockwave
+      [0, 80, 160].forEach((delay, i) => {
+        setTimeout(() => {
+          spawn(`<div class="r2-shock" style="
+            position:absolute; left:${x}px; top:${y}px;
+            width: ${40 + i * 10}px; height: ${40 + i * 10}px; border-radius: 50%;
+            border: ${2 - i * 0.4}px solid ${color};
+            animation: r2-shock ${600 + i * 100}ms cubic-bezier(0.22,1,0.36,1) forwards;
+          "></div>`);
+        }, delay);
+      });
+      // Bright core flash
+      spawn(`<div class="r2-muzzle" style="
+        position:absolute; left:${x}px; top:${y}px;
+        width: 80px; height: 80px; border-radius: 50%;
+        background: radial-gradient(circle, #ffffff 0%, ${color} 40%, transparent 100%);
+        animation: r2-mz-halo 520ms cubic-bezier(0.22,1,0.36,1) forwards;
+      "></div>`);
+      // More sparks
+      for (let i = 0; i < 20; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const d = 30 + Math.random() * 60;
+        spawn(`<div class="r2-particle" style="
+          left:${x}px; top:${y}px;
+          background: ${i % 3 === 0 ? '#ffd24a' : color};
+          width: 3px; height: 3px;
+          --dx: ${Math.cos(a)*d}px; --dy: ${Math.sin(a)*d}px;
+          animation-duration: ${600 + Math.random() * 300}ms;
+        "></div>`);
+      }
+    }
+
+    // ─── Public fire functions ──────────────────────────
+    function fireAt(enemyId, source = 'turret') {
+      const enemy = document.getElementById(enemyId);
+      if (!enemy || +enemy.dataset.hp <= 0) return;
+      const isShip = source === 'ship';
+      const sourceEl = isShip ? document.getElementById('ship') : document.getElementById('base');
+      const sourceC = center(sourceEl);
+      const targetC = center(enemy);
+      const angle = Math.atan2(targetC.y - sourceC.y, targetC.x - sourceC.x);
+
+      // Aim the base barrel
+      if (!isShip) {
+        const bg = document.querySelector('#base #barrelGroup');
+        bg.style.transition = 'transform 120ms ease-out';
+        bg.style.transformOrigin = '0 0';
+        bg.setAttribute('transform', `rotate(${(angle * 180 / Math.PI) - 90})`);
+      }
+
+      // Recoil
+      sourceEl.classList.remove('recoil');
+      void sourceEl.offsetWidth;
+      sourceEl.classList.add('recoil');
+
+      // Muzzle flash from offset along barrel
+      const muzzleOffset = isShip ? 16 : 22;
+      const mx = sourceC.x + Math.cos(angle) * muzzleOffset;
+      const my = sourceC.y + Math.sin(angle) * muzzleOffset;
+      const color = isShip ? '#4ea1ff' : '#3ee0c5';
+      muzzleFlash(mx, my, angle, color);
+
+      // Fire bullet
+      const kind = isShip ? 'ally' : 'turret';
+      const dmg = isShip ? 5 : 12;
+      const flightMs = fireBullet(mx, my, targetC.x, targetC.y, kind);
+
+      setTimeout(() => {
+        hitEffect(enemy, dmg, enemy.dataset.type);
+      }, flightMs);
+    }
+
+    function shipFireAt(enemyId) { fireAt(enemyId, 'ship'); }
+
+    function volley() {
+      ['e-basic', 'e-fast', 'e-tank'].forEach((id, i) => {
+        setTimeout(() => fireAt(id, 'turret'), i * 120);
+      });
+      setTimeout(() => shipFireAt('e-tank'), 360);
+    }
+
+    function resetEnemies() {
+      ['e-basic', 'e-fast', 'e-tank'].forEach((id) => {
+        const e = document.getElementById(id);
+        if (!e) return;
+        e.dataset.hp = e.dataset.max;
+        e.style.opacity = '1';
+        e.style.transform = '';
+        const bar = e.querySelector('.lab-hpbar > div');
+        bar.style.width = '100%';
+        bar.style.background = '#3ee0c5';
+      });
+    }
+
+    // ─── Click handlers + keyboard ──────────────────────
+    ['e-basic', 'e-fast', 'e-tank'].forEach((id) => {
+      const e = document.getElementById(id);
+      e.addEventListener('click', () => fireAt(id, 'turret'));
+    });
+
+    document.addEventListener('keydown', (ev) => {
+      if (ev.key === 'f' || ev.key === 'F') {
+        // Find first alive enemy nearest to base
+        const base = document.getElementById('base');
+        const bc = center(base);
+        let best = null, bestD = Infinity;
+        ['e-basic', 'e-fast', 'e-tank'].forEach((id) => {
+          const e = document.getElementById(id);
+          if (+e.dataset.hp <= 0) return;
+          const c = center(e);
+          const d = Math.hypot(c.x - bc.x, c.y - bc.y);
+          if (d < bestD) { bestD = d; best = id; }
+        });
+        if (best) fireAt(best, 'turret');
+      } else if (ev.key === ' ' || ev.code === 'Space') {
+        ev.preventDefault();
+        volley();
+      } else if (ev.key === 'r' || ev.key === 'R') {
+        resetEnemies();
+      }
+    });
+  </script>
+</body>
+</html>

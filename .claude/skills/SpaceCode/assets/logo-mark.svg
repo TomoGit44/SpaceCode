@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200" aria-label="SpaceCode mark">
+  <rect width="200" height="200" fill="#05070d"></rect>
+  
+  <circle cx="100" cy="100" r="80" fill="none" stroke="#3ee0c5" stroke-width="1" opacity="0.22"></circle>
+  <circle cx="100" cy="100" r="80" fill="none" stroke="#3ee0c5" stroke-width="2" opacity="0.38" stroke-dasharray="6 6"></circle>
+  
+  <circle cx="100" cy="100" r="48" fill="#a07bff" opacity="0.22"></circle>
+  
+  <circle cx="100" cy="100" r="42" fill="none" stroke="#5a3ec9" stroke-width="2.5" opacity="0.9"></circle>
+  <g stroke="#5a3ec9" stroke-width="3.5">
+    <line x1="100" y1="56" x2="100" y2="64"></line>
+    <line x1="100" y1="136" x2="100" y2="144"></line>
+    <line x1="56" y1="100" x2="64" y2="100"></line>
+    <line x1="136" y1="100" x2="144" y2="100"></line>
+  </g>
+  
+  <circle cx="100" cy="100" r="32" fill="#a07bff"></circle>
+  
+  <circle cx="100" cy="100" r="13" fill="#3ee0c5"></circle>
+  
+  <g stroke="#ffffff" stroke-width="2.4" opacity="0.95">
+    <line x1="82" y1="100" x2="118" y2="100"></line>
+    <line x1="100" y1="82" x2="100" y2="118"></line>
+  </g>
+</svg>

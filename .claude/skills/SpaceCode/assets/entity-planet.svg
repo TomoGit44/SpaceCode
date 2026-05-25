@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200" aria-label="SpaceCode Planet">
+  
+  <circle cx="100" cy="100" r="80" fill="#ffd24a" opacity="0.12"></circle>
+  
+  <circle cx="100" cy="100" r="76" fill="none" stroke="#ffd24a" stroke-width="2" opacity="0.85" stroke-dasharray="320 480" stroke-dashoffset="-80" transform="rotate(-90 100 100)"></circle>
+  
+  <circle cx="100" cy="100" r="70" fill="#8a6f1f"></circle>
+  
+  <circle cx="76" cy="86" r="16" fill="#6b551a"></circle>
+  <circle cx="118" cy="121" r="12" fill="#6b551a"></circle>
+  
+  <circle cx="100" cy="100" r="13" fill="#ffd24a"></circle>
+</svg>

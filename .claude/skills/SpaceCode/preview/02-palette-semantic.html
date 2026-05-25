@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Semantic / allyship palette</title>
+<link rel="stylesheet" href="../colors_and_type.css"/>
+<style>
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ui);
+    font-family: var(--font-sans);
+    padding: 18px 20px;
+    box-sizing: border-box;
+  }
+  .stack > * + * { margin-top: 12px; }
+  .row { display: flex; gap: 10px; align-items: center; }
+  .row.wrap { flex-wrap: wrap; }
+  .meta { color: var(--ui-dim); font-size: 11px; font-family: var(--font-mono); }
+  code { font-family: var(--font-mono); font-size: 11px; color: var(--ui-dim); }
+</style>
+</head>
+<body>
+
+<div style="display:grid; grid-template-columns: repeat(5, 1fr); gap:10px;">
+  
+    <div style="position:relative; background:#a07bff; height:96px; padding:8px; color:#05070d;">
+      <div style="font-weight:700; font-size:13px;">Base</div>
+      <div style="font-family:var(--font-mono); font-size:10px; opacity:0.8; margin-top:2px;">#a07bff</div>
+      <div style="position:absolute; bottom:8px; left:8px; right:8px; font-size:11px; color:#0a1020; opacity:0.7;">↳ protect</div>
+    </div>
+    <div style="position:relative; background:#4ea1ff; height:96px; padding:8px; color:#05070d;">
+      <div style="font-weight:700; font-size:13px;">Ally</div>
+      <div style="font-family:var(--font-mono); font-size:10px; opacity:0.8; margin-top:2px;">#4ea1ff</div>
+      <div style="position:absolute; bottom:8px; left:8px; right:8px; font-size:11px; color:#0a1020; opacity:0.7;">↳ friendly</div>
+    </div>
+    <div style="position:relative; background:#ff4d5a; height:96px; padding:8px; color:#05070d;">
+      <div style="font-weight:700; font-size:13px;">Enemy</div>
+      <div style="font-family:var(--font-mono); font-size:10px; opacity:0.8; margin-top:2px;">#ff4d5a</div>
+      <div style="position:absolute; bottom:8px; left:8px; right:8px; font-size:11px; color:#0a1020; opacity:0.7;">↳ hostile</div>
+    </div>
+    <div style="position:relative; background:#ffd24a; height:96px; padding:8px; color:#05070d;">
+      <div style="font-weight:700; font-size:13px;">Resource</div>
+      <div style="font-family:var(--font-mono); font-size:10px; opacity:0.8; margin-top:2px;">#ffd24a</div>
+      <div style="position:absolute; bottom:8px; left:8px; right:8px; font-size:11px; color:#0a1020; opacity:0.7;">↳ reward</div>
+    </div>
+    <div style="position:relative; background:#3ee0c5; height:96px; padding:8px; color:#05070d;">
+      <div style="font-weight:700; font-size:13px;">Accent</div>
+      <div style="font-family:var(--font-mono); font-size:10px; opacity:0.8; margin-top:2px;">#3ee0c5</div>
+      <div style="position:absolute; bottom:8px; left:8px; right:8px; font-size:11px; color:#0a1020; opacity:0.7;">↳ active</div>
+    </div>
+</div>
+<div style="margin-top:10px; color: var(--ui-dim); font-size:11px; font-family: var(--font-mono);">
+  One color = one job. Blue never means hostile. Red never means accent.
+</div>
+
+</body></html>

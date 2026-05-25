@@ -1,0 +1,1015 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>SpaceCode — Item system</title>
+  <link rel="stylesheet" href="../../../colors_and_type.css"/>
+  <link rel="stylesheet" href="styles.css"/>
+  <style>
+    /* ─── Tab bar ───────────────────────────────────── */
+    .tabs {
+      position: absolute; left: 16px; top: 60px;
+      display: flex; gap: 4px; z-index: 30;
+    }
+    .tab {
+      padding: 8px 14px;
+      background: rgba(10, 16, 32, 0.7);
+      border: 1px solid var(--panel-border);
+      color: var(--ui-dim);
+      font-size: 12px; font-weight: 700;
+      cursor: pointer;
+      user-select: none;
+      letter-spacing: 0.04em;
+    }
+    .tab:hover { color: var(--ui); background: var(--panel-hover); }
+    .tab.active {
+      background: rgba(62, 224, 197, 0.12);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    /* ─── Scene container ───────────────────────────── */
+    .scene {
+      position: absolute; inset: 100px 16px 16px 16px;
+      display: none;
+    }
+    .scene.active { display: block; }
+
+    /* ═════════ SCENE: INVENTORY ═════════ */
+    .inv {
+      display: grid;
+      grid-template-columns: 200px 1fr 360px;
+      gap: 16px;
+      height: 100%;
+    }
+
+    .inv-cats {
+      display: flex; flex-direction: column;
+      background: rgba(10, 16, 32, 0.6);
+      border: 1px solid var(--panel-border);
+      padding: 12px 0;
+    }
+    .inv-cat {
+      display: flex; align-items: center; gap: 10px;
+      padding: 12px 16px;
+      font-size: 13px; color: var(--ui-dim);
+      cursor: pointer;
+      border-left: 2px solid transparent;
+    }
+    .inv-cat:hover { background: var(--panel-hover); color: var(--ui); }
+    .inv-cat.active {
+      color: var(--accent);
+      border-left-color: var(--accent);
+      background: rgba(62, 224, 197, 0.08);
+    }
+    .inv-cat .count {
+      margin-left: auto;
+      font-family: var(--font-mono); font-size: 11px;
+      color: var(--ui-dim);
+    }
+    .inv-cat .icon {
+      width: 12px; height: 12px; display: inline-block;
+    }
+    .inv-cat-sub {
+      padding: 8px 16px;
+      font-family: var(--font-mono); font-size: 10px;
+      color: var(--ui-dim); letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-top: 4px;
+    }
+
+    .inv-grid-wrap {
+      background: rgba(10, 16, 32, 0.45);
+      border: 1px solid var(--panel-border);
+      padding: 16px;
+      display: flex; flex-direction: column;
+      min-height: 0;
+    }
+    .inv-grid-head {
+      display: flex; align-items: baseline; gap: 14px;
+      margin-bottom: 14px;
+    }
+    .inv-grid-head h3 { margin: 0; font-size: 17px; }
+    .inv-grid-head .sub {
+      font-family: var(--font-mono); font-size: 11px;
+      color: var(--ui-dim); letter-spacing: 0.06em;
+    }
+    .inv-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      overflow: auto;
+      flex: 1;
+      align-content: start;
+    }
+    .item-card {
+      position: relative;
+      background: rgba(10, 16, 32, 0.85);
+      border: 1px solid var(--panel-border);
+      padding: 10px;
+      cursor: pointer;
+      display: flex; flex-direction: column; align-items: center;
+      transition: transform 140ms var(--ease-out), border-color 140ms var(--ease-out);
+      overflow: hidden;
+    }
+    .item-card:hover { transform: translateY(-2px); }
+    .item-card.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+
+    /* rarity-specific styling */
+    .item-card.rar-r-card  { border-color: rgba(78, 161, 255, 0.5); }
+    .item-card.rar-r-card:hover  { border-color: var(--rar-r); }
+    .item-card.rar-sr-card { border-color: rgba(198, 108, 255, 0.55); border-width: 1.5px; }
+    .item-card.rar-sr-card::before {
+      content: ""; position: absolute; inset: -50%;
+      background: conic-gradient(from 0deg,
+        transparent 0deg,
+        rgba(198, 108, 255, 0.45) 40deg,
+        transparent 80deg,
+        transparent 360deg);
+      animation: r2-rotate 4s linear infinite;
+      z-index: 0;
+    }
+    .item-card.rar-sr-card::after {
+      content: ""; position: absolute; inset: 1px;
+      background: rgba(10, 16, 32, 0.95);
+      z-index: 0;
+    }
+    .item-card.rar-l-card {
+      border-color: rgba(255, 210, 74, 0.6); border-width: 2px;
+      box-shadow: 0 0 16px rgba(255, 210, 74, 0.18);
+    }
+    .item-card.rar-l-card::before {
+      content: ""; position: absolute; inset: 0;
+      background:
+        radial-gradient(circle at 30% 30%, rgba(255, 210, 74, 0.18), transparent 60%),
+        radial-gradient(circle at 70% 80%, rgba(255, 210, 74, 0.15), transparent 60%);
+      z-index: 0;
+    }
+    .item-card > * { position: relative; z-index: 1; }
+
+    .item-thumb {
+      width: 64px; height: 64px;
+      display: flex; align-items: center; justify-content: center;
+      margin: 4px 0 10px;
+      position: relative;
+    }
+    .item-rar-badge {
+      position: absolute; top: 6px; left: 6px;
+      font-family: var(--font-mono); font-size: 10px;
+      font-weight: 700; letter-spacing: 0.06em;
+      padding: 1px 5px;
+      z-index: 2;
+    }
+    .item-name {
+      font-size: 12px; font-weight: 700;
+      text-align: center; color: var(--ui);
+      line-height: 1.3;
+      width: 100%;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .item-effect {
+      font-size: 11px; color: var(--accent);
+      font-family: var(--font-mono);
+      margin-top: 4px;
+    }
+    .item-equipped {
+      position: absolute; top: 6px; right: 6px;
+      font-family: var(--font-mono); font-size: 9px;
+      font-weight: 700;
+      padding: 1px 4px;
+      background: var(--accent);
+      color: var(--bg);
+      z-index: 2;
+    }
+
+    /* Detail panel */
+    .inv-detail {
+      background: rgba(10, 16, 32, 0.55);
+      border: 1px solid var(--panel-border);
+      padding: 0;
+      display: flex; flex-direction: column;
+      overflow: hidden;
+    }
+    .inv-detail .hero {
+      position: relative;
+      height: 220px;
+      background:
+        radial-gradient(circle at 50% 50%, rgba(198, 108, 255, 0.16), transparent 70%),
+        rgba(5, 7, 13, 0.6);
+      display: flex; align-items: center; justify-content: center;
+      overflow: hidden;
+    }
+    .inv-detail .hero::before {
+      content: ""; position: absolute; inset: 0;
+      background-image: url('../../../assets/starfield.svg');
+      background-size: 200px 200px; background-repeat: repeat;
+      opacity: 0.45;
+    }
+    .inv-detail .hero svg { position: relative; z-index: 2; filter: drop-shadow(0 0 16px rgba(198,108,255,0.5)); }
+    .inv-detail .meta {
+      padding: 16px 18px 8px;
+      border-bottom: 1px solid var(--panel-border);
+    }
+    .inv-detail .rar {
+      font-family: var(--font-mono); font-size: 11px;
+      font-weight: 700; letter-spacing: 0.1em;
+      margin-bottom: 4px;
+    }
+    .inv-detail h2 { margin: 0 0 6px; font-size: 22px; letter-spacing: -0.01em; }
+    .inv-detail .typedesc { font-size: 12px; color: var(--ui-dim); }
+    .inv-detail .stats {
+      padding: 14px 18px;
+      flex: 1;
+    }
+    .inv-detail .stat-row {
+      display: flex; justify-content: space-between; align-items: baseline;
+      padding: 6px 0;
+      border-bottom: 1px solid rgba(58, 74, 106, 0.4);
+      font-size: 13px;
+    }
+    .inv-detail .stat-row:last-child { border-bottom: none; }
+    .inv-detail .stat-k { color: var(--ui-dim); }
+    .inv-detail .stat-v { color: var(--ui); font-weight: 700; font-family: var(--font-mono); }
+    .inv-detail .stat-v.accent { color: var(--accent); }
+    .inv-detail .desc {
+      padding: 0 18px 14px;
+      font-size: 13px; color: var(--ui); line-height: 1.6;
+    }
+    .inv-detail .actions {
+      padding: 14px 18px;
+      border-top: 1px solid var(--panel-border);
+      display: flex; gap: 8px;
+    }
+    .inv-detail .actions .r2-btn { flex: 1; }
+
+    /* ─── Total effect summary bar ─── */
+    .effect-summary {
+      grid-column: 1 / 4;
+      display: flex; align-items: center; gap: 14px;
+      padding: 12px 18px;
+      background: rgba(10, 16, 32, 0.85);
+      border: 1px solid var(--panel-border);
+      margin-top: 0;
+    }
+    .effect-summary .label {
+      font-family: var(--font-mono); font-size: 10px;
+      color: var(--ui-dim); letter-spacing: 0.1em; text-transform: uppercase;
+    }
+    .effect-summary .chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 10px;
+      background: rgba(62, 224, 197, 0.1);
+      border: 1px solid rgba(62, 224, 197, 0.4);
+      color: var(--accent);
+      font-size: 12px; font-weight: 700;
+      font-family: var(--font-mono);
+    }
+    .effect-summary .chip .v { color: var(--ui); }
+
+    /* ═════════ SCENE: GACHA ═════════ */
+    .gacha {
+      position: relative;
+      height: 100%;
+      background:
+        radial-gradient(circle at 50% 50%, rgba(20, 30, 60, 0.55), transparent 70%),
+        rgba(5, 7, 13, 0.55);
+      border: 1px solid var(--panel-border);
+      display: flex; align-items: center; justify-content: center;
+      overflow: hidden;
+    }
+    .gacha::before {
+      content: ""; position: absolute; inset: 0;
+      background-image: url('../../../assets/starfield.svg');
+      background-size: 200px 200px; background-repeat: repeat;
+      opacity: 0.4;
+    }
+
+    .gacha-stage {
+      position: relative;
+      width: 700px; height: 480px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 28px;
+      z-index: 2;
+    }
+
+    .capsule-wrap { position: relative; width: 260px; height: 260px; }
+
+    .capsule {
+      position: absolute; left: 50%; top: 50%;
+      transform: translate(-50%, -50%);
+      width: 140px; height: 140px;
+    }
+
+    .capsule-glow {
+      position: absolute; inset: -60px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(198, 108, 255, 0.6) 0%, transparent 60%);
+      opacity: 0;
+      transition: opacity 400ms;
+    }
+    .gacha-stage.charging .capsule-glow { opacity: 1; animation: r2-pulse-glow 800ms ease-in-out infinite; }
+
+    .gacha-orbits {
+      position: absolute; left: 50%; top: 50%;
+      transform: translate(-50%, -50%);
+      width: 240px; height: 240px;
+    }
+    .gacha-orbit {
+      position: absolute; inset: 0;
+      border-radius: 50%;
+      border: 1px dashed rgba(198, 108, 255, 0.3);
+      animation: r2-rotate 8s linear infinite;
+    }
+    .gacha-orbit.inner {
+      inset: 30px;
+      border-color: rgba(255, 210, 74, 0.4);
+      animation: r2-rotate-ccw 6s linear infinite;
+    }
+    .gacha-orbit-dot {
+      position: absolute; left: 50%; top: 0;
+      width: 6px; height: 6px;
+      margin-left: -3px;
+      border-radius: 50%;
+      background: var(--rar-sr);
+      box-shadow: 0 0 8px var(--rar-sr);
+    }
+
+    .gacha-controls { display: flex; gap: 10px; }
+
+    .gacha-result {
+      position: absolute; inset: 0;
+      display: none;
+      align-items: center; justify-content: center;
+      background: radial-gradient(circle, rgba(255, 210, 74, 0.18), rgba(5, 7, 13, 0.95) 70%);
+      z-index: 5;
+    }
+    .gacha-result.visible { display: flex; }
+
+    .reveal-card {
+      position: relative;
+      width: 280px;
+      background: rgba(10, 16, 32, 0.97);
+      border: 2px solid var(--rar-l);
+      padding: 24px 22px 22px;
+      text-align: center;
+      box-shadow: 0 0 40px rgba(255, 210, 74, 0.4);
+      animation: revealIn 800ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    @keyframes revealIn {
+      0% { opacity: 0; transform: scale(0.4) rotate(-8deg); }
+      60% { opacity: 1; transform: scale(1.08) rotate(2deg); }
+      100% { opacity: 1; transform: scale(1) rotate(0); }
+    }
+    .reveal-card .rar {
+      font-family: var(--font-mono); font-size: 13px;
+      font-weight: 700; letter-spacing: 0.2em;
+      color: var(--rar-l);
+      margin-bottom: 6px;
+    }
+    .reveal-card h2 { margin: 0 0 10px; font-size: 22px; }
+    .reveal-card .effect {
+      font-family: var(--font-mono); font-size: 14px;
+      color: var(--accent);
+      margin-bottom: 16px;
+    }
+    .reveal-card .desc {
+      font-size: 12px; color: var(--ui-dim);
+      line-height: 1.5;
+      margin-bottom: 20px;
+    }
+
+    .gacha-info {
+      position: absolute; top: 32px; left: 32px;
+      max-width: 320px;
+      z-index: 3;
+    }
+    .gacha-info h3 { margin: 0 0 8px; font-size: 18px; }
+    .gacha-info p { margin: 0; font-size: 12px; color: var(--ui-dim); line-height: 1.6; }
+
+    .gacha-rate {
+      position: absolute; bottom: 24px; right: 24px;
+      font-family: var(--font-mono); font-size: 11px;
+      color: var(--ui-dim);
+      background: rgba(10, 16, 32, 0.85);
+      border: 1px solid var(--panel-border);
+      padding: 8px 12px;
+      z-index: 3;
+    }
+    .gacha-rate .rate-row { display: flex; justify-content: space-between; gap: 14px; padding: 1px 0; }
+
+    /* ═════════ SCENE: BANNER + EQUIP ═════════ */
+    .be-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      height: 100%;
+    }
+    .be-cell {
+      background: rgba(10, 16, 32, 0.55);
+      border: 1px solid var(--panel-border);
+      padding: 0;
+      display: flex; flex-direction: column;
+      position: relative;
+      overflow: hidden;
+    }
+    .be-cell-head {
+      padding: 12px 16px;
+      font-size: 13px; font-weight: 700;
+      color: var(--ui);
+      border-bottom: 1px solid var(--panel-border);
+      display: flex; align-items: center; gap: 10px;
+    }
+    .be-cell-head .sub {
+      font-family: var(--font-mono); font-size: 10px;
+      color: var(--ui-dim); letter-spacing: 0.08em;
+      margin-left: auto;
+    }
+    .be-stage {
+      flex: 1;
+      position: relative;
+      background:
+        radial-gradient(circle at 50% 50%, rgba(20, 30, 60, 0.55), transparent 70%),
+        rgba(5, 7, 13, 0.5);
+      overflow: hidden;
+    }
+    .be-stage::before {
+      content: ""; position: absolute; inset: 0;
+      background-image: url('../../../assets/starfield.svg');
+      background-size: 200px 200px; background-repeat: repeat;
+      opacity: 0.4;
+    }
+    .be-control {
+      padding: 14px 16px;
+      border-top: 1px solid var(--panel-border);
+      display: flex; gap: 8px; align-items: center;
+    }
+
+    /* Banner */
+    @keyframes bannerIn {
+      0%   { opacity: 0; transform: translate(-50%, -100%); }
+      60%  { opacity: 1; transform: translate(-50%, 8px); }
+      100% { opacity: 1; transform: translate(-50%, 0); }
+    }
+    @keyframes bannerOut {
+      0%   { opacity: 1; transform: translate(-50%, 0); }
+      100% { opacity: 0; transform: translate(-50%, -100%); }
+    }
+    .acq-banner {
+      position: absolute;
+      left: 50%; top: 24px;
+      transform: translate(-50%, 0);
+      opacity: 1;
+      width: 360px;
+      background: rgba(10, 16, 32, 0.95);
+      border: 2px solid var(--rar-sr);
+      padding: 14px 16px;
+      display: flex; align-items: center; gap: 14px;
+      box-shadow: 0 0 24px rgba(198, 108, 255, 0.4);
+      z-index: 10;
+    }
+    .acq-banner.entering { animation: bannerIn 480ms cubic-bezier(0.22, 1, 0.36, 1); }
+    .acq-banner.dismissing { animation: bannerOut 320ms cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+    .acq-banner .thumb {
+      width: 56px; height: 56px;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(5, 7, 13, 0.6);
+      border: 1px solid var(--rar-sr);
+      flex-shrink: 0;
+    }
+    .acq-banner .body { flex: 1; min-width: 0; }
+    .acq-banner .head {
+      font-family: var(--font-mono); font-size: 10px;
+      color: var(--rar-sr); letter-spacing: 0.14em;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+    .acq-banner .name {
+      font-size: 15px; font-weight: 700; color: var(--ui);
+      margin-bottom: 2px;
+    }
+    .acq-banner .effect {
+      font-family: var(--font-mono); font-size: 11px;
+      color: var(--accent);
+    }
+
+    /* Equip indicator on ship */
+    .equip-cluster {
+      position: absolute; left: 50%; top: 50%;
+      transform: translate(-50%, -50%);
+      width: 200px; height: 200px;
+    }
+    .equip-cluster > .equip-ship {
+      position: absolute; left: 50%; top: 50%;
+      transform: translate(-50%, -50%);
+    }
+    .equip-slot-ring {
+      position: absolute; left: 50%; top: 50%;
+      width: 110px; height: 110px;
+      margin: -55px 0 0 -55px;
+      border-radius: 50%;
+      border: 1px dashed rgba(62, 224, 197, 0.5);
+      animation: r2-rotate 12s linear infinite;
+    }
+    .equip-slot {
+      position: absolute; width: 26px; height: 26px;
+      left: 50%; top: 50%;
+      margin: -13px 0 0 -13px;
+      background: rgba(10, 16, 32, 0.95);
+      border: 1.5px solid var(--rar-sr);
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 0 8px var(--rar-sr);
+      font-size: 12px; font-weight: 700;
+      color: var(--rar-sr);
+    }
+    .equip-slot.r-r  { border-color: var(--rar-r);  box-shadow: 0 0 8px var(--rar-r);  color: var(--rar-r); }
+    .equip-slot.r-l  { border-color: var(--rar-l);  box-shadow: 0 0 8px var(--rar-l);  color: var(--rar-l); }
+
+    /* Equip effect floater */
+    @keyframes effectFloat {
+      0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.6); }
+      20%  { opacity: 1; transform: translate(-50%, -60%) scale(1.1); }
+      100% { opacity: 0; transform: translate(-50%, -120%) scale(1.0); }
+    }
+    .equip-effect-tag {
+      position: absolute; left: 50%; top: 50%;
+      transform: translate(-50%, -50%);
+      font-family: var(--font-mono); font-size: 13px;
+      font-weight: 700; color: var(--accent);
+      white-space: nowrap;
+      text-shadow: 0 0 6px rgba(62, 224, 197, 0.7);
+      animation: effectFloat 1400ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="r2-host">
+    <div class="r2-stage" id="stage">
+      <div class="r2-bar">
+        <span class="crumb"><a href="index.html">← Redesign hub</a></span>
+        <span class="sep"></span>
+        <span class="title">03 · Item system</span>
+        <span class="hint">タブで Inventory / Gacha / Banner+Equip を切替</span>
+      </div>
+
+      <div class="r2-starfield" style="opacity:0.55;"></div>
+
+      <div class="tabs">
+        <div class="tab active" data-tab="inv">📦 Inventory</div>
+        <div class="tab" data-tab="gacha">🎰 Gacha</div>
+        <div class="tab" data-tab="be">✨ Acquisition + Equip</div>
+      </div>
+
+      <!-- ═════════════════════════════════════════════════
+           SCENE 1 — INVENTORY
+           ═════════════════════════════════════════════════ -->
+      <div class="scene active" id="scene-inv">
+        <div class="inv">
+          <!-- Category sidebar -->
+          <div class="inv-cats" id="inv-cats">
+            <div class="inv-cat-sub">アイテム</div>
+            <div class="inv-cat active" data-cat="omni">
+              <span class="icon" style="background:#3ee0c5;"></span>
+              <span>オムニ・コア</span>
+              <span class="count">8</span>
+            </div>
+            <div class="inv-cat" data-cat="module">
+              <span class="icon" style="background:#4ea1ff;"></span>
+              <span>モジュール</span>
+              <span class="count">3</span>
+            </div>
+            <div class="inv-cat" data-cat="chemical">
+              <span class="icon" style="background:#ff9040;"></span>
+              <span>ケミカル</span>
+              <span class="count">5</span>
+            </div>
+            <div class="inv-cat-sub" style="margin-top:18px;">ガチャ</div>
+            <div class="inv-cat" data-cat="codeGacha">
+              <span class="icon" style="background:#c66cff;"></span>
+              <span>コードガチャ</span>
+              <span class="count">2</span>
+            </div>
+            <div class="inv-cat" data-cat="moduleGacha">
+              <span class="icon" style="background:#ffd24a;"></span>
+              <span>モジュールガチャ</span>
+              <span class="count">1</span>
+            </div>
+          </div>
+
+          <!-- Item grid -->
+          <div class="inv-grid-wrap">
+            <div class="inv-grid-head">
+              <h3>オムニ・コア</h3>
+              <span class="sub">8 / 99 所持中 · 4 装着中</span>
+            </div>
+            <div class="inv-grid" id="inv-grid">
+              <!-- populated by JS -->
+            </div>
+          </div>
+
+          <!-- Detail panel -->
+          <div class="inv-detail" id="inv-detail">
+            <div class="hero" id="detail-hero">
+              <!-- SVG injected -->
+            </div>
+            <div class="meta">
+              <div class="rar" id="detail-rar">SR · スーパーレア</div>
+              <h2 id="detail-name">フェイザー・コア</h2>
+              <div class="typedesc">オムニ・コア — 射撃強化</div>
+            </div>
+            <div class="stats">
+              <div class="stat-row"><span class="stat-k">攻撃力</span><span class="stat-v accent" id="detail-eff">+18%</span></div>
+              <div class="stat-row"><span class="stat-k">スタック</span><span class="stat-v">加算</span></div>
+              <div class="stat-row"><span class="stat-k">対象</span><span class="stat-v">全 Ship</span></div>
+              <div class="stat-row"><span class="stat-k">入手</span><span class="stat-v">コードガチャ Phase 4</span></div>
+            </div>
+            <div class="desc" id="detail-desc">
+              全 Ship の弾道ダメージを底上げ。所持しているだけで常時有効。同種コアの効果は加算で重なる。
+            </div>
+            <div class="actions">
+              <button class="r2-btn r2-btn--accent">装着</button>
+              <button class="r2-btn">分解</button>
+              <button class="r2-btn r2-btn--danger">破棄</button>
+            </div>
+          </div>
+
+          <!-- Summary bar (spans full width) -->
+          <div class="effect-summary">
+            <span class="label">合計効果</span>
+            <span class="chip">攻撃力 <span class="v">+24%</span></span>
+            <span class="chip">採掘速度 <span class="v">+12%</span></span>
+            <span class="chip">移動速度 <span class="v">+5%</span></span>
+            <span class="chip">基地射程 <span class="v">+8%</span></span>
+            <span style="margin-left:auto; font-size:11px; color:var(--ui-dim); font-family: var(--font-mono);">
+              ストック: <span style="color:var(--ui);">19 アイテム</span>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═════════════════════════════════════════════════
+           SCENE 2 — GACHA
+           ═════════════════════════════════════════════════ -->
+      <div class="scene" id="scene-gacha">
+        <div class="gacha">
+          <div class="gacha-info">
+            <h3>コードガチャ</h3>
+            <p>Phase クリア報酬で 1 回。L (レジェンド) 排出率は固定 3%。同種コアの効果は加算で重なる。</p>
+          </div>
+
+          <div class="gacha-stage" id="gacha-stage">
+            <div class="capsule-wrap">
+              <div class="capsule-glow"></div>
+              <div class="gacha-orbits">
+                <div class="gacha-orbit">
+                  <span class="gacha-orbit-dot"></span>
+                </div>
+                <div class="gacha-orbit inner">
+                  <span class="gacha-orbit-dot" style="background:var(--rar-l); box-shadow:0 0 8px var(--rar-l);"></span>
+                </div>
+              </div>
+              <div class="capsule">
+                <svg viewBox="-70 -70 140 140" width="140" height="140">
+                  <defs>
+                    <radialGradient id="capG" cx="0" cy="0" r="0.5">
+                      <stop offset="0%" stop-color="#ffffff" stop-opacity="1"/>
+                      <stop offset="40%" stop-color="#c66cff" stop-opacity="0.9"/>
+                      <stop offset="100%" stop-color="#5a3ec9" stop-opacity="1"/>
+                    </radialGradient>
+                  </defs>
+                  <!-- capsule body — diamond shape -->
+                  <polygon points="0,-50 35,0 0,50 -35,0" fill="url(#capG)"
+                           stroke="#ffffff" stroke-width="1.5" opacity="0.95"/>
+                  <polygon points="0,-50 35,0 0,50 -35,0" fill="none"
+                           stroke="#c66cff" stroke-width="0.5" opacity="0.9"/>
+                  <!-- inner crack lines -->
+                  <line x1="0" y1="-50" x2="0" y2="50" stroke="#ffffff" stroke-width="0.8" opacity="0.4"/>
+                  <line x1="-35" y1="0" x2="35" y2="0" stroke="#ffffff" stroke-width="0.8" opacity="0.4"/>
+                  <!-- core glow -->
+                  <circle r="14" fill="#ffffff" opacity="0.9"
+                          style="animation: r2-pulse-glow 1200ms ease-in-out infinite;"/>
+                </svg>
+              </div>
+            </div>
+
+            <div class="gacha-controls">
+              <button class="r2-btn r2-btn--accent" id="pull1">1 回引く</button>
+              <button class="r2-btn r2-btn--gold" id="pull10">10 連 · 1 L 確定</button>
+            </div>
+          </div>
+
+          <div class="gacha-result" id="gacha-result">
+            <!-- reveal card injected -->
+          </div>
+
+          <div class="gacha-rate">
+            <div class="rate-row"><span style="color:var(--rar-l);">L</span><span>3%</span></div>
+            <div class="rate-row"><span style="color:var(--rar-sr);">SR</span><span>12%</span></div>
+            <div class="rate-row"><span style="color:var(--rar-r);">R</span><span>35%</span></div>
+            <div class="rate-row"><span style="color:var(--rar-n);">N</span><span>50%</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═════════════════════════════════════════════════
+           SCENE 3 — BANNER + EQUIP
+           ═════════════════════════════════════════════════ -->
+      <div class="scene" id="scene-be">
+        <div class="be-grid">
+          <!-- Acquisition banner cell -->
+          <div class="be-cell">
+            <div class="be-cell-head">
+              アイテム取得バナー
+              <span class="sub">画面上部から降下 · 4 秒で自動退場</span>
+            </div>
+            <div class="be-stage" id="banner-stage">
+              <!-- starfield via ::before -->
+              <!-- bottom hint -->
+              <div style="position:absolute; left:16px; bottom:16px; font-size:11px; color:var(--ui-dim); line-height:1.6;">
+                バナー: card-mini + レア度色枠 + 効果。<br/>
+                4 つのレア度で 4 色 (N/R/SR/L)。
+              </div>
+            </div>
+            <div class="be-control">
+              <button class="r2-btn" onclick="showBanner('N')">N 排出</button>
+              <button class="r2-btn r2-btn--accent" onclick="showBanner('R')">R 排出</button>
+              <button class="r2-btn" style="border-color: rgba(198,108,255,0.7);" onclick="showBanner('SR')">SR 排出</button>
+              <button class="r2-btn r2-btn--gold" onclick="showBanner('L')">L 排出</button>
+            </div>
+          </div>
+
+          <!-- Equip indicator cell -->
+          <div class="be-cell">
+            <div class="be-cell-head">
+              装着インジケータ + 効果適用演出
+              <span class="sub">船の周囲に装着スロット + 効果フローター</span>
+            </div>
+            <div class="be-stage" id="equip-stage">
+              <div class="equip-cluster">
+                <div class="equip-ship">
+                  <svg viewBox="-50 -50 100 100" width="100" height="100">
+                    <defs>
+                      <radialGradient id="eqShipHalo" cx="0" cy="0" r="0.5">
+                        <stop offset="0%" stop-color="#4ea1ff" stop-opacity="0.65"/>
+                        <stop offset="100%" stop-color="#4ea1ff" stop-opacity="0"/>
+                      </radialGradient>
+                    </defs>
+                    <circle r="30" fill="url(#eqShipHalo)"/>
+                    <polygon points="20,0 -10,-12 -4,0 -10,12" fill="#4ea1ff"/>
+                    <polygon points="-10,-12 -16,-16 -5,-9" fill="#4ea1ff" opacity="0.85"/>
+                    <polygon points="-10,12 -16,16 -5,9" fill="#4ea1ff" opacity="0.85"/>
+                    <circle cx="3" cy="0" r="3" fill="#3ee0c5"/>
+                    <circle cx="3" cy="0" r="1.2" fill="#ffffff"/>
+                    <rect x="16" y="-0.7" width="5" height="1.4" fill="#ffffff"/>
+                  </svg>
+                </div>
+                <div class="equip-slot-ring"></div>
+                <!-- 3 equipped slots at 12 / 4 / 8 o'clock -->
+                <div class="equip-slot" style="transform: translate(0, -68px);">⚡</div>
+                <div class="equip-slot r-r" style="transform: translate(58px, 34px);">⛏</div>
+                <div class="equip-slot r-l" style="transform: translate(-58px, 34px);">★</div>
+              </div>
+
+              <div style="position:absolute; left:16px; bottom:16px; font-size:11px; color:var(--ui-dim); line-height:1.6;">
+                装着スロット: 船の周囲を回るリング上に小アイコン。<br/>
+                効果適用ボタンで「+X%」が艦から上昇。
+              </div>
+            </div>
+            <div class="be-control">
+              <button class="r2-btn r2-btn--accent" onclick="showEffect('+18% 攻撃力')">⚡ +18% 攻撃力</button>
+              <button class="r2-btn" onclick="showEffect('+12% 採掘速度')">⛏ +12% 採掘速度</button>
+              <button class="r2-btn r2-btn--gold" onclick="showEffect('+8% 射程')">★ +8% 射程</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ─── Stage fit ────────────────────────────────────────
+    (function fitStage() {
+      const stage = document.getElementById('stage');
+      function fit() {
+        const sx = window.innerWidth / 1280;
+        const sy = window.innerHeight / 720;
+        const s = Math.min(sx, sy);
+        stage.style.transform = `scale(${s})`;
+        stage.style.left = ((window.innerWidth - 1280 * s) / 2) + 'px';
+        stage.style.top  = ((window.innerHeight - 720 * s) / 2) + 'px';
+      }
+      fit();
+      window.addEventListener('resize', fit);
+    })();
+
+    // ─── Tabs ────────────────────────────────────────────
+    document.querySelectorAll('.tab').forEach((tab) => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach((t) => t.classList.remove('active'));
+        document.querySelectorAll('.scene').forEach((s) => s.classList.remove('active'));
+        tab.classList.add('active');
+        document.getElementById('scene-' + tab.dataset.tab).classList.add('active');
+      });
+    });
+
+    // ─── Item SVG generator ──────────────────────────────
+    // Each item type has a distinct hex/glyph thumbnail.
+    function itemSvg(kind, color, size = 48) {
+      const inner = {
+        omni:     `<circle r="${size*0.32}" fill="${color}"/>
+                   <circle r="${size*0.20}" fill="#0a1020"/>
+                   <circle r="${size*0.10}" fill="#ffffff" opacity="0.9"/>`,
+        module:   `<rect x="${-size*0.28}" y="${-size*0.28}" width="${size*0.56}" height="${size*0.56}" fill="${color}" opacity="0.85"/>
+                   <rect x="${-size*0.16}" y="${-size*0.16}" width="${size*0.32}" height="${size*0.32}" fill="#0a1020"/>
+                   <circle r="${size*0.08}" fill="${color}"/>`,
+        chemical: `<path d="M 0 ${-size*0.34} L ${size*0.30} ${size*0.30} L ${-size*0.30} ${size*0.30} Z"
+                         fill="${color}" opacity="0.85"/>
+                   <circle cy="${size*0.10}" r="${size*0.10}" fill="#ffffff" opacity="0.85"/>`,
+      };
+      return `<svg viewBox="${-size/2} ${-size/2} ${size} ${size}" width="${size}" height="${size}">
+        <polygon points="0,${-size*0.45} ${size*0.39},${-size*0.22} ${size*0.39},${size*0.22} 0,${size*0.45} ${-size*0.39},${size*0.22} ${-size*0.39},${-size*0.22}"
+                 fill="rgba(10,16,32,0.7)" stroke="${color}" stroke-width="1.2" opacity="0.9"/>
+        ${inner[kind] || inner.omni}
+      </svg>`;
+    }
+
+    // ─── Item catalog ────────────────────────────────────
+    const RAR_COLOR = { N: '#9aa4ba', R: '#4ea1ff', SR: '#c66cff', L: '#ffd24a' };
+    const RAR_NAME  = { N: 'ノーマル', R: 'レア', SR: 'スーパーレア', L: 'レジェンド' };
+    const RAR_PCT   = { N: 4, R: 8, SR: 14, L: 22 };
+
+    const ITEMS = [
+      { id: 'i1', kind: 'omni', name: 'シールド・コア',   rar: 'N',  stat: '基地HP',    eq: false },
+      { id: 'i2', kind: 'omni', name: 'リペア・コア',     rar: 'N',  stat: 'HP回復',    eq: false },
+      { id: 'i3', kind: 'omni', name: 'ブースト・コア',   rar: 'R',  stat: '移動速度',  eq: true },
+      { id: 'i4', kind: 'omni', name: 'マイナ・コア',     rar: 'R',  stat: '採掘速度',  eq: true },
+      { id: 'i5', kind: 'omni', name: 'フェイザー・コア', rar: 'SR', stat: '攻撃力',    eq: true },
+      { id: 'i6', kind: 'omni', name: 'レンジ・コア',     rar: 'SR', stat: '基地射程',  eq: true },
+      { id: 'i7', kind: 'omni', name: 'タレント・コア',   rar: 'SR', stat: '弾速',      eq: false },
+      { id: 'i8', kind: 'omni', name: 'オムニ・コア',     rar: 'L',  stat: '全強化',    eq: false },
+    ];
+
+    // ─── Populate grid ───────────────────────────────────
+    const grid = document.getElementById('inv-grid');
+    let selectedId = 'i5'; // default selection
+
+    function renderGrid() {
+      grid.innerHTML = ITEMS.map((it) => {
+        const color = RAR_COLOR[it.rar];
+        const rarCls = `rar-${it.rar.toLowerCase()}-card`;
+        const isSel = it.id === selectedId;
+        const pct = RAR_PCT[it.rar];
+        return `
+          <div class="item-card ${rarCls}${isSel ? ' selected' : ''}" data-id="${it.id}">
+            <div class="item-rar-badge rar-${it.rar}" style="background:${color}22; color:${color};">${it.rar}</div>
+            ${it.eq ? '<div class="item-equipped">EQ</div>' : ''}
+            <div class="item-thumb">${itemSvg(it.kind, color, 56)}</div>
+            <div class="item-name">${it.name}</div>
+            <div class="item-effect" style="color:${color};">+${pct}% ${it.stat}</div>
+          </div>`;
+      }).join('');
+      // wire click
+      grid.querySelectorAll('.item-card').forEach((card) => {
+        card.addEventListener('click', () => {
+          selectedId = card.dataset.id;
+          renderGrid();
+          renderDetail();
+        });
+      });
+    }
+
+    function renderDetail() {
+      const it = ITEMS.find((x) => x.id === selectedId);
+      if (!it) return;
+      const color = RAR_COLOR[it.rar];
+      const pct = RAR_PCT[it.rar];
+      const hero = document.getElementById('detail-hero');
+      hero.style.background = `
+        radial-gradient(circle at 50% 50%, ${color}22, transparent 70%),
+        rgba(5, 7, 13, 0.6)`;
+      hero.innerHTML = `
+        <div style="position:absolute; inset:0; background-image:url('../../../assets/starfield.svg'); background-size:200px 200px; opacity:0.4;"></div>
+        ${itemSvg(it.kind, color, 140).replace('<svg ', '<svg style="filter: drop-shadow(0 0 18px ' + color + '88); position:relative; z-index:2;" ')}
+      `;
+      const rarEl = document.getElementById('detail-rar');
+      rarEl.textContent = `${it.rar} · ${RAR_NAME[it.rar]}`;
+      rarEl.style.color = color;
+      document.getElementById('detail-name').textContent = it.name;
+      document.getElementById('detail-eff').textContent = `+${pct}% ${it.stat}`;
+      document.getElementById('detail-eff').style.color = color;
+    }
+
+    renderGrid();
+    renderDetail();
+
+    // ─── Category clicks (visual only — all show omni for demo) ──
+    document.querySelectorAll('.inv-cat').forEach((cat) => {
+      cat.addEventListener('click', () => {
+        document.querySelectorAll('.inv-cat').forEach((c) => c.classList.remove('active'));
+        cat.classList.add('active');
+      });
+    });
+
+    // ═══════════ GACHA ═══════════════════════════════════
+    const gachaStage = document.getElementById('gacha-stage');
+    const gachaResult = document.getElementById('gacha-result');
+
+    function pull(forceL = false) {
+      gachaStage.classList.add('charging');
+      // sequence: charge 800ms → flash 200ms → reveal
+      setTimeout(() => {
+        // Roll rarity
+        let rar = 'N';
+        const r = Math.random();
+        if (forceL || r < 0.03) rar = 'L';
+        else if (r < 0.15) rar = 'SR';
+        else if (r < 0.50) rar = 'R';
+        const items = ITEMS.filter((x) => x.rar === rar);
+        const pick = items[Math.floor(Math.random() * items.length)] || ITEMS[ITEMS.length - 1];
+        showReveal(pick);
+      }, 900);
+    }
+
+    function showReveal(item) {
+      const color = RAR_COLOR[item.rar];
+      const pct = RAR_PCT[item.rar];
+      gachaStage.classList.remove('charging');
+      gachaResult.innerHTML = `
+        <div class="reveal-card" style="border-color: ${color}; box-shadow: 0 0 50px ${color}66;">
+          <div class="rar" style="color:${color};">${item.rar} · ${RAR_NAME[item.rar]}</div>
+          <div style="margin: 8px auto 16px; display: inline-block;">
+            ${itemSvg(item.kind, color, 100).replace('<svg ', '<svg style="filter: drop-shadow(0 0 12px ' + color + 'aa);" ')}
+          </div>
+          <h2 style="color:${color};">${item.name}</h2>
+          <div class="effect" style="color:${color};">+${pct}% ${item.stat}</div>
+          <div class="desc">${item.rar === 'L' ? '伝説級。全 Ship に常時バフが適用される。' : '所持しているだけで常時有効。同種コアの効果は加算で重なる。'}</div>
+          <button class="r2-btn r2-btn--accent" onclick="document.getElementById('gacha-result').classList.remove('visible');" style="width: 100%;">受け取る</button>
+        </div>
+        <!-- particles around the reveal -->
+        ${Array.from({ length: 14 }, (_, i) => {
+          const a = (i / 14) * Math.PI * 2 + Math.random() * 0.5;
+          const d = 120 + Math.random() * 100;
+          return `<div class="r2-particle" style="
+            left: 50%; top: 50%;
+            background: ${i % 2 === 0 ? color : '#ffffff'};
+            width: ${item.rar === 'L' ? 4 : 3}px; height: ${item.rar === 'L' ? 4 : 3}px;
+            --dx: ${Math.cos(a) * d}px; --dy: ${Math.sin(a) * d}px;
+            animation-duration: 1200ms;
+          "></div>`;
+        }).join('')}
+      `;
+      gachaResult.classList.add('visible');
+    }
+
+    document.getElementById('pull1').addEventListener('click', () => pull(false));
+    document.getElementById('pull10').addEventListener('click', () => pull(true));
+
+    // ═══════════ BANNER ══════════════════════════════════
+    function showBanner(rar) {
+      const stage = document.getElementById('banner-stage');
+      // Remove any existing
+      const existing = stage.querySelector('.acq-banner');
+      if (existing) existing.remove();
+      const item = ITEMS.find((x) => x.rar === rar) || ITEMS[0];
+      const color = RAR_COLOR[rar];
+      const pct = RAR_PCT[rar];
+      const banner = document.createElement('div');
+      banner.className = 'acq-banner';
+      banner.style.borderColor = color;
+      banner.style.boxShadow = `0 0 24px ${color}66`;
+      banner.innerHTML = `
+        <div class="thumb" style="border-color:${color};">
+          ${itemSvg(item.kind, color, 40)}
+        </div>
+        <div class="body">
+          <div class="head" style="color:${color};">▼ 新しいアイテム · ${rar} ${RAR_NAME[rar]}</div>
+          <div class="name">${item.name}</div>
+          <div class="effect">+${pct}% ${item.stat}</div>
+        </div>
+      `;
+      stage.appendChild(banner);
+      requestAnimationFrame(() => banner.classList.add('entering'));
+      setTimeout(() => {
+        if (banner.parentNode) banner.classList.remove('entering');
+      }, 500);
+      setTimeout(() => {
+        if (banner.parentNode) banner.classList.add('dismissing');
+      }, 3200);
+      setTimeout(() => {
+        if (banner.parentNode) banner.parentNode.removeChild(banner);
+      }, 3700);
+    }
+
+    // ═══════════ EQUIP EFFECT FLOATER ════════════════════
+    function showEffect(text) {
+      const stage = document.getElementById('equip-stage');
+      const tag = document.createElement('div');
+      tag.className = 'equip-effect-tag';
+      tag.textContent = text;
+      stage.appendChild(tag);
+      setTimeout(() => { if (tag.parentNode) tag.parentNode.removeChild(tag); }, 1500);
+    }
+  </script>
+</body>
+</html>

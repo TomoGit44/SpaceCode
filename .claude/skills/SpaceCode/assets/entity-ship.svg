@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120" aria-label="SpaceCode Ship">
+  <circle cx="60" cy="60" r="44" fill="#4ea1ff" opacity="0.18"></circle>
+  <polygon points="96,60 34.8,33 45.6,60 34.8,87" fill="#4ea1ff"></polygon>
+  <circle cx="60" cy="60" r="9" fill="#3ee0c5"></circle>
+</svg>

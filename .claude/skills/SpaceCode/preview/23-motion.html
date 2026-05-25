@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Motion durations & easings</title>
+<link rel="stylesheet" href="../colors_and_type.css"/>
+<style>
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ui);
+    font-family: var(--font-sans);
+    padding: 18px 20px;
+    box-sizing: border-box;
+  }
+  .meta { color: var(--ui-dim); font-size: 11px; font-family: var(--font-mono); margin-top: 10px; }
+</style>
+</head>
+<body>
+
+<style>
+  .m-row { display:grid; grid-template-columns: 140px 70px 1fr; gap: 12px; align-items:center; padding:6px 0;}
+  .m-tk { font-family: var(--font-mono); font-size:11px; color:var(--ui); }
+  .m-du { font-family: var(--font-mono); font-size:11px; color:var(--accent); }
+  .m-de { font-size: 12px; color: var(--ui-dim); }
+</style>
+<div>
+  <div class="m-row"><span class="m-tk">--dur-flash</span><span class="m-du">160ms</span><span class="m-de">muzzle flash, hit pop · Cubic.easeOut</span></div>
+  <div class="m-row"><span class="m-tk">--dur-fast</span><span class="m-du">220ms</span><span class="m-de">banner scale-in · Back.easeOut</span></div>
+  <div class="m-row"><span class="m-tk">--dur-fade</span><span class="m-du">320ms</span><span class="m-de">subtitle alpha fade</span></div>
+  <div class="m-row"><span class="m-tk">--dur-entrance</span><span class="m-du">420ms</span><span class="m-de">title slide-fade in · Cubic.easeOut</span></div>
+  <div class="m-row"><span class="m-tk">--dur-scene</span><span class="m-du">380ms</span><span class="m-de">scene-to-scene fade from/to bg</span></div>
+  <div class="m-row"><span class="m-tk">--dur-pulse</span><span class="m-du">720ms</span><span class="m-de">idle "attention" pulse · Sine.easeInOut · yoyo ∞</span></div>
+  <div class="m-row"><span class="m-tk">rotate-base</span><span class="m-du">12000ms</span><span class="m-de">Base outer ring · linear loop</span></div>
+  <div class="m-row"><span class="m-tk">rotate-planet</span><span class="m-du">18000ms</span><span class="m-de">Planet resource ring · linear loop</span></div>
+</div>
+
+</body></html>

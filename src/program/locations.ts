@@ -9,9 +9,12 @@ import type { Planet } from '../entities/Planet';
  * 直接選ばせる方式へ変更したため、コード側のターゲットもこの記号 ID に統一する。
  *
  * MVP では惑星 2 個固定 (config.PLANETS) のため `planet0` / `planet1` のみ。
+ * 2026-05-25 後: `enemy_nearest` を追加 — 最寄りの敵を追尾する MOVE_TO 用 (惑星/基地と
+ * は異質の動的ターゲットで、座標は毎フレーム再計算される)。
+ *
  * 追加するときは LocationId に variant を 1 つ + ALL_* 配列に 1 行 + planetIndexOf に分岐 1 つ。
  */
-export type LocationId = 'base' | 'planet0' | 'planet1';
+export type LocationId = 'base' | 'planet0' | 'planet1' | 'enemy_nearest';
 export type PlanetId = 'planet0' | 'planet1';
 
 /** UI に表示する日本語ラベル。 */
@@ -19,10 +22,16 @@ export const LOCATION_LABELS: Record<LocationId, string> = {
   base: '基地',
   planet0: '惑星A',
   planet1: '惑星B',
+  enemy_nearest: '最寄りの敵',
 };
 
 /** UI が走査するための列挙。 */
-export const ALL_LOCATION_IDS: ReadonlyArray<LocationId> = ['base', 'planet0', 'planet1'];
+export const ALL_LOCATION_IDS: ReadonlyArray<LocationId> = [
+  'base',
+  'planet0',
+  'planet1',
+  'enemy_nearest',
+];
 export const ALL_PLANET_IDS: ReadonlyArray<PlanetId> = ['planet0', 'planet1'];
 
 export function planetIndexOf(id: PlanetId): number {
@@ -32,12 +41,29 @@ export function planetIndexOf(id: PlanetId): number {
 /**
  * MoveTo 用: 座標だけを返す (Planet 型に依存しない)。
  * 該当地点が存在しなければ null (blocked になる)。
+ *
+ * `enemy_nearest` は基地から見た最寄りの生存敵の座標を返す。MoveTo は別途
+ * 船からの距離 + バッファで再計算するため、この関数の返り値は「敵が存在するか」の
+ * 解決にのみ使われる側面もある。
  */
 export function resolveLocation(
   id: LocationId,
   world: ShipWorld
 ): { x: number; y: number } | null {
   if (id === 'base') return { x: world.base.x, y: world.base.y };
+  if (id === 'enemy_nearest') {
+    let best: { x: number; y: number } | null = null;
+    let bestDist = Infinity;
+    for (const e of world.enemies) {
+      if (e.dead) continue;
+      const d = Math.hypot(e.x - world.base.x, e.y - world.base.y);
+      if (d < bestDist) {
+        bestDist = d;
+        best = { x: e.x, y: e.y };
+      }
+    }
+    return best;
+  }
   const p = world.planets[planetIndexOf(id)];
   return p ? { x: p.x, y: p.y } : null;
 }

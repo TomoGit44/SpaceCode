@@ -5,6 +5,7 @@ import type { Planet } from './Planet';
 import type { Enemy } from './Enemy';
 import { spawnElectricArc } from './Enemy';
 import { Bullet } from './Bullet';
+import { muzzleFlash } from '../systems/CombatFx';
 import type { EconomySystem } from '../systems/EconomySystem';
 import type { EffectSystem } from '../items/effects';
 import type { Program } from '../program/Program';
@@ -181,22 +182,13 @@ export class Ship {
       const jx = i === 0 ? 0 : (Math.random() - 0.5) * 12;
       const jy = i === 0 ? 0 : (Math.random() - 0.5) * 12;
       world.bullets.push(
-        new Bullet(this.scene, this.x + jx, this.y + jy, enemy, damage, SHIP.bulletSpeed)
+        new Bullet(this.scene, this.x + jx, this.y + jy, enemy, damage, SHIP.bulletSpeed, COLORS.ally)
       );
     }
     this.energy -= SHIP.energyPerShot;  // Phase 4: 射撃でエネルギー消費 (1 射ぶん)
-    // Phase 5: マズルフラッシュ (短い円が拡大して消える)
-    const flash = this.scene.add.graphics();
-    flash.fillStyle(COLORS.accent, 0.7);
-    flash.fillCircle(this.x, this.y, SHIP.radius * 0.8);
-    this.scene.tweens.add({
-      targets: flash,
-      scale: 1.6,
-      alpha: 0,
-      duration: 160,
-      ease: 'Cubic.easeOut',
-      onComplete: () => flash.destroy(),
-    });
+    // Step 1-C: CombatFx の砲口フラッシュ (3 層 + 4 ray)。Ship 弾色 = ally (青)。
+    const angle = Math.atan2(enemy.y - this.y, enemy.x - this.x);
+    muzzleFlash(this.scene, this.x, this.y, angle, COLORS.ally);
     return true;
   }
 

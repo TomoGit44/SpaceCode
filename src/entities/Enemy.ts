@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { ENEMY_TYPES, COLORS, type EnemyType, type EnemyTypeStats } from '../config';
 import { EnemyBullet } from './EnemyBullet';
+import { hitEffect, bigExplosion } from '../systems/CombatFx';
 
 /**
  * 敵 (Enemy)。出現位置から基地へ直進する単純AI。
@@ -191,7 +192,12 @@ export class Enemy {
   public takeDamage(amount: number): void {
     if (this.dead) return;
     this.hp -= amount;
-    // ダメージフラッシュ
+    // Step 1-D: 弾命中 (amount >= 1) のみ着弾エフェクトを出す。
+    // 体当たりモジュールの持続接触ダメ (~0.5/frame) ではエフェクトを発生させない (画面が騒がしくなるのを防ぐ)。
+    if (amount >= 1) {
+      hitEffect(this.gfx.scene, { x: this.x, y: this.y }, amount, this.type);
+    }
+    // 本体の短い色抜き (CombatFx と併用してヒット感を補強)
     this.gfx.setAlpha(0.4);
     this.gfx.scene.time.delayedCall(60, () => {
       if (!this.dead) this.gfx.setAlpha(1);
@@ -203,12 +209,15 @@ export class Enemy {
 
   private die(): void {
     this.dead = true;
-    // 簡易爆発演出: fadeしながら拡大
+    // Step 1-E: 大爆発演出 (3 連 shockwave + 中心フラッシュ + 多数 spark)
+    bigExplosion(this.gfx.scene, this.x, this.y, this.type, this.stats.color);
+    // 本体は短く膨らんで消える (CombatFx の爆発と被らないよう 180ms 程度に短縮)
     this.gfx.scene.tweens.add({
       targets: this.gfx,
       alpha: 0,
-      scale: 1.8,
-      duration: 220,
+      scale: 1.6,
+      duration: 180,
+      ease: 'Cubic.easeOut',
       onComplete: () => this.gfx.destroy(),
     });
   }

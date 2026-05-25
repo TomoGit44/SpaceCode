@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { BASE, BASE_TURRET, COLORS } from '../config';
 import { Enemy } from './Enemy';
 import { Bullet } from './Bullet';
+import { muzzleFlash } from '../systems/CombatFx';
 import type { EffectSystem } from '../items/effects';
 
 /**
@@ -204,20 +205,25 @@ export class Base {
     return best;
   }
 
+  /**
+   * 射撃時の演出: CombatFx の砲口フラッシュ (3 層 + 4 ray) + 砲身リコイル。
+   * 連射時は前フレームの barrel tween を kill して位置を原点に戻してから再生する。
+   */
   private muzzleFlash(): void {
     const angle = this.barrel.rotation;
     const fx = this.x + Math.cos(angle) * 26;
     const fy = this.y + Math.sin(angle) * 26;
-    const flash = this.scene.add.graphics();
-    flash.fillStyle(COLORS.accent, 1);
-    flash.fillCircle(0, 0, 5);
-    flash.setPosition(fx, fy);
+    muzzleFlash(this.scene, fx, fy, angle, COLORS.accent);
+    // 砲身リコイル (進行方向の反対に 3px ずらして 60ms で戻る)
+    this.scene.tweens.killTweensOf(this.barrel);
+    this.barrel.setPosition(this.x, this.y);
     this.scene.tweens.add({
-      targets: flash,
-      alpha: 0,
-      scale: 0.3,
-      duration: 110,
-      onComplete: () => flash.destroy(),
+      targets: this.barrel,
+      x: this.x - Math.cos(angle) * 3,
+      y: this.y - Math.sin(angle) * 3,
+      duration: 60,
+      yoyo: true,
+      ease: 'Cubic.easeOut',
     });
   }
 

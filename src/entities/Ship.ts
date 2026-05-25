@@ -67,6 +67,7 @@ export class Ship {
   private scene: Phaser.Scene;
   private bodyGfx: Phaser.GameObjects.Graphics;
   private barGfx: Phaser.GameObjects.Graphics;
+  private thrustGfx: Phaser.GameObjects.Graphics; // Step 2-B: 推進炎 (移動中のみ visible)
   private rotation: number = 0;
 
   // 低レベル命令の現在ターゲット
@@ -83,32 +84,90 @@ export class Ship {
     this.x = x;
     this.y = y;
 
-    this.bodyGfx = scene.add.graphics();
-    this.barGfx = scene.add.graphics();
+    // 推進炎 (Step 2-B): bodyGfx より背面に描く。常に alpha 0..1 を yoyo で明滅。
+    this.thrustGfx = scene.add.graphics().setDepth(3);
+    this.drawThrust();
+    this.thrustGfx.setAlpha(0);
+    scene.tweens.add({
+      targets: this.thrustGfx,
+      scaleX: 1.15,
+      duration: 280,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
+
+    this.bodyGfx = scene.add.graphics().setDepth(4);
+    this.barGfx = scene.add.graphics().setDepth(4);
     this.drawBody();
     this.drawBars();
     this.bodyGfx.setPosition(x, y);
   }
 
+  /**
+   * Step 2-B: 戦闘機シルエット。
+   *  - ハロー (低α円)
+   *  - 本体 (スウェプトバック四角 = `(r, 0) → (-0.55r, -0.6r) → (-0.25r, 0) → (-0.55r, 0.6r)`)
+   *  - ウィングチップ (本体後縁の外側に小三角 2 個)
+   *  - コックピット (teal 円 + 白 dot)
+   *  - ノーズマーカー (短い白棒)
+   */
   private drawBody(): void {
     const g = this.bodyGfx;
     g.clear();
     const r = SHIP.radius;
+
     // ハロー
-    g.fillStyle(COLORS.ally, 0.18);
-    g.fillCircle(0, 0, r + 5);
-    // 三角本体 (右向き、setRotation で向きを合わせる)
+    g.fillStyle(COLORS.ally, 0.2);
+    g.fillCircle(0, 0, r + 6);
+
+    // 本体 (4 頂点でスウェプトバック)
     g.fillStyle(COLORS.ally, 1);
     g.beginPath();
     g.moveTo(r, 0);
-    g.lineTo(-r * 0.7, -r * 0.75);
-    g.lineTo(-r * 0.4, 0);
-    g.lineTo(-r * 0.7, r * 0.75);
+    g.lineTo(-r * 0.55, -r * 0.6);
+    g.lineTo(-r * 0.25, 0);
+    g.lineTo(-r * 0.55, r * 0.6);
     g.closePath();
     g.fillPath();
-    // コア
+
+    // ウィングチップ (本体後縁の外側に翼端三角)
+    g.fillStyle(COLORS.ally, 0.85);
+    g.beginPath();
+    g.moveTo(-r * 0.55, -r * 0.6);
+    g.lineTo(-r * 0.85, -r * 0.85);
+    g.lineTo(-r * 0.2,  -r * 0.45);
+    g.closePath();
+    g.fillPath();
+    g.beginPath();
+    g.moveTo(-r * 0.55, r * 0.6);
+    g.lineTo(-r * 0.85, r * 0.85);
+    g.lineTo(-r * 0.2,  r * 0.45);
+    g.closePath();
+    g.fillPath();
+
+    // コックピット (teal + 白)
     g.fillStyle(COLORS.accent, 1);
-    g.fillCircle(0, 0, r * 0.25);
+    g.fillCircle(r * 0.15, 0, r * 0.28);
+    g.fillStyle(COLORS.highlight, 1);
+    g.fillCircle(r * 0.15, 0, r * 0.1);
+
+    // ノーズマーカー (短い白棒)
+    g.fillStyle(COLORS.highlight, 1);
+    g.fillRect(r * 0.75, -0.6, r * 0.35, 1.2);
+  }
+
+  /** 推進炎: 後方 (−x 方向) に楕円 2 枚を重ねる。 */
+  private drawThrust(): void {
+    const g = this.thrustGfx;
+    g.clear();
+    const r = SHIP.radius;
+    // 外側 (青グロー)
+    g.fillStyle(COLORS.ally, 0.7);
+    g.fillEllipse(-r * 1.5, 0, r * 1.8, r * 0.55);
+    // 内側 (白い芯)
+    g.fillStyle(COLORS.highlight, 0.95);
+    g.fillEllipse(-r * 1.1, 0, r * 0.9, r * 0.28);
   }
 
   private drawBars(): void {
@@ -351,6 +410,10 @@ export class Ship {
     // 描画更新
     this.bodyGfx.setPosition(this.x, this.y);
     this.bodyGfx.setRotation(this.rotation);
+    // Step 2-B: 推進炎は移動中のみ可視 (state="moving" 直後の moved フラグで判定)
+    this.thrustGfx.setPosition(this.x, this.y);
+    this.thrustGfx.setRotation(this.rotation);
+    this.thrustGfx.setAlpha(moved ? 0.9 : 0);
     this.drawBars();
 
     // state 補正 (idle 時)
@@ -414,12 +477,14 @@ export class Ship {
       onComplete: () => this.bodyGfx.destroy(),
     });
     this.barGfx.destroy();
+    this.thrustGfx.destroy();
   }
 
   public destroy(): void {
     if (!this.dead) {
       this.bodyGfx.destroy();
       this.barGfx.destroy();
+      this.thrustGfx.destroy();
     }
     this.dead = true;
   }

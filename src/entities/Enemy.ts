@@ -57,6 +57,18 @@ export class Enemy {
     this.gfx = scene.add.graphics();
     this.redraw();
     this.gfx.setPosition(x, y);
+
+    // Step 2-E: tank だけ heavy-breath (2400ms 拡縮 1.0↔1.025) を仕込む
+    if (type === 'tank') {
+      scene.tweens.add({
+        targets: this.gfx,
+        scale: 1.025,
+        duration: 2400,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut',
+      });
+    }
   }
 
   /** 撃破報酬 (Phase 4)。GameScene の撃破集計で使用。 */
@@ -74,46 +86,231 @@ export class Enemy {
     return this.stats.hitRadius;
   }
 
+  /**
+   * Step 2-C/D/E (2026-05-25): 敵種別ごとに redraw を分岐。
+   *  - basic: 三角 + 後方クロー + 白コアアイ
+   *  - fast:  細身三角 + 後方スピードライン 3 本 + 白ノーズ + 白コア
+   *  - tank:  二重三角アウトライン + 内側装甲 + ボルト + 装甲ハイライト + シールド点線リング
+   *  - boss/sniper: 既存維持
+   */
   private redraw(): void {
     const g = this.gfx;
     const stats = this.stats;
     g.clear();
-    // ボス: 大きめ外周 + 二重リング (Phase 6 Step 7)
-    if (this.type === 'boss') {
-      g.fillStyle(stats.color, 0.22);
-      g.fillCircle(0, 0, stats.radius + 14);
-      g.lineStyle(2, stats.color, 0.7);
-      g.strokeCircle(0, 0, stats.radius + 8);
-      g.lineStyle(1, COLORS.highlight, 0.4);
-      g.strokeCircle(0, 0, stats.radius + 2);
-    } else if (this.type === 'sniper') {
-      // sniper: 外周 + 砲身を意識した薄い長方形 + 中心リング (2026-05-25)
-      g.fillStyle(stats.color, 0.2);
-      g.fillCircle(0, 0, stats.radius + 6);
-      g.lineStyle(1, stats.color, 0.7);
-      g.strokeCircle(0, 0, stats.radius + 2);
-    } else {
-      // 外側のグロー
-      g.fillStyle(stats.color, 0.18);
-      g.fillCircle(0, 0, stats.radius + 5);
+
+    switch (this.type) {
+      case 'basic':
+        this.drawBasic(g);
+        break;
+      case 'fast':
+        this.drawFast(g);
+        break;
+      case 'tank':
+        this.drawTank(g);
+        break;
+      case 'boss':
+        this.drawBoss(g);
+        break;
+      case 'sniper':
+        this.drawSniper(g);
+        break;
+      default: {
+        // 念のためのフォールバック (旧描画)
+        g.fillStyle(stats.color, 0.18);
+        g.fillCircle(0, 0, stats.radius + 5);
+        g.fillStyle(stats.color, 1);
+        g.beginPath();
+        g.moveTo(stats.radius, 0);
+        g.lineTo(-stats.radius * 0.7, -stats.radius * 0.8);
+        g.lineTo(-stats.radius * 0.7, stats.radius * 0.8);
+        g.closePath();
+        g.fillPath();
+      }
     }
-    // 三角 (右向き、後で setRotation で進行方向に合わせる)
-    g.fillStyle(stats.color, 1);
+  }
+
+  /** basic: 三角 + 後方クロー + 白コアアイ。 */
+  private drawBasic(g: Phaser.GameObjects.Graphics): void {
+    const r = this.stats.radius;
+    const c = this.stats.color;
+    // ハロー
+    g.fillStyle(c, 0.22);
+    g.fillCircle(0, 0, r + 6);
+    // 本体三角
+    g.fillStyle(c, 1);
     g.beginPath();
-    g.moveTo(stats.radius, 0);
-    g.lineTo(-stats.radius * 0.7, -stats.radius * 0.8);
-    g.lineTo(-stats.radius * 0.7, stats.radius * 0.8);
+    g.moveTo(r, 0);
+    g.lineTo(-r * 0.7, -r * 0.8);
+    g.lineTo(-r * 0.7, r * 0.8);
     g.closePath();
     g.fillPath();
-    // sniper: 砲身を細い長方形で前方に伸ばす
-    if (this.type === 'sniper') {
-      g.fillStyle(stats.color, 1);
-      g.fillRect(stats.radius - 1, -2, stats.radius * 0.9, 4);
+    // 後方クロー (本体後縁の外側に小三角)
+    g.fillStyle(c, 0.9);
+    g.beginPath();
+    g.moveTo(-r * 0.7, -r * 0.8);
+    g.lineTo(-r * 1.0, -r * 1.15);
+    g.lineTo(-r * 0.35, -r * 0.6);
+    g.closePath();
+    g.fillPath();
+    g.beginPath();
+    g.moveTo(-r * 0.7, r * 0.8);
+    g.lineTo(-r * 1.0, r * 1.15);
+    g.lineTo(-r * 0.35, r * 0.6);
+    g.closePath();
+    g.fillPath();
+    // コアアイ (白 + 赤コア)
+    g.fillStyle(COLORS.highlight, 0.92);
+    g.fillCircle(0, 0, r * 0.36);
+    g.fillStyle(c, 1);
+    g.fillCircle(0, 0, r * 0.16);
+  }
+
+  /** fast: 細身 + 後方スピードライン 3 本 + 白ノーズ + 白コア。 */
+  private drawFast(g: Phaser.GameObjects.Graphics): void {
+    const r = this.stats.radius;
+    const c = this.stats.color;
+    // ハロー
+    g.fillStyle(c, 0.22);
+    g.fillCircle(0, 0, r + 6);
+    // 後方スピードライン 3 本 (移動方向の反対側)
+    g.fillStyle(c, 0.75);
+    g.fillRect(-r * 4.0, -0.6, r * 2.0, 1.2);
+    g.fillStyle(c, 0.55);
+    g.fillRect(-r * 3.4, -r * 0.7, r * 1.5, 1);
+    g.fillRect(-r * 3.4, r * 0.7 - 1, r * 1.5, 1);
+    // 細身本体 (くびれ付き)
+    g.fillStyle(c, 1);
+    g.beginPath();
+    g.moveTo(r * 1.1, 0);
+    g.lineTo(-r * 0.6, -r * 0.7);
+    g.lineTo(-r * 0.2, 0);
+    g.lineTo(-r * 0.6, r * 0.7);
+    g.closePath();
+    g.fillPath();
+    // ウィングチップ薄め
+    g.fillStyle(c, 0.7);
+    g.beginPath();
+    g.moveTo(-r * 0.6, -r * 0.7);
+    g.lineTo(-r * 0.85, -r * 0.95);
+    g.lineTo(-r * 0.25, -r * 0.45);
+    g.closePath();
+    g.fillPath();
+    g.beginPath();
+    g.moveTo(-r * 0.6, r * 0.7);
+    g.lineTo(-r * 0.85, r * 0.95);
+    g.lineTo(-r * 0.25, r * 0.45);
+    g.closePath();
+    g.fillPath();
+    // ノーズマーカー (白短棒)
+    g.fillStyle(COLORS.highlight, 1);
+    g.fillRect(r * 1.0, -0.5, r * 0.6, 1);
+    // 白コア
+    g.fillCircle(0, 0, r * 0.3);
+  }
+
+  /** tank: 二重三角アウトライン + 内側装甲 + ボルト + シールド点線リング。 */
+  private drawTank(g: Phaser.GameObjects.Graphics): void {
+    const r = this.stats.radius;
+    const c = this.stats.color;
+    // ハロー
+    g.fillStyle(c, 0.25);
+    g.fillCircle(0, 0, r + 8);
+    // シールド点線リング (24 セグメント、半数を打って点線化)
+    g.lineStyle(1.2, COLORS.enemy, 0.4);
+    const seg = 24;
+    const sr = r * 2.0;
+    for (let i = 0; i < seg; i += 2) {
+      const a0 = (i / seg) * Math.PI * 2;
+      const a1 = ((i + 1) / seg) * Math.PI * 2;
+      g.beginPath();
+      g.arc(0, 0, sr, a0, a1, false);
+      g.strokePath();
     }
-    // コア (tank は濃いめ、fast は白っぽく速度感を強調、boss は強コア)
-    const coreAlpha = this.type === 'fast' ? 1 : 0.85;
-    g.fillStyle(COLORS.highlight, coreAlpha);
-    g.fillCircle(0, 0, stats.radius * (this.type === 'boss' ? 0.35 : 0.25));
+    // 外装甲アウトライン (大きめ三角)
+    g.lineStyle(2, c, 0.9);
+    g.beginPath();
+    g.moveTo(r * 1.7, 0);
+    g.lineTo(-r * 1.2, -r * 1.45);
+    g.lineTo(-r * 1.2, r * 1.45);
+    g.closePath();
+    g.strokePath();
+    // 本体三角
+    g.fillStyle(c, 1);
+    g.beginPath();
+    g.moveTo(r * 1.4, 0);
+    g.lineTo(-r * 1.0, -r * 1.15);
+    g.lineTo(-r * 1.0, r * 1.15);
+    g.closePath();
+    g.fillPath();
+    // 内側装甲セグメント (暗赤)
+    g.fillStyle(0x7a0f1c, 1);
+    g.beginPath();
+    g.moveTo(r * 1.0, 0);
+    g.lineTo(-r * 0.65, -r * 0.7);
+    g.lineTo(-r * 0.65, r * 0.7);
+    g.closePath();
+    g.fillPath();
+    // プレートボルト 3 個 (灰色)
+    g.fillStyle(COLORS.ui, 0.7);
+    g.fillCircle(-r * 0.45, -r * 0.65, 1.6);
+    g.fillCircle(-r * 0.45, r * 0.65, 1.6);
+    g.fillCircle(r * 0.3, 0, 1.6);
+    // 装甲ハイライト (薄赤線で前縁→後縁の上下)
+    g.lineStyle(0.8, COLORS.enemy, 0.7);
+    g.beginPath();
+    g.moveTo(r * 1.4, 0);
+    g.lineTo(-r * 1.0, -r * 1.15);
+    g.moveTo(r * 1.4, 0);
+    g.lineTo(-r * 1.0, r * 1.15);
+    g.strokePath();
+    // コア (赤 + 白 dot)
+    g.fillStyle(COLORS.enemy, 1);
+    g.fillCircle(0, 0, r * 0.36);
+    g.fillStyle(COLORS.highlight, 0.9);
+    g.fillCircle(0, 0, r * 0.14);
+  }
+
+  /** boss: 既存維持 (Step 2 範囲外、redesign 案も無いため最低限の刷新のみ)。 */
+  private drawBoss(g: Phaser.GameObjects.Graphics): void {
+    const r = this.stats.radius;
+    const c = this.stats.color;
+    g.fillStyle(c, 0.22);
+    g.fillCircle(0, 0, r + 14);
+    g.lineStyle(2, c, 0.7);
+    g.strokeCircle(0, 0, r + 8);
+    g.lineStyle(1, COLORS.highlight, 0.4);
+    g.strokeCircle(0, 0, r + 2);
+    g.fillStyle(c, 1);
+    g.beginPath();
+    g.moveTo(r, 0);
+    g.lineTo(-r * 0.7, -r * 0.8);
+    g.lineTo(-r * 0.7, r * 0.8);
+    g.closePath();
+    g.fillPath();
+    g.fillStyle(COLORS.highlight, 0.85);
+    g.fillCircle(0, 0, r * 0.35);
+  }
+
+  /** sniper: 既存維持 (Step 2 範囲外)。 */
+  private drawSniper(g: Phaser.GameObjects.Graphics): void {
+    const r = this.stats.radius;
+    const c = this.stats.color;
+    g.fillStyle(c, 0.2);
+    g.fillCircle(0, 0, r + 6);
+    g.lineStyle(1, c, 0.7);
+    g.strokeCircle(0, 0, r + 2);
+    g.fillStyle(c, 1);
+    g.beginPath();
+    g.moveTo(r, 0);
+    g.lineTo(-r * 0.7, -r * 0.8);
+    g.lineTo(-r * 0.7, r * 0.8);
+    g.closePath();
+    g.fillPath();
+    // 砲身を細い長方形で前方に伸ばす
+    g.fillStyle(c, 1);
+    g.fillRect(r - 1, -2, r * 0.9, 4);
+    g.fillStyle(COLORS.highlight, 0.85);
+    g.fillCircle(0, 0, r * 0.25);
   }
 
   /**

@@ -22,7 +22,8 @@ export class Base {
   public readonly y: number;
 
   private bodyGfx: Phaser.GameObjects.Graphics;
-  private ring: Phaser.GameObjects.Graphics;
+  private ring: Phaser.GameObjects.Graphics;          // 外輪 8 セグメント (時計回り)
+  private innerRing: Phaser.GameObjects.Graphics;     // 内側点線 (反対回り) — Step 2-A
   private rangeRing: Phaser.GameObjects.Graphics;
   private barrel: Phaser.GameObjects.Graphics;
   private pulse: number = 0;
@@ -41,68 +42,149 @@ export class Base {
     this.drawRangeRing();
     this.rangeRing.setPosition(x, y);
 
-    // 外周リング (回転する)
+    // 外周リング (8 セグメント、時計回り 16s)
     this.ring = scene.add.graphics();
     this.drawRing();
     this.ring.setPosition(x, y);
 
-    // 本体
+    // 内側点線リング (反対回り 24s) — Step 2-A
+    this.innerRing = scene.add.graphics();
+    this.drawInnerRing();
+    this.innerRing.setPosition(x, y);
+
+    // 本体 (ヘックスコア)
     this.bodyGfx = scene.add.graphics();
     this.drawBody();
     this.bodyGfx.setPosition(x, y);
 
-    // 砲身 (敵方向に回転)
+    // 砲身 (敵方向に回転、双砲)
     this.barrel = scene.add.graphics();
     this.drawBarrel();
     this.barrel.setPosition(x, y);
 
-    // 緩やかな回転 tween (リングのみ)
+    // 回転 tween (外輪は時計回り、内側はカウンター)
     scene.tweens.add({
       targets: this.ring,
       angle: 360,
-      duration: 12000,
+      duration: 16000,
+      repeat: -1,
+    });
+    scene.tweens.add({
+      targets: this.innerRing,
+      angle: -360,
+      duration: 24000,
       repeat: -1,
     });
   }
 
+  /**
+   * Step 2-A: ヘックスコア化。
+   *  - ハロー (外周のグロー)
+   *  - 外形ヘックス (`#1a1235` fill + base stroke)
+   *  - 内側ヘックス (base 低α fill)
+   *  - エネルギー十字 (白線)
+   *  - コア (teal 円 + 白 dot)
+   */
   private drawBody(): void {
     const g = this.bodyGfx;
     g.clear();
-    // 外側の柔らかいハロー
-    g.fillStyle(COLORS.base, 0.18);
-    g.fillCircle(0, 0, BASE.radius + 14);
-    // 本体
-    g.fillStyle(COLORS.base, 1);
-    g.fillCircle(0, 0, BASE.radius);
-    // 中央コア
-    g.fillStyle(COLORS.accent, 1);
-    g.fillCircle(0, 0, BASE.radius * 0.4);
-    // 十字 (中央の発光)
-    g.lineStyle(2, COLORS.highlight, 0.9);
+    const hexR = BASE.radius;
+    const innerR = hexR * 0.7;
+
+    // 外側の柔らかいハロー (3 層で radialGradient 近似)
+    g.fillStyle(COLORS.base, 0.22);
+    g.fillCircle(0, 0, hexR + 18);
+    g.fillStyle(COLORS.base, 0.12);
+    g.fillCircle(0, 0, hexR + 28);
+
+    // 外形ヘックス (六角形 fill + stroke)
+    const hexPoints = (r: number): Array<{ x: number; y: number }> => [
+      { x: 0,            y: -r },
+      { x: r * 0.866,    y: -r * 0.5 },
+      { x: r * 0.866,    y: r * 0.5 },
+      { x: 0,            y: r },
+      { x: -r * 0.866,   y: r * 0.5 },
+      { x: -r * 0.866,   y: -r * 0.5 },
+    ];
+    const drawHex = (r: number, fill: number, fillAlpha: number, strokeColor: number | null, strokeWidth = 1.5, strokeAlpha = 1): void => {
+      const pts = hexPoints(r);
+      g.fillStyle(fill, fillAlpha);
+      g.beginPath();
+      g.moveTo(pts[0]!.x, pts[0]!.y);
+      for (let i = 1; i < pts.length; i++) g.lineTo(pts[i]!.x, pts[i]!.y);
+      g.closePath();
+      g.fillPath();
+      if (strokeColor !== null) {
+        g.lineStyle(strokeWidth, strokeColor, strokeAlpha);
+        g.beginPath();
+        g.moveTo(pts[0]!.x, pts[0]!.y);
+        for (let i = 1; i < pts.length; i++) g.lineTo(pts[i]!.x, pts[i]!.y);
+        g.closePath();
+        g.strokePath();
+      }
+    };
+    // 外形 (#1a1235 暗紫 + base stroke)
+    drawHex(hexR, 0x1a1235, 0.95, COLORS.base, 1.8, 1);
+    // 内側 (base 低 α)
+    drawHex(innerR, COLORS.base, 0.45, null);
+
+    // エネルギー十字 (白線)
+    g.lineStyle(1.2, COLORS.highlight, 0.7);
     g.beginPath();
-    g.moveTo(-BASE.radius * 0.55, 0);
-    g.lineTo(BASE.radius * 0.55, 0);
-    g.moveTo(0, -BASE.radius * 0.55);
-    g.lineTo(0, BASE.radius * 0.55);
+    g.moveTo(-hexR, 0);
+    g.lineTo(hexR, 0);
+    g.moveTo(0, -hexR);
+    g.lineTo(0, hexR);
     g.strokePath();
+
+    // コア (teal 円 + 白 dot)
+    g.fillStyle(COLORS.accent, 1);
+    g.fillCircle(0, 0, hexR * 0.4);
+    g.fillStyle(COLORS.highlight, 1);
+    g.fillCircle(0, 0, hexR * 0.14);
   }
 
+  /**
+   * 外輪 8 セグメント (時計回りに回転)。
+   * セグメント間に node 円 (ベース色) を 8 個配置して「ノード接続」感を出す。
+   */
   private drawRing(): void {
     const g = this.ring;
     g.clear();
-    g.lineStyle(2, COLORS.baseRing, 0.85);
-    g.strokeCircle(0, 0, BASE.ringRadius);
-    // 4方向のノッチ
-    g.lineStyle(3, COLORS.baseRing, 1);
-    for (let i = 0; i < 4; i++) {
-      const a = (i / 4) * Math.PI * 2;
-      const x1 = Math.cos(a) * (BASE.ringRadius - 4);
-      const y1 = Math.sin(a) * (BASE.ringRadius - 4);
-      const x2 = Math.cos(a) * (BASE.ringRadius + 4);
-      const y2 = Math.sin(a) * (BASE.ringRadius + 4);
+    const r = BASE.ringRadius + 14;  // ヘックスより少し外側
+    // 8 セグメントの円弧 (隙間を空けて回転感を出す)
+    g.lineStyle(3, COLORS.baseRing, 0.9);
+    const seg = 8;
+    const gap = 0.16; // ラジアン: セグメント間の隙間
+    for (let i = 0; i < seg; i++) {
+      const a0 = (i / seg) * Math.PI * 2 + gap;
+      const a1 = ((i + 1) / seg) * Math.PI * 2 - gap;
       g.beginPath();
-      g.moveTo(x1, y1);
-      g.lineTo(x2, y2);
+      g.arc(0, 0, r, a0, a1, false);
+      g.strokePath();
+    }
+    // node 円 (各セグメント境目に)
+    g.fillStyle(COLORS.base, 1);
+    for (let i = 0; i < seg; i++) {
+      const a = ((i + 0.5) / seg) * Math.PI * 2;
+      const nx = Math.cos(a) * (r + 5);
+      const ny = Math.sin(a) * (r + 5);
+      g.fillCircle(nx, ny, 2.5);
+    }
+  }
+
+  /** 内側カウンター回転リング (点線、base 色)。 */
+  private drawInnerRing(): void {
+    const g = this.innerRing;
+    g.clear();
+    const r = BASE.radius * 1.2;
+    g.lineStyle(1.3, COLORS.base, 0.55);
+    const seg = 24;
+    for (let i = 0; i < seg; i += 2) {
+      const a0 = (i / seg) * Math.PI * 2;
+      const a1 = ((i + 1) / seg) * Math.PI * 2;
+      g.beginPath();
+      g.arc(0, 0, r, a0, a1, false);
       g.strokePath();
     }
   }
@@ -114,7 +196,7 @@ export class Base {
     // 薄い外周
     g.lineStyle(1, COLORS.accent, 0.18);
     g.strokeCircle(0, 0, BASE_TURRET.range);
-    // 内側に少し濃いダッシュ風 (32 分割で短い arc を描く)
+    // 内側に少し濃いダッシュ風 (48 分割で短い arc を描く)
     g.lineStyle(2, COLORS.accent, 0.32);
     const segments = 48;
     for (let i = 0; i < segments; i += 2) {
@@ -126,13 +208,26 @@ export class Base {
     }
   }
 
+  /**
+   * Step 2-A: 双砲身。マウント円 + 上下に並ぶ 2 本の砲身 + 各先端の teal アクセント。
+   * 砲身は setRotation で敵方向に回る。
+   */
   private drawBarrel(): void {
     const g = this.barrel;
     g.clear();
+    // マウント (砲塔ベース)
+    g.fillStyle(COLORS.bgAlt, 1);
+    g.fillCircle(0, 0, 8);
+    g.lineStyle(1, COLORS.base, 0.9);
+    g.strokeCircle(0, 0, 8);
+    // 双砲身 (上下に並列)
     g.fillStyle(COLORS.highlight, 0.95);
-    g.fillRect(0, -3, 22, 6);
+    g.fillRect(6, -5, 18, 3);
+    g.fillRect(6, 2, 18, 3);
+    // 砲身先端 (teal アクセント)
     g.fillStyle(COLORS.accent, 1);
-    g.fillRect(20, -4, 4, 8);
+    g.fillRect(22, -6, 3, 5);
+    g.fillRect(22, 1, 3, 5);
   }
 
   /** ダメージ。後フェーズで敵衝突から呼ばれる。 */
@@ -231,6 +326,7 @@ export class Base {
   public destroy(): void {
     this.bodyGfx.destroy();
     this.ring.destroy();
+    this.innerRing.destroy();
     this.rangeRing.destroy();
     this.barrel.destroy();
   }

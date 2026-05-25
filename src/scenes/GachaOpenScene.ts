@@ -50,6 +50,8 @@ export class GachaOpenScene extends Phaser.Scene {
   private cardObjects: Array<{
     bg: Phaser.GameObjects.Rectangle;
     border: Phaser.GameObjects.Rectangle;
+    decor?: Phaser.GameObjects.Graphics;
+    decorTween?: Phaser.Tweens.Tween;
   }> = [];
   private escHandler?: () => void;
 
@@ -108,12 +110,55 @@ export class GachaOpenScene extends Phaser.Scene {
         .setDepth(2)
     );
 
+    // Step 3-C: 開封演出 — 画面中央で白フラッシュ + 拡大 (280ms)
+    this.playOpeningFlash();
+
     this.renderCards();
     this.renderFooter();
 
     this.escHandler = () => this.close();
     this.input.keyboard?.on('keydown-ESC', this.escHandler);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.shutdown, this);
+  }
+
+  /**
+   * Step 3-C: 開封演出。Gacha のレア度色で中央フラッシュ + 同色 shockwave ring を 1 つ出す。
+   * カードのフェードインと並行して再生される。
+   */
+  private playOpeningFlash(): void {
+    const cx = GAME_WIDTH / 2;
+    const cy = GAME_HEIGHT / 2 - 20;
+    const rc = RARITY_COLOR[this.gacha.rarity];
+
+    // 白フラッシュ
+    const flash = this.add.graphics().setDepth(6);
+    flash.fillStyle(0xffffff, 1);
+    flash.fillCircle(0, 0, 80);
+    flash.fillStyle(rc, 0.6);
+    flash.fillCircle(0, 0, 120);
+    flash.setPosition(cx, cy).setScale(0.3);
+    this.tweens.add({
+      targets: flash,
+      scale: 2.4,
+      alpha: 0,
+      duration: 520,
+      ease: 'Cubic.easeOut',
+      onComplete: () => flash.destroy(),
+    });
+
+    // Shockwave ring
+    const ring = this.add.graphics().setDepth(6);
+    ring.lineStyle(3, rc, 1);
+    ring.strokeCircle(0, 0, 60);
+    ring.setPosition(cx, cy);
+    this.tweens.add({
+      targets: ring,
+      scale: 4,
+      alpha: 0,
+      duration: 720,
+      ease: 'Cubic.easeOut',
+      onComplete: () => ring.destroy(),
+    });
   }
 
   // ─── カード描画 ────────────────────────────────────────────
@@ -159,7 +204,56 @@ export class GachaOpenScene extends Phaser.Scene {
     });
 
     this.chrome.push(border, bg);
-    this.cardObjects.push({ bg, border });
+
+    // Step 3-C: Rarity 別装飾 (SR=回転アーク / L=金ハロー & 粒子)
+    let decor: Phaser.GameObjects.Graphics | undefined;
+    let decorTween: Phaser.Tweens.Tween | undefined;
+    if (cand.rarity === 'SR') {
+      decor = this.add.graphics().setDepth(4).setPosition(cx, cy);
+      decor.lineStyle(2.5, rc, 0.75);
+      decor.beginPath();
+      decor.arc(0, 0, Math.min(w, h) * 0.42, -Math.PI / 4, Math.PI / 4, false);
+      decor.strokePath();
+      decor.lineStyle(1.5, rc, 0.45);
+      decor.beginPath();
+      decor.arc(0, 0, Math.min(w, h) * 0.42, Math.PI * 0.75, Math.PI * 1.05, false);
+      decor.strokePath();
+      decorTween = this.tweens.add({
+        targets: decor,
+        angle: 360,
+        duration: 4000,
+        repeat: -1,
+        ease: 'Linear',
+      });
+    } else if (cand.rarity === 'L') {
+      decor = this.add.graphics().setDepth(2).setPosition(cx, cy);
+      decor.fillStyle(COLORS.rarityL, 0.22);
+      decor.fillCircle(0, 0, Math.max(w, h) * 0.55);
+      // 金粒子 3 個 (固定位置で拡縮 yoyo)
+      for (let i = 0; i < 3; i++) {
+        const px = (Math.random() - 0.5) * w * 0.7;
+        const py = (Math.random() - 0.5) * h * 0.7;
+        const p = this.add.graphics().setDepth(5);
+        p.fillStyle(COLORS.rarityL, 1);
+        p.fillCircle(0, 0, 2);
+        p.setPosition(cx + px, cy + py).setScale(0.6);
+        this.chrome.push(p);
+        const ptw = this.tweens.add({
+          targets: p,
+          scale: 1.6,
+          alpha: 0.3,
+          duration: 700 + i * 220,
+          yoyo: true,
+          repeat: -1,
+          ease: 'Sine.easeInOut',
+        });
+        // 粒子 tween は cardObjects に紐付けず chrome 側で stop
+        (p as Phaser.GameObjects.Graphics & { _tw?: Phaser.Tweens.Tween })._tw = ptw;
+      }
+    }
+    if (decor) this.chrome.push(decor);
+
+    this.cardObjects.push({ bg, border, decor, decorTween });
 
     // カード中身
     const top = cy - h / 2;
@@ -351,6 +445,7 @@ export class GachaOpenScene extends Phaser.Scene {
   private confirmPick(): void {
     if (this.selectedIndex === null || this.consumed) return;
     const cand = this.candidates[this.selectedIndex]!;
+    this.consumed = true;
 
     // ガチャ個体を消費
     this.inventory.items = this.inventory.items.filter((i) => i.uid !== this.gacha.uid);
@@ -372,8 +467,33 @@ export class GachaOpenScene extends Phaser.Scene {
       this.inventory.codes.push(code);
     }
 
-    this.consumed = true;
-    this.close();
+    // Step 3-C: 確定演出 — 選んだカードを光らせて拡大 fade
+    const picked = this.cardObjects[this.selectedIndex]!;
+    const rc = RARITY_COLOR[cand.rarity];
+    // 白フラッシュ (カード中心)
+    const flash = this.add.graphics().setDepth(7);
+    flash.fillStyle(0xffffff, 0.9);
+    flash.fillCircle(0, 0, 60);
+    flash.fillStyle(rc, 0.7);
+    flash.fillCircle(0, 0, 100);
+    flash.setPosition(picked.bg.x, picked.bg.y).setScale(0.4);
+    this.tweens.add({
+      targets: flash,
+      scale: 2.4,
+      alpha: 0,
+      duration: 380,
+      ease: 'Cubic.easeOut',
+      onComplete: () => flash.destroy(),
+    });
+    // カード自体を膨らませて消す
+    this.tweens.add({
+      targets: [picked.bg, picked.border],
+      scale: 1.3,
+      alpha: 0,
+      duration: 380,
+      ease: 'Cubic.easeOut',
+      onComplete: () => this.close(),
+    });
   }
 
   // ─── 閉じる ───────────────────────────────────────────────
@@ -386,6 +506,14 @@ export class GachaOpenScene extends Phaser.Scene {
     if (this.escHandler) {
       this.input.keyboard?.off('keydown-ESC', this.escHandler);
       this.escHandler = undefined;
+    }
+    // Rarity 装飾 tween / 粒子 tween を停止
+    for (const co of this.cardObjects) {
+      co.decorTween?.stop();
+    }
+    for (const g of this.chrome) {
+      const withTw = g as Phaser.GameObjects.GameObject & { _tw?: Phaser.Tweens.Tween };
+      withTw._tw?.stop();
     }
     for (const g of this.dyn) g.destroy();
     for (const g of this.chrome) g.destroy();

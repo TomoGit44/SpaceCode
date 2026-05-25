@@ -55,7 +55,10 @@ export type ShipStat =
   | 'maxHp'
   | 'maxEnergy'
   | 'mineRate'
-  | 'inventoryCap';
+  | 'inventoryCap'
+  // 2026-05-25: 省エネコア用。Ship.update で SHIP.energyConsumePerSec / energyPerShot に乗算する
+  //   倍率として効く (デフォルト 1.0、-0.5 のコアで 0.5 倍消費 = 半分)。
+  | 'energyConsume';
 
 /** 装着アイテムが強化しうる基地 stat。 */
 export type BaseStat =

@@ -11,6 +11,7 @@ import { Executor } from '../program/Executor';
 import { Program } from '../program/Program';
 import { Inventory } from '../items/Inventory';
 import { EffectSystem } from '../items/effects';
+import { OmniCoreStrip } from '../ui/OmniCoreStrip';
 import type { Rarity } from '../items/itemTypes';
 import { CHEMICAL_TYPES, makeRandomChemical } from '../items/types/chemicals';
 import {
@@ -56,6 +57,8 @@ export class GameScene extends Phaser.Scene {
   // (localStorage 非永続、仕様 §8.5)。
   private inventory!: Inventory;
   private effects!: EffectSystem;
+  // 2026-05-25: 画面左上に常時表示する所持オムニ・コアの帯
+  private omniCoreStrip!: OmniCoreStrip;
 
   private terminating: boolean = false; // GameOver / Victory 遷移中
 
@@ -130,6 +133,20 @@ export class GameScene extends Phaser.Scene {
     // Phase 6: アイテムシステム (新しい Run = 空のインベントリから開始)
     this.inventory = new Inventory();
     this.effects = new EffectSystem(this.inventory);
+
+    // 2026-05-25: スターターオムニ・コア 3 個を装着済みで開始
+    // (新コア core_attack_plus / core_efficiency / core_endurance)。
+    // 既存 6 個 (core_attack/_thruster/_drill/_hull/_turret/_bounty) は現状の入手経路なし。
+    for (const typeId of ['core_attack_plus', 'core_efficiency', 'core_endurance'] as const) {
+      this.inventory.items.push({
+        uid: crypto.randomUUID(),
+        typeId,
+        rarity: 'SR',
+      });
+    }
+
+    // 左上オムニ・コア帯 (HUD HP/Phase 表示の下あたり)
+    this.omniCoreStrip = new OmniCoreStrip(this, this.inventory, 12, 76);
 
     // HUD + 報酬バナー (Step 3-D: 別経路で並存)
     this.hud = new HUD(this, this.base.maxHp);
@@ -403,6 +420,7 @@ export class GameScene extends Phaser.Scene {
       onChanged: () => {
         this.recomputeShipStats();
         this.refreshItemButton();
+        this.omniCoreStrip?.refresh();
       },
       useChemical: (typeId: string, rarity: Rarity) => this.applyChemical(typeId, rarity),
     });
@@ -789,6 +807,7 @@ export class GameScene extends Phaser.Scene {
     this.planets = [];
     this.ships = [];
     this.shop?.destroy();
+    this.omniCoreStrip?.destroy();
     this.waves?.destroy();
     this.economy?.destroy();
     this.rewardBanner?.destroy();

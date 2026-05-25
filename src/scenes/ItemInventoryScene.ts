@@ -11,7 +11,7 @@ import {
   RARITY_SHORT,
   RARITY_COLOR,
 } from '../items/itemTypes';
-import { OMNI_CORE_TYPES, isOmniCore, omniCorePercent, makeRandomOmniCore } from '../items/types/omniCores';
+// 2026-05-25: オムニ・コアは画面左上 OmniCoreStrip に移行したため、本シーンの import を撤去
 import { MODULE_TYPES, isModule, moduleEffectText, makeRandomModule } from '../items/types/modules';
 import { CHEMICAL_TYPES, isChemical, chemicalEffectText, makeRandomChemical } from '../items/types/chemicals';
 import { isCodeGacha, isModuleGacha, isGacha, gachaItemName, makeGachaItem } from '../items/gacha';
@@ -34,8 +34,9 @@ interface CategoryDef {
   label: string;
 }
 
+// 2026-05-25: オムニ・コアは画面左上の OmniCoreStrip に常時表示するため、
+// アイテムメニューのタブからは撤去 (debug 獲得経路も同時に消滅)。
 const CATEGORIES: ReadonlyArray<CategoryDef> = [
-  { id: 'omniCore', label: 'オムニ・コア' },
   { id: 'module', label: 'モジュール' },
   { id: 'chemical', label: 'ケミカル' },
   { id: 'codeGacha', label: 'コードガチャ' },
@@ -58,7 +59,7 @@ export class ItemInventoryScene extends Phaser.Scene {
   private onChanged!: () => void;
   private useChemicalCb!: (typeId: string, rarity: Rarity) => void;
 
-  private selectedCategory: ItemCategory = 'omniCore';
+  private selectedCategory: ItemCategory = 'module';
   private selectedUid: string | null = null;
   private confirmingUse = false;
 
@@ -89,7 +90,7 @@ export class ItemInventoryScene extends Phaser.Scene {
     this.getShips = data.getShips;
     this.onChanged = data.onChanged;
     this.useChemicalCb = data.useChemical;
-    this.selectedCategory = 'omniCore';
+    this.selectedCategory = 'module';
     this.selectedUid = null;
     this.confirmingUse = false;
   }
@@ -220,12 +221,11 @@ export class ItemInventoryScene extends Phaser.Scene {
 
   private countForCategory(cat: ItemCategory): number {
     switch (cat) {
-      case 'omniCore':    return this.inventory.items.filter((it) => isOmniCore(it.typeId)).length;
       case 'module':      return this.inventory.items.filter((it) => isModule(it.typeId)).length;
       case 'chemical':    return this.inventory.items.filter((it) => isChemical(it.typeId)).length;
       case 'codeGacha':   return this.inventory.items.filter((it) => isCodeGacha(it.typeId)).length;
       case 'moduleGacha': return this.inventory.items.filter((it) => isModuleGacha(it.typeId)).length;
-      default:            return 0;
+      default:            return 0; // omniCore など UI から撤去されたカテゴリ
     }
   }
 
@@ -328,7 +328,6 @@ export class ItemInventoryScene extends Phaser.Scene {
 
   /** カード中央アイコンの色 (カテゴリ別に固定)。 */
   private iconColorFor(typeId: string): number {
-    if (isOmniCore(typeId))    return COLORS.base;
     if (isModule(typeId))      return COLORS.ally;
     if (isChemical(typeId))    return COLORS.accent;
     if (isCodeGacha(typeId))   return COLORS.raritySR;
@@ -338,7 +337,6 @@ export class ItemInventoryScene extends Phaser.Scene {
 
   /** カード下部のサブテキスト (効果や状態)。 */
   private subtextFor(it: ItemInstance): string {
-    if (isOmniCore(it.typeId)) return `+${omniCorePercent(it.typeId, it.rarity)}%`;
     if (isChemical(it.typeId)) return '使い切り';
     if (isGacha(it.typeId))    return '未開封';
     return '';
@@ -353,9 +351,6 @@ export class ItemInventoryScene extends Phaser.Scene {
 
   /** 選択カテゴリに属する所持アイテム。 */
   private categoryItems(): ItemInstance[] {
-    if (this.selectedCategory === 'omniCore') {
-      return this.inventory.items.filter((it) => isOmniCore(it.typeId));
-    }
     if (this.selectedCategory === 'module') {
       return this.inventory.items.filter((it) => isModule(it.typeId));
     }
@@ -368,13 +363,12 @@ export class ItemInventoryScene extends Phaser.Scene {
     if (this.selectedCategory === 'moduleGacha') {
       return this.inventory.items.filter((it) => isModuleGacha(it.typeId));
     }
-    return [];
+    return []; // omniCore はこのシーンに表示しない (左上 OmniCoreStrip 担当)
   }
 
   private displayName(typeId: string): string {
     if (isGacha(typeId)) return gachaItemName(typeId);
     return (
-      OMNI_CORE_TYPES[typeId]?.nameJa ??
       MODULE_TYPES[typeId]?.nameJa ??
       CHEMICAL_TYPES[typeId]?.nameJa ??
       typeId
@@ -458,8 +452,7 @@ export class ItemInventoryScene extends Phaser.Scene {
     );
 
     const detailTop = top + heroH + 70;
-    if (isOmniCore(sel.typeId)) this.renderCoreDetail(sel, x, w, detailTop);
-    else if (isModule(sel.typeId)) this.renderModuleDetail(sel, x, w, detailTop);
+    if (isModule(sel.typeId)) this.renderModuleDetail(sel, x, w, detailTop);
     else if (isChemical(sel.typeId)) this.renderChemicalDetail(sel, x, w, detailTop);
     else if (isGacha(sel.typeId)) this.renderGachaDetail(sel, x, w, detailTop);
   }
@@ -501,29 +494,8 @@ export class ItemInventoryScene extends Phaser.Scene {
     this.scene.bringToTop('GachaOpenScene');
   }
 
-  private renderCoreDetail(it: ItemInstance, x: number, w: number, top: number): void {
-    const core = OMNI_CORE_TYPES[it.typeId]!;
-    this.dyn.push(
-      this.add
-        .text(x + 16, top, `${core.descJa}\n\n効果: +${omniCorePercent(it.typeId, it.rarity)}%`, {
-          fontFamily: FONT,
-          fontSize: '13px',
-          color: '#cfd6e6',
-          lineSpacing: 5,
-          wordWrap: { width: w - 32 },
-        })
-        .setDepth(4),
-      this.add
-        .text(x + 16, top + 96, '所持しているだけで常時有効。\n同種コアの効果は加算で重なる。', {
-          fontFamily: FONT,
-          fontSize: '11px',
-          color: '#6b7da0',
-          lineSpacing: 4,
-          wordWrap: { width: w - 32 },
-        })
-        .setDepth(4)
-    );
-  }
+  // 2026-05-25: renderCoreDetail は OmniCoreStrip 移行に伴い撤去。
+  // 詳細表示はストリップアイコン hover のツールチップに集約。
 
   private renderModuleDetail(it: ItemInstance, x: number, w: number, top: number): void {
     const mod = MODULE_TYPES[it.typeId]!;
@@ -728,11 +700,10 @@ export class ItemInventoryScene extends Phaser.Scene {
     this.chrome.push(bg, t);
   }
 
-  /** 選択中カテゴリのアイテムを 1 個獲得する (全カテゴリ対応)。 */
+  /** 選択中カテゴリのアイテムを 1 個獲得する (デバッグ用、omniCore は除外)。 */
   private debugGrant(rarity: Rarity): void {
     let granted: ItemInstance | null = null;
-    if (this.selectedCategory === 'omniCore') granted = makeRandomOmniCore(rarity);
-    else if (this.selectedCategory === 'module') granted = makeRandomModule(rarity);
+    if (this.selectedCategory === 'module') granted = makeRandomModule(rarity);
     else if (this.selectedCategory === 'chemical') granted = makeRandomChemical(rarity);
     else if (this.selectedCategory === 'codeGacha') granted = makeGachaItem('code', rarity);
     else if (this.selectedCategory === 'moduleGacha') granted = makeGachaItem('module', rarity);

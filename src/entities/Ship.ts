@@ -230,7 +230,9 @@ export class Ship {
    */
   public fireAt(enemy: Enemy, world: ShipWorld): boolean {
     if (enemy.dead) return false;
-    if (this.energy < SHIP.energyPerShot) return false;  // Phase 4: 射撃エネルギー判定
+    // 2026-05-25: 省エネコアで射撃消費 0〜1 倍に。実消費量で判定 + 消費する
+    const shotCost = SHIP.energyPerShot * world.effects.shipStat(this, 'energyConsume', 1);
+    if (this.energy < shotCost) return false;
     const d = Math.hypot(enemy.x - this.x, enemy.y - this.y);
     if (d > SHIP.attackRange) return false;
     // Phase 6: 攻撃力はオムニ・コア/モジュールで強化されうる (EffectSystem 経由)
@@ -244,7 +246,7 @@ export class Ship {
         new Bullet(this.scene, this.x + jx, this.y + jy, enemy, damage, SHIP.bulletSpeed, COLORS.ally)
       );
     }
-    this.energy -= SHIP.energyPerShot;  // Phase 4: 射撃でエネルギー消費 (1 射ぶん)
+    this.energy -= shotCost;  // Phase 4: 射撃でエネルギー消費 (省エネコア反映済)
     // Step 1-C: CombatFx の砲口フラッシュ (3 層 + 4 ray)。Ship 弾色 = ally (青)。
     const angle = Math.atan2(enemy.y - this.y, enemy.x - this.x);
     muzzleFlash(this.scene, this.x, this.y, angle, COLORS.ally);
@@ -354,7 +356,9 @@ export class Ship {
       }
     }
     if (moved) {
-      this.energy -= SHIP.energyConsumePerSec * (delta / 1000);
+      // 2026-05-25: 省エネコアで移動消費に倍率 (デフォルト 1.0、コアで 0.5 等)
+      const consumeMul = world.effects.shipStat(this, 'energyConsume', 1);
+      this.energy -= SHIP.energyConsumePerSec * consumeMul * (delta / 1000);
       this.state = 'moving';
     }
 

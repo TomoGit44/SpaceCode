@@ -42,6 +42,7 @@ export const MODULE_STAT_LABEL: Record<ModuleStatTarget, string> = {
   inventoryCap: '積載量',
   extraShots: '連射',
   contactDps: '体当たり威力',
+  energyConsume: 'エネルギー消費',
 };
 
 const PCT = (n: Record<Rarity, number>): Record<Rarity, number> => n;

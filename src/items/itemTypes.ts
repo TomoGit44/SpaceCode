@@ -37,16 +37,14 @@ export const RARITY_COLOR: Record<Rarity, number> = {
 };
 
 /**
- * アイテムカテゴリ (6 カテゴリ)。
- * コードアイテムは「プログラムへの配置」概念がアイテム装備と異質なため、
- * このカテゴリとは独立した CodeItemInstance として扱う (仕様 §8.1)。
+ * アイテムカテゴリ。
+ *
+ * 2026-05-25 後: ケミカル / ガチャ系の Inventory 保管を廃止し、
+ * Inventory に残るのは実質モジュールのみ。omniCore は左上 Strip 専用。
  */
 export type ItemCategory =
   | 'omniCore'
-  | 'module'
-  | 'chemical'
-  | 'codeGacha'
-  | 'moduleGacha';
+  | 'module';
 
 /** 装着アイテムが強化しうる Ship stat。 */
 export type ShipStat =

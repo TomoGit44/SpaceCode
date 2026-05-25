@@ -9,18 +9,22 @@ import type { Rarity, ShipStat, ItemInstance } from '../itemTypes';
  * - 各 Ship に好きなだけ装着可能 (スロット上限なし)。同種は加算スタック。
  * - モジュール個体は 1 つの Ship にしか装着できない (排他)。
  * - 装着先は `Inventory.shipModules[ship.id]` が uid 配列で保持する。
+ *
+ * 2026-05-25 後: 重複していた % 系の装甲/カーゴを flat 系に置換し、
+ * バッテリー (最大エネルギー flat) とボム砲 (範囲攻撃) を追加。
  */
 
 /**
  * モジュール効果が触れる stat。
  *  - `extraShots`: ATTACK_NEAREST 1 回ぶんの追加弾数 (整数加算、config に base を持たない)
- *  - `contactDps`: 2026-05-25 追加。装着 Ship が敵接触中に与える DPS (config に base 0)
+ *  - `contactDps`: 装着 Ship が敵接触中に与える DPS (config に base 0)
+ *  - `bombDamage`: ATTACK_NEAREST 1 回ぶんで追加発射されるボム弾の威力 (config に base 0)
  */
-export type ModuleStatTarget = ShipStat | 'extraShots' | 'contactDps';
+export type ModuleStatTarget = ShipStat | 'extraShots' | 'contactDps' | 'bombDamage';
 
 export interface ModuleEffect {
   readonly stat: ModuleStatTarget;
-  /** percent: 対象 stat に加算割合 (omni-core と合算) / flat: 整数加算 (extraShots 用)。 */
+  /** percent: 対象 stat に加算割合 (omni-core と合算) / flat: 整数加算。 */
   readonly kind: 'percent' | 'flat';
   readonly rarityValue: Record<Rarity, number>;
 }
@@ -43,6 +47,7 @@ export const MODULE_STAT_LABEL: Record<ModuleStatTarget, string> = {
   extraShots: '連射',
   contactDps: '体当たり威力',
   energyConsume: 'エネルギー消費',
+  bombDamage: 'ボム威力',
 };
 
 const PCT = (n: Record<Rarity, number>): Record<Rarity, number> => n;
@@ -53,16 +58,8 @@ export const MODULE_TYPES: Record<string, ModuleType> = {
     nameJa: 'ガトリング砲',
     descJa: '1 射あたりの弾数を増やすが、1 発の威力は下がる',
     effects: [
-      { stat: 'extraShots', kind: 'flat', rarityValue: { N: 2, R: 3, SR: 4, L: 6 } },
+      { stat: 'extraShots',    kind: 'flat',    rarityValue: { N: 2, R: 3, SR: 4, L: 6 } },
       { stat: 'damagePerShot', kind: 'percent', rarityValue: PCT({ N: -0.45, R: -0.42, SR: -0.4, L: -0.35 }) },
-    ],
-  },
-  mod_armor: {
-    id: 'mod_armor',
-    nameJa: '装甲プレート',
-    descJa: '最大 HP を上げる',
-    effects: [
-      { stat: 'maxHp', kind: 'percent', rarityValue: PCT({ N: 0.25, R: 0.4, SR: 0.6, L: 1.0 }) },
     ],
   },
   mod_thruster: {
@@ -78,19 +75,11 @@ export const MODULE_TYPES: Record<string, ModuleType> = {
     nameJa: '強化ドリル',
     descJa: '採掘速度を大きく上げるが、移動が少し遅くなる',
     effects: [
-      { stat: 'mineRate', kind: 'percent', rarityValue: PCT({ N: 0.4, R: 0.6, SR: 0.9, L: 1.4 }) },
+      { stat: 'mineRate',  kind: 'percent', rarityValue: PCT({ N: 0.4, R: 0.6, SR: 0.9, L: 1.4 }) },
       { stat: 'moveSpeed', kind: 'percent', rarityValue: PCT({ N: -0.15, R: -0.13, SR: -0.1, L: -0.08 }) },
     ],
   },
-  mod_cargo: {
-    id: 'mod_cargo',
-    nameJa: '拡張カーゴ',
-    descJa: '積載量を増やす',
-    effects: [
-      { stat: 'inventoryCap', kind: 'percent', rarityValue: PCT({ N: 0.3, R: 0.5, SR: 0.8, L: 1.2 }) },
-    ],
-  },
-  // 2026-05-25 追加: 体当たり攻撃。装着すると敵接触中ずっと DPS でダメージを与える。
+  // 体当たり攻撃。装着すると敵接触中ずっと DPS でダメージを与える。
   // 引き換えに移動速度がやや遅くなる (突っ込み戦法と整合)。
   mod_ram: {
     id: 'mod_ram',
@@ -99,6 +88,44 @@ export const MODULE_TYPES: Record<string, ModuleType> = {
     effects: [
       { stat: 'contactDps', kind: 'flat',    rarityValue: { N: 8, R: 14, SR: 22, L: 35 } },
       { stat: 'moveSpeed',  kind: 'percent', rarityValue: PCT({ N: -0.12, R: -0.10, SR: -0.08, L: -0.05 }) },
+    ],
+  },
+  // 新 4 種 (2026-05-25 後): flat ベース。
+  // 装甲: 最大 HP を flat で加算する。base 30 に対して R で +25 = 約 1.8 倍。
+  mod_armor: {
+    id: 'mod_armor',
+    nameJa: '装甲',
+    descJa: '最大 HP を増やす',
+    effects: [
+      { stat: 'maxHp', kind: 'flat', rarityValue: { N: 15, R: 25, SR: 40, L: 70 } },
+    ],
+  },
+  // 貯蔵庫: 積載量を flat で加算する。base 20 に対して R で +10 = 1.5 倍。
+  mod_cargo: {
+    id: 'mod_cargo',
+    nameJa: '貯蔵庫',
+    descJa: '資源の積載量を増やす',
+    effects: [
+      { stat: 'inventoryCap', kind: 'flat', rarityValue: { N: 7, R: 12, SR: 20, L: 35 } },
+    ],
+  },
+  // バッテリー: 最大エネルギーを flat で加算する。base 100 に対して R で +50 = 1.5 倍。
+  mod_battery: {
+    id: 'mod_battery',
+    nameJa: 'バッテリー',
+    descJa: '最大エネルギーを増やす',
+    effects: [
+      { stat: 'maxEnergy', kind: 'flat', rarityValue: { N: 30, R: 50, SR: 80, L: 150 } },
+    ],
+  },
+  // ボム砲: ATTACK_NEAREST 1 回ぶんでボム弾を追加発射。弾速は遅いが着弾時に範囲攻撃。
+  // 直撃ダメージ + 半径 80px の AoE。AoE は直撃ターゲット以外にも適用される。
+  mod_bomb: {
+    id: 'mod_bomb',
+    nameJa: 'ボム砲',
+    descJa: '一射ごとに低速のボム弾を追加発射する。着弾時に範囲爆発',
+    effects: [
+      { stat: 'bombDamage', kind: 'flat', rarityValue: { N: 15, R: 25, SR: 40, L: 65 } },
     ],
   },
 };
@@ -110,7 +137,7 @@ export function isModule(typeId: string): boolean {
   return typeId in MODULE_TYPES;
 }
 
-/** モジュール 1 効果の表示文字列 (例: "攻撃力 -40%" / "連射 +4")。 */
+/** モジュール 1 効果の表示文字列 (例: "攻撃力 -40%" / "連射 +4" / "最大HP +25")。 */
 function effectText(stat: ModuleStatTarget, kind: 'percent' | 'flat', value: number): string {
   const label = MODULE_STAT_LABEL[stat];
   if (kind === 'percent') {
@@ -127,6 +154,13 @@ export function moduleEffectText(typeId: string, rarity: Rarity): string {
   return mt.effects
     .map((e) => effectText(e.stat, e.kind, e.rarityValue[rarity]))
     .join('  /  ');
+}
+
+/** モジュールの効果を 1 つずつ配列で返す (UI で行ごとに表示する用)。 */
+export function moduleEffectLines(typeId: string, rarity: Rarity): string[] {
+  const mt = MODULE_TYPES[typeId];
+  if (!mt) return [];
+  return mt.effects.map((e) => effectText(e.stat, e.kind, e.rarityValue[rarity]));
 }
 
 /** デバッグ用: 指定レア度のモジュールをランダムに 1 個生成する。 */

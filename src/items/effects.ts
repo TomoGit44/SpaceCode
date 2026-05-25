@@ -79,13 +79,37 @@ export class EffectSystem {
     return sum;
   }
 
-  /** Ship stat に装着効果 (オムニ・コア + モジュール + 時限バフ) を適用した値。 */
+  /**
+   * 指定 Ship に装着中の全モジュールから stat への flat 加算の合計
+   * (2026-05-25 後: 装甲 / 貯蔵庫 / バッテリーが maxHp / inventoryCap / maxEnergy を
+   * flat で底上げする経路。% との合算は `base * (1 + pct) + flat` で行う)。
+   */
+  private shipModuleFlat(ship: Ship, stat: string): number {
+    let sum = 0;
+    const uids = this.inventory.shipModules[ship.id];
+    if (!uids) return 0;
+    for (const uid of uids) {
+      const it = this.inventory.items.find((i) => i.uid === uid);
+      if (!it) continue;
+      const mt = MODULE_TYPES[it.typeId];
+      if (!mt) continue;
+      for (const eff of mt.effects) {
+        if (eff.stat === stat && eff.kind === 'flat') {
+          sum += eff.rarityValue[it.rarity];
+        }
+      }
+    }
+    return sum;
+  }
+
+  /** Ship stat に装着効果 (オムニ・コア + モジュール % + モジュール flat + 時限バフ) を適用した値。 */
   public shipStat(ship: Ship, stat: ShipStat, base: number): number {
     const pct =
       this.omniPercent('ship', stat) +
       this.shipModulePercent(ship, stat) +
       this.timedPercent(stat);
-    return base * (1 + pct);
+    const flat = this.shipModuleFlat(ship, stat);
+    return base * (1 + pct) + flat;
   }
 
   /**
@@ -108,6 +132,28 @@ export class EffectSystem {
       }
     }
     return Math.max(0, Math.round(sum));
+  }
+
+  /**
+   * 指定 Ship のボム弾威力 (モジュール `mod_bomb` の `bombDamage` flat 合計、2026-05-25 後)。
+   * 0 ならボム発射なし。> 0 のとき Ship.fireAt が低速のボム弾を 1 発追加発射する。
+   */
+  public shipBombDamage(ship: Ship): number {
+    let sum = 0;
+    const uids = this.inventory.shipModules[ship.id];
+    if (!uids) return 0;
+    for (const uid of uids) {
+      const it = this.inventory.items.find((i) => i.uid === uid);
+      if (!it) continue;
+      const mt = MODULE_TYPES[it.typeId];
+      if (!mt) continue;
+      for (const eff of mt.effects) {
+        if (eff.stat === 'bombDamage' && eff.kind === 'flat') {
+          sum += eff.rarityValue[it.rarity];
+        }
+      }
+    }
+    return Math.max(0, sum);
   }
 
   /**

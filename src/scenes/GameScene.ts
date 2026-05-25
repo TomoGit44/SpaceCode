@@ -12,8 +12,6 @@ import { Program } from '../program/Program';
 import { Inventory } from '../items/Inventory';
 import { EffectSystem } from '../items/effects';
 import { OmniCoreStrip } from '../ui/OmniCoreStrip';
-import type { Rarity } from '../items/itemTypes';
-import { CHEMICAL_TYPES, makeRandomChemical } from '../items/types/chemicals';
 import {
   rollPhaseRewardRarity,
   phaseRewardCategory,
@@ -419,7 +417,7 @@ export class GameScene extends Phaser.Scene {
     this.scene.bringToTop('ProgramEditorScene');
   }
 
-  /** アイテム一覧オーバーレイを開く (ProgramEditor とは排他)。 */
+  /** モジュール画面オーバーレイを開く (ProgramEditor とは排他)。 */
   private openItemInventory(): void {
     if (this.overlayDepth > 0) return;
     this.overlayDepth += 1;
@@ -431,7 +429,6 @@ export class GameScene extends Phaser.Scene {
         this.refreshItemButton();
         this.omniCoreStrip?.refresh();
       },
-      useChemical: (typeId: string, rarity: Rarity) => this.applyChemical(typeId, rarity),
     });
     const ov = this.scene.get('ItemInventoryScene');
     ov.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
@@ -441,9 +438,8 @@ export class GameScene extends Phaser.Scene {
     this.scene.bringToTop('ItemInventoryScene');
   }
 
-  /** 右端「アイテム」ボタンを作る。 */
+  /** 右端「モジュール」ボタンを作る (2026-05-25 後: アイテム → モジュールに名称変更)。 */
   private createItemButton(): void {
-    // Phase 7: タッチ向けに 130×34 → 160×44 (44pt 以上)、フォントも 14→16
     const w = 160;
     const h = 44;
     const cx = GAME_WIDTH - 12 - w / 2;
@@ -473,11 +469,12 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  /** アイテムボタンの所持総数バッジを更新する。 */
+  /** モジュールボタンのバッジを更新する (所持モジュール数を表示)。 */
   private refreshItemButton(): void {
     if (!this.itemBtnLabel) return;
-    const n = this.inventory.items.length + this.inventory.codes.length;
-    this.itemBtnLabel.setText(`📦 アイテム (${n})`);
+    // モジュールのみを所持の対象とする (ケミカル/ガチャは保管廃止済み)
+    const n = this.inventory.items.length;
+    this.itemBtnLabel.setText(`🔧 モジュール (${n})`);
   }
 
   /** 全 Ship の最大 stat を装着アイテムに合わせて再計算する (アイテム構成変化時)。 */
@@ -507,10 +504,12 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
+  /** 半数ボーナスのクレジット額 (2026-05-25 後: ケミカル削除に伴い差し替え)。 */
+  private static readonly HALF_REWARD_CREDITS = 80;
+
   /**
-   * Phase 6 Step 8 (2026-05-25 新フロー):
-   * 当該 Phase の累計撃破数が合計の半数以上に達したら、ケミカル N を 1 個ドロップ。
-   * 取得演出は RewardPopupScene に統一 (タップで Inventory へ飛行)。
+   * 当該 Phase の累計撃破数が合計の半数以上に達したら、+$80 クレジットを付与 (2026-05-25 後)。
+   * モーダルポップアップは出さず、横バナー (RewardBanner) で軽量通知する。
    */
   private checkPhaseHalfReward(): void {
     if (this.phaseHalfRewarded) return;
@@ -519,11 +518,13 @@ export class GameScene extends Phaser.Scene {
     const threshold = Math.floor(total / 2);
     if (this.phaseKillCount < threshold) return;
     this.phaseHalfRewarded = true;
-    const chem = makeRandomChemical('N');
-    this.enqueueReward({
-      kind: 'chemical',
-      chem,
+    this.economy.add(GameScene.HALF_REWARD_CREDITS, 'halfReward');
+    this.rewardBanner.show({
+      rarity: 'N',
+      accentColor: COLORS.resource,
       heading: '中盤ボーナス',
+      name: `+$${GameScene.HALF_REWARD_CREDITS} クレジット`,
+      displayMs: 1400,
     });
   }
 
@@ -590,43 +591,6 @@ export class GameScene extends Phaser.Scene {
       },
     });
     this.scene.bringToTop('RewardPopupScene');
-  }
-
-  /** ケミカル使用効果を適用する (ItemInventoryScene から呼ばれる)。 */
-  private applyChemical(typeId: string, rarity: Rarity): void {
-    const chem = CHEMICAL_TYPES[typeId];
-    if (!chem) return;
-    const v = chem.rarityValue[rarity];
-    switch (chem.kind) {
-      case 'baseHeal':
-        this.base.heal(v);
-        this.hud.setHp(this.base.hp);
-        break;
-      case 'shipHeal':
-        for (const s of this.ships) s.heal(v);
-        break;
-      case 'shipRefuel':
-        for (const s of this.ships) s.refuel();
-        break;
-      case 'credits':
-        this.economy.add(v, 'chemical');
-        break;
-      case 'timedAttack':
-        this.effects.addTimedShipBuff(
-          chem.buffStat ?? 'damagePerShot',
-          v,
-          chem.durationMs ?? 20000
-        );
-        break;
-      case 'aoeDamage': {
-        const r = chem.radius ?? 300;
-        for (const e of this.enemies) {
-          if (e.dead) continue;
-          if (Math.hypot(e.x - this.base.x, e.y - this.base.y) <= r) e.takeDamage(v);
-        }
-        break;
-      }
-    }
   }
 
   update(_time: number, delta: number): void {

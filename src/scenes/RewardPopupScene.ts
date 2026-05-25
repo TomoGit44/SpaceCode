@@ -2,28 +2,20 @@ import Phaser from 'phaser';
 import { GAME_WIDTH, GAME_HEIGHT, COLORS } from '../config';
 import type { Inventory } from '../items/Inventory';
 import { RARITY_COLOR, RARITY_LABEL, RARITY_SHORT, type Rarity, type ItemInstance } from '../items/itemTypes';
-import { CHEMICAL_TYPES } from '../items/types/chemicals';
 
 const FONT = 'system-ui, "Segoe UI", sans-serif';
 
 /**
- * 報酬の中身 (2026-05-25)。
+ * 報酬の中身 (2026-05-25 後: ケミカル削除に伴いガチャ系のみ)。
  * - gacha: タップでガチャ開封フローに進む (GachaOpenScene を mandatory で起動)
- * - chemical: タップで Inventory に追加 (ケミカルは即時インベントリ入り)
  */
-export type RewardPayload =
-  | {
-      kind: 'gacha';
-      category: 'code' | 'module';
-      rarity: Rarity;
-      /** カード上部の見出し (例: "PHASE 1 CLEAR" / "BOSS DROP")。 */
-      heading: string;
-    }
-  | {
-      kind: 'chemical';
-      chem: ItemInstance;
-      heading: string;
-    };
+export type RewardPayload = {
+  kind: 'gacha';
+  category: 'code' | 'module';
+  rarity: Rarity;
+  /** カード上部の見出し (例: "PHASE 1 CLEAR" / "BOSS DROP")。 */
+  heading: string;
+};
 
 export interface RewardPopupData {
   reward: RewardPayload;
@@ -144,7 +136,7 @@ export class RewardPopupScene extends Phaser.Scene {
   private makeCard(cx: number, cy: number): Phaser.GameObjects.Container {
     const container = this.add.container(cx, cy).setDepth(3);
 
-    const rarity: Rarity = this.reward.kind === 'gacha' ? this.reward.rarity : this.reward.chem.rarity;
+    const rarity: Rarity = this.reward.rarity;
     const rc = RARITY_COLOR[rarity];
 
     // 背景パネル
@@ -194,12 +186,8 @@ export class RewardPopupScene extends Phaser.Scene {
     // 中央アート (種類別)
     const artY = -CARD_H / 2 + 110;
     const art = this.add.graphics();
-    if (this.reward.kind === 'gacha') {
-      if (this.reward.category === 'code') this.drawCodeArt(art, 0, artY, rc);
-      else this.drawModuleArt(art, 0, artY, rc);
-    } else {
-      this.drawChemicalArt(art, 0, artY, rc);
-    }
+    if (this.reward.category === 'code') this.drawCodeArt(art, 0, artY, rc);
+    else this.drawModuleArt(art, 0, artY, rc);
     container.add(art);
 
     // タイトル (中央下)
@@ -243,22 +231,15 @@ export class RewardPopupScene extends Phaser.Scene {
   }
 
   private categoryLabel(): string {
-    if (this.reward.kind === 'gacha') {
-      return this.reward.category === 'code' ? 'CODE PACK' : 'MODULE PACK';
-    }
-    return 'CHEMICAL';
+    return this.reward.category === 'code' ? 'CODE PACK' : 'MODULE PACK';
   }
 
   private cardTitle(): string {
-    if (this.reward.kind === 'gacha') {
-      return this.reward.category === 'code' ? 'コードガチャ' : 'モジュールガチャ';
-    }
-    return CHEMICAL_TYPES[this.reward.chem.typeId]?.nameJa ?? 'ケミカル';
+    return this.reward.category === 'code' ? 'コードガチャ' : 'モジュールガチャ';
   }
 
   private cardSubtitle(): string {
-    if (this.reward.kind === 'gacha') return 'タップで開封 — 3 候補から 1 つ選択';
-    return 'タップで受け取り';
+    return 'タップで開封 — 3 候補から 1 つ選択';
   }
 
   // ─── 中央アート (Graphics で完結、画像アセット不使用) ───────────────
@@ -347,40 +328,6 @@ export class RewardPopupScene extends Phaser.Scene {
     g.strokePath();
   }
 
-  /** ケミカル風: フラスコ。 */
-  private drawChemicalArt(g: Phaser.GameObjects.Graphics, cx: number, cy: number, color: number): void {
-    // フラスコ口
-    g.fillStyle(color, 0.9);
-    g.fillRect(cx - 10, cy - 50, 20, 14);
-    // 首
-    g.fillRect(cx - 4, cy - 36, 8, 14);
-    // 本体 (三角形)
-    g.fillStyle(color, 0.35);
-    g.beginPath();
-    g.moveTo(cx - 8, cy - 22);
-    g.lineTo(cx - 40, cy + 36);
-    g.lineTo(cx + 40, cy + 36);
-    g.lineTo(cx + 8, cy - 22);
-    g.closePath();
-    g.fillPath();
-    g.lineStyle(2, color, 1);
-    g.beginPath();
-    g.moveTo(cx - 8, cy - 22);
-    g.lineTo(cx - 40, cy + 36);
-    g.lineTo(cx + 40, cy + 36);
-    g.lineTo(cx + 8, cy - 22);
-    g.closePath();
-    g.strokePath();
-    // 液面
-    g.fillStyle(color, 0.85);
-    g.fillRect(cx - 28, cy + 14, 56, 22);
-    // 泡
-    g.fillStyle(COLORS.highlight, 0.85);
-    g.fillCircle(cx - 10, cy + 22, 3);
-    g.fillCircle(cx + 6, cy + 16, 2);
-    g.fillCircle(cx + 14, cy + 26, 2);
-  }
-
   // ─── タップ処理 ─────────────────────────────────────────────
 
   private handleTap(): void {
@@ -388,61 +335,31 @@ export class RewardPopupScene extends Phaser.Scene {
     this.claimed = true;
     this.cardTween?.stop();
 
-    if (this.reward.kind === 'gacha') {
-      // GachaOpenScene を mandatory モードで起動 (キャンセル不可)。
-      // 合成 ItemInstance を渡す: Inventory には入っていないが、GachaOpenScene の
-      // 個体削除 filter は uid 未一致なら no-op なので問題なく動く。
-      const syntheticGacha: ItemInstance = {
-        uid: crypto.randomUUID(),
-        typeId: this.reward.category === 'code' ? 'codeGacha' : 'moduleGacha',
-        rarity: this.reward.rarity,
-      };
-      // 一旦カードを非インタラクティブにして、ガチャシーン中の重ね押しを防ぐ
-      this.cardContainer?.setAlpha(0); // カードは飛ばさず単純に消す (ガチャ画面が前面に出るため)
-      for (const g of this.chrome) {
-        const obj = g as Phaser.GameObjects.GameObject & { disableInteractive?: () => void };
-        if (typeof obj.disableInteractive === 'function') obj.disableInteractive();
-      }
-
-      this.scene.launch('GachaOpenScene', {
-        gacha: syntheticGacha,
-        inventory: this.inventory,
-        mandatory: true,
-        onClosed: () => {
-          // ガチャ確定後: 自分自身を閉じる (アイテムボタンへの飛行演出は GachaOpenScene 側で完結)
-          this.scene.stop();
-          this.onClosed();
-        },
-      });
-      this.scene.bringToTop('GachaOpenScene');
-      return;
+    // GachaOpenScene を mandatory モードで起動 (キャンセル不可)。
+    // 合成 ItemInstance を渡す: Inventory には入っていないが、GachaOpenScene の
+    // 個体削除 filter は uid 未一致なら no-op なので問題なく動く。
+    const syntheticGacha: ItemInstance = {
+      uid: crypto.randomUUID(),
+      typeId: this.reward.category === 'code' ? 'codeGacha' : 'moduleGacha',
+      rarity: this.reward.rarity,
+    };
+    // 一旦カードを非インタラクティブにして、ガチャシーン中の重ね押しを防ぐ
+    this.cardContainer?.setAlpha(0);
+    for (const g of this.chrome) {
+      const obj = g as Phaser.GameObjects.GameObject & { disableInteractive?: () => void };
+      if (typeof obj.disableInteractive === 'function') obj.disableInteractive();
     }
 
-    // ケミカル: Inventory に追加 → カードを右上アイテムボタンへ飛ばす
-    this.inventory.items.push(this.reward.chem);
-    this.flyCardToButton();
-  }
-
-  /** 受け取り演出: カードを右上アイテムボタンへ縮小 + フェードで飛ばす。 */
-  private flyCardToButton(): void {
-    const c = this.cardContainer;
-    if (!c) {
-      this.scene.stop();
-      this.onClosed();
-      return;
-    }
-    this.tweens.add({
-      targets: c,
-      x: this.itemBtnTarget.x,
-      y: this.itemBtnTarget.y,
-      scale: 0.18,
-      alpha: 0.1,
-      duration: 520,
-      ease: 'Cubic.easeIn',
-      onComplete: () => {
+    this.scene.launch('GachaOpenScene', {
+      gacha: syntheticGacha,
+      inventory: this.inventory,
+      mandatory: true,
+      itemBtnTarget: this.itemBtnTarget,
+      onClosed: () => {
         this.scene.stop();
         this.onClosed();
       },
     });
+    this.scene.bringToTop('GachaOpenScene');
   }
 }

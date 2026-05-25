@@ -246,6 +246,17 @@ export class Ship {
         new Bullet(this.scene, this.x + jx, this.y + jy, enemy, damage, SHIP.bulletSpeed, COLORS.ally)
       );
     }
+    // 2026-05-25 後: ボム砲装着時は 1 射ごとに低速ボム弾を追加発射 (着弾時に半径 80px AoE)。
+    // 通常弾と並行発射するため、ガトリング砲との重複装着も可。
+    const bombDamage = world.effects.shipBombDamage(this);
+    if (bombDamage > 0) {
+      world.bullets.push(
+        new Bullet(this.scene, this.x, this.y, enemy, bombDamage, SHIP.bulletSpeed * 0.5, COLORS.enemy, {
+          explosionRadius: 80,
+          getEnemies: () => world.enemies,
+        })
+      );
+    }
     this.energy -= shotCost;  // Phase 4: 射撃でエネルギー消費 (省エネコア反映済)
     // Step 1-C: CombatFx の砲口フラッシュ (3 層 + 4 ray)。Ship 弾色 = ally (青)。
     const angle = Math.atan2(enemy.y - this.y, enemy.x - this.x);

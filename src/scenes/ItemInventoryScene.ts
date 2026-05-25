@@ -1,9 +1,9 @@
 import Phaser from 'phaser';
-import { GAME_WIDTH, GAME_HEIGHT, COLORS } from '../config';
+import { GAME_WIDTH, GAME_HEIGHT, COLORS, SHIP } from '../config';
 import type { Ship } from '../entities/Ship';
 import type { Inventory } from '../items/Inventory';
+import type { EffectSystem } from '../items/effects';
 import {
-  type ItemCategory,
   type Rarity,
   type ItemInstance,
   ALL_RARITIES,
@@ -11,9 +11,12 @@ import {
   RARITY_SHORT,
   RARITY_COLOR,
 } from '../items/itemTypes';
-// 2026-05-25: オムニ・コアは画面左上 OmniCoreStrip に移行したため、本シーンの import を撤去
-import { MODULE_TYPES, isModule, moduleEffectText, makeRandomModule } from '../items/types/modules';
-import { CHEMICAL_TYPES, isChemical, chemicalEffectText, makeRandomChemical } from '../items/types/chemicals';
+import {
+  MODULE_TYPES,
+  isModule,
+  moduleEffectLines,
+  makeRandomModule,
+} from '../items/types/modules';
 import { ItemCard } from '../ui/ItemCard';
 
 const FONT = 'system-ui, "Segoe UI", sans-serif';
@@ -22,62 +25,47 @@ export interface ItemInventoryData {
   inventory: Inventory;
   /** 現在の生存 Ship を返す (GameScene が毎フレーム配列を作り直すため getter で渡す)。 */
   getShips: () => Ship[];
-  /** アイテム構成が変わったとき呼ぶ (GameScene が最大 stat 再計算 + バッジ更新)。 */
+  /** 装着構成変更時に GameScene が最大 stat 再計算 + バッジ更新する。 */
   onChanged: () => void;
-  /** ケミカル使用効果を適用する (GameScene が base/ships/economy 等に反映)。 */
-  useChemical: (typeId: string, rarity: Rarity) => void;
 }
-
-interface CategoryDef {
-  id: ItemCategory;
-  label: string;
-}
-
-// 2026-05-25: オムニ・コアは画面左上の OmniCoreStrip に常時表示するため、
-// アイテムメニューのタブからは撤去 (debug 獲得経路も同時に消滅)。
-// 2026-05-25 後: ガチャは即時開封 (報酬ポップアップ) に変更したため、
-// codeGacha/moduleGacha も Inventory に保管されなくなり、タブも撤去。
-const CATEGORIES: ReadonlyArray<CategoryDef> = [
-  { id: 'module', label: 'モジュール' },
-  { id: 'chemical', label: 'ケミカル' },
-];
 
 /**
- * アイテム一覧オーバーレイ (Step 3-A 再構築, 2026-05-25)。
+ * モジュール画面 (2026-05-25 後リデザイン: 船 × モジュールマトリックス)。
  *
- * 3 カラムレイアウト:
- *   - 左 (200px): カテゴリタブ縦並び + 件数バッジ
- *   - 中央 (560px): 4 列 × N 行 のカードグリッド (ItemCard)
- *   - 右 (340px): 選択アイテムの詳細 (ヒーロー領域 + 説明 + アクション)
+ * レイアウト (1140 × 600 カード内):
+ *   ├─ 左 (220px): 船リスト + 各船の HP/ENE/INV/モジュール数バッジ
+ *   ├─ 中央 (~560px): 全所持モジュールのグリッド (4 列)
+ *   └─ 右 (~340px): 選択モジュール詳細 + 選択船に対する装着前後 stat プレビュー + 装着/取り外しボタン
  *
- * GameScene を pause せず並行 active で起動する (ProgramEditorScene と同じパターン)。
+ * ケミカル / オムニコア / ガチャは扱わない (本シーンに残るのはモジュールのみ)。
+ * GameScene を pause せず並行 active で起動する。
  */
 export class ItemInventoryScene extends Phaser.Scene {
   private inventory!: Inventory;
   private getShips!: () => Ship[];
   private onChanged!: () => void;
-  private useChemicalCb!: (typeId: string, rarity: Rarity) => void;
 
-  private selectedCategory: ItemCategory = 'module';
+  /** 装着対象として選択中の船 (null = 自動選択 = 先頭船)。 */
+  private selectedShipId: string | null = null;
+  /** 選択中モジュール (Inventory.items.uid)。 */
   private selectedUid: string | null = null;
-  private confirmingUse = false;
 
   private dyn: Phaser.GameObjects.GameObject[] = [];
   private dynCards: ItemCard[] = [];
   private chrome: Phaser.GameObjects.GameObject[] = [];
   private escHandler?: () => void;
 
-  // カードレイアウト
+  // 全体カードレイアウト
   private cardLeft = 0;
   private cardTop = 0;
   private readonly cardW = 1140;
   private readonly cardH = 600;
 
-  // 各カラムの座標 (create で計算)
+  // 3 カラム座標
   private colLeftX = 0;
   private colCenterX = 0;
   private colRightX = 0;
-  private readonly leftW = 200;
+  private readonly leftW = 220;
   private readonly rightW = 340;
 
   constructor() {
@@ -88,17 +76,13 @@ export class ItemInventoryScene extends Phaser.Scene {
     this.inventory = data.inventory;
     this.getShips = data.getShips;
     this.onChanged = data.onChanged;
-    this.useChemicalCb = data.useChemical;
-    this.selectedCategory = 'module';
+    this.selectedShipId = null;
     this.selectedUid = null;
-    this.confirmingUse = false;
   }
 
   create(): void {
     this.cardLeft = (GAME_WIDTH - this.cardW) / 2;
     this.cardTop = (GAME_HEIGHT - this.cardH) / 2;
-
-    // カラム座標 (24px パディング + gap 16)
     this.colLeftX = this.cardLeft + 24;
     this.colCenterX = this.colLeftX + this.leftW + 16;
     this.colRightX = this.cardLeft + this.cardW - 24 - this.rightW;
@@ -121,10 +105,9 @@ export class ItemInventoryScene extends Phaser.Scene {
     card.on('pointerdown', () => {});
     this.chrome.push(card);
 
-    // タイトル
     this.chrome.push(
       this.add
-        .text(this.cardLeft + 24, this.cardTop + 16, '📦 アイテム', {
+        .text(this.cardLeft + 24, this.cardTop + 16, '🔧 モジュール', {
           fontFamily: FONT,
           fontSize: '20px',
           color: '#cfd6e6',
@@ -132,7 +115,7 @@ export class ItemInventoryScene extends Phaser.Scene {
         })
         .setDepth(2),
       this.add
-        .text(this.cardLeft + 140, this.cardTop + 22, 'INVENTORY', {
+        .text(this.cardLeft + 168, this.cardTop + 22, 'SHIP × MODULE MATRIX', {
           fontFamily: FONT,
           fontSize: '11px',
           color: '#6b7da0',
@@ -151,55 +134,78 @@ export class ItemInventoryScene extends Phaser.Scene {
     this.render();
   }
 
-  // ─── 描画 ──────────────────────────────────────────────────
+  // ─── 描画 (3 カラム) ──────────────────────────────────────
 
   private render(): void {
     for (const g of this.dyn) g.destroy();
     for (const c of this.dynCards) c.destroy();
     this.dyn = [];
     this.dynCards = [];
-    this.renderTabs();
-    this.renderGrid();
+
+    // 先頭船を自動選択 (まだ無選択かつ船が居れば)
+    const ships = this.getShips();
+    if (!this.selectedShipId && ships.length > 0) {
+      this.selectedShipId = ships[0]!.id;
+    }
+    // 選択船が消えていたら解除
+    if (this.selectedShipId && !ships.some((s) => s.id === this.selectedShipId)) {
+      this.selectedShipId = ships[0]?.id ?? null;
+    }
+
+    this.renderShipColumn();
+    this.renderModuleGrid();
     this.renderDetail();
   }
 
-  /** 左: カテゴリタブ (件数バッジ付き、active バー). */
-  private renderTabs(): void {
+  /** 左: 船リスト。各エントリは選択中船をハイライト + 装着済みモジュール数バッジ + HP/ENE/INV mini bar。 */
+  private renderShipColumn(): void {
     const x = this.colLeftX;
     const w = this.leftW;
-    let y = this.cardTop + 60;
-    for (const cat of CATEGORIES) {
-      const selected = cat.id === this.selectedCategory;
-      const count = this.countForCategory(cat.id);
-      // active ハイライト (左 2px バー)
-      if (selected) {
-        this.dyn.push(
-          this.add.rectangle(x, y + 21, 2, 38, COLORS.accent, 1).setOrigin(0, 0.5).setDepth(3)
-        );
-      }
+    const top = this.cardTop + 60;
+
+    this.dyn.push(
+      this.add
+        .text(x, this.cardTop + 28, '宇宙船', {
+          fontFamily: FONT,
+          fontSize: '15px',
+          color: '#cfd6e6',
+          fontStyle: 'bold',
+        })
+        .setDepth(2)
+    );
+
+    const ships = this.getShips();
+    if (ships.length === 0) {
+      this.dyn.push(
+        this.add
+          .rectangle(x + w / 2, top + 60, w, 100, COLORS.bgAlt, 0.4)
+          .setStrokeStyle(1, COLORS.panelBorder, 0.5)
+          .setDepth(2),
+        this.add
+          .text(x + w / 2, top + 60, '宇宙船がいません\n先に下のショップで購入', {
+            fontFamily: FONT,
+            fontSize: '11px',
+            color: '#6b7da0',
+            align: 'center',
+            lineSpacing: 4,
+          })
+          .setOrigin(0.5)
+          .setDepth(3)
+      );
+      return;
+    }
+
+    let y = top;
+    const itemH = 76;
+    ships.forEach((s, i) => {
+      const selected = s.id === this.selectedShipId;
+      const moduleCount = (this.inventory.shipModules[s.id] ?? []).length;
+      // 背景
       const bg = this.add
-        .rectangle(x + w / 2, y + 21, w, 42, selected ? COLORS.accent : COLORS.panelBg, selected ? 0.12 : 1)
-        .setStrokeStyle(1, selected ? COLORS.accent : COLORS.panelBorder, selected ? 1 : 0.6)
+        .rectangle(x + w / 2, y + itemH / 2, w, itemH, selected ? COLORS.accent : COLORS.panelBg, selected ? 0.16 : 1)
+        .setStrokeStyle(1.5, selected ? COLORS.accent : COLORS.panelBorder, selected ? 1 : 0.6)
         .setDepth(2)
         .setInteractive({ useHandCursor: true });
-      const label = this.add
-        .text(x + 16, y + 21, cat.label, {
-          fontFamily: FONT,
-          fontSize: '13px',
-          color: selected ? '#3ee0c5' : '#cfd6e6',
-          fontStyle: selected ? 'bold' : 'normal',
-        })
-        .setOrigin(0, 0.5)
-        .setDepth(3);
-      const countText = this.add
-        .text(x + w - 14, y + 21, count > 0 ? `${count}` : '—', {
-          fontFamily: FONT,
-          fontSize: '12px',
-          color: count > 0 ? '#cfd6e6' : '#6b7da0',
-          fontStyle: count > 0 ? 'bold' : 'normal',
-        })
-        .setOrigin(1, 0.5)
-        .setDepth(3);
       bg.on('pointerover', () => {
         if (!selected) bg.setFillStyle(COLORS.panelHover, 1);
       });
@@ -208,39 +214,96 @@ export class ItemInventoryScene extends Phaser.Scene {
       });
       bg.on('pointerdown', (p: Phaser.Input.Pointer) => {
         if (p.rightButtonDown()) return;
-        this.selectedCategory = cat.id;
-        this.selectedUid = null;
-        this.confirmingUse = false;
+        this.selectedShipId = s.id;
         this.render();
       });
-      this.dyn.push(bg, label, countText);
-      y += 50;
-    }
+
+      // 選択バー (左 2px)
+      if (selected) {
+        this.dyn.push(
+          this.add.rectangle(x, y + itemH / 2, 3, itemH - 4, COLORS.accent, 1).setOrigin(0, 0.5).setDepth(3)
+        );
+      }
+
+      // ヘッダ: 船番号 + モジュール数バッジ
+      const label = this.add
+        .text(x + 14, y + 12, `S${i + 1}`, {
+          fontFamily: FONT,
+          fontSize: '15px',
+          color: selected ? '#3ee0c5' : '#cfd6e6',
+          fontStyle: 'bold',
+        })
+        .setDepth(3);
+      const badge = this.add
+        .rectangle(x + w - 20, y + 18, 32, 18, COLORS.bgAlt, 0.9)
+        .setStrokeStyle(1, COLORS.accent, 0.6)
+        .setDepth(3);
+      const badgeText = this.add
+        .text(x + w - 20, y + 18, `M${moduleCount}`, {
+          fontFamily: FONT,
+          fontSize: '10px',
+          color: moduleCount > 0 ? '#3ee0c5' : '#6b7da0',
+          fontStyle: 'bold',
+        })
+        .setOrigin(0.5)
+        .setDepth(4);
+
+      // ミニバー: HP / ENE / INV
+      const barX = x + 14;
+      const barTop = y + 36;
+      const barW = w - 28;
+      const barH = 6;
+      const barGap = 10;
+      const hpRatio = Math.max(0, s.hp / s.maxHp);
+      const eRatio = Math.max(0, s.energy / s.maxEnergy);
+      const iRatio = s.inventoryCap > 0 ? Math.min(1, s.inventory / s.inventoryCap) : 0;
+      this.drawMiniBar(barX, barTop, barW, barH, hpRatio, COLORS.enemy, 'HP');
+      this.drawMiniBar(barX, barTop + barGap, barW, barH, eRatio, COLORS.ally, 'EN');
+      this.drawMiniBar(barX, barTop + barGap * 2, barW, barH, iRatio, COLORS.resource, 'IN');
+
+      this.dyn.push(bg, label, badge, badgeText);
+      y += itemH + 8;
+    });
   }
 
-  private countForCategory(cat: ItemCategory): number {
-    switch (cat) {
-      case 'module':   return this.inventory.items.filter((it) => isModule(it.typeId)).length;
-      case 'chemical': return this.inventory.items.filter((it) => isChemical(it.typeId)).length;
-      default:         return 0; // omniCore / codeGacha / moduleGacha は UI から撤去
-    }
+  /** ミニバー (左ラベル + バー + 数値テキストは省略、色で意味を示す)。 */
+  private drawMiniBar(x: number, y: number, w: number, h: number, ratio: number, color: number, label: string): void {
+    const labelText = this.add
+      .text(x, y + h / 2, label, {
+        fontFamily: FONT,
+        fontSize: '9px',
+        color: '#6b7da0',
+        fontStyle: 'bold',
+      })
+      .setOrigin(0, 0.5)
+      .setDepth(3);
+    const barX = x + 18;
+    const barW = w - 18;
+    const bg = this.add
+      .rectangle(barX, y, barW, h, COLORS.bg, 0.85)
+      .setOrigin(0, 0)
+      .setDepth(3);
+    const fg = this.add
+      .rectangle(barX, y, Math.max(1, barW * ratio), h, color, 0.95)
+      .setOrigin(0, 0)
+      .setDepth(4);
+    this.dyn.push(labelText, bg, fg);
   }
 
-  /** 中央: 4 列 × N 行 のカードグリッド。 */
-  private renderGrid(): void {
+  /** 中央: モジュールグリッド (4 列 × N 行)。装着船バッジで配属を示す。 */
+  private renderModuleGrid(): void {
     const gridLeft = this.colCenterX;
     const gridTop = this.cardTop + 60;
-    const gridW = this.colRightX - gridLeft - 16; // 右カラムとの gap 16
+    const gridW = this.colRightX - gridLeft - 16;
     const cols = 4;
     const gap = 8;
     const cardW = Math.floor((gridW - gap * (cols - 1)) / cols);
     const cardH = 140;
 
-    // ヘッダー (カテゴリ名 + 件数)
-    const items = this.categoryItems();
+    const items = this.inventory.items.filter((it) => isModule(it.typeId));
     this.dyn.push(
       this.add
-        .text(gridLeft, this.cardTop + 28, this.headerForCategory(), {
+        .text(gridLeft, this.cardTop + 28, '所持モジュール', {
           fontFamily: FONT,
           fontSize: '15px',
           color: '#cfd6e6',
@@ -248,7 +311,7 @@ export class ItemInventoryScene extends Phaser.Scene {
         })
         .setDepth(2),
       this.add
-        .text(gridLeft + 120, this.cardTop + 32, `${items.length} 件`, {
+        .text(gridLeft + 150, this.cardTop + 32, `${items.length} 件`, {
           fontFamily: FONT,
           fontSize: '11px',
           color: '#6b7da0',
@@ -263,11 +326,12 @@ export class ItemInventoryScene extends Phaser.Scene {
           .setStrokeStyle(1, COLORS.panelBorder, 0.5)
           .setDepth(2),
         this.add
-          .text(gridLeft + gridW / 2, gridTop + 120, 'このカテゴリのアイテムを所持していません', {
+          .text(gridLeft + gridW / 2, gridTop + 120, 'モジュールを所持していません\n\nガチャを引いて獲得しましょう', {
             fontFamily: FONT,
             fontSize: '13px',
             color: '#6b7da0',
             align: 'center',
+            lineSpacing: 6,
             wordWrap: { width: 360 },
           })
           .setOrigin(0.5)
@@ -276,28 +340,28 @@ export class ItemInventoryScene extends Phaser.Scene {
       return;
     }
 
-    // カード並べ
-    const maxRows = 3; // グリッド表示の上限
+    const maxRows = 3;
     const maxCards = cols * maxRows;
+    const shipsList = this.getShips();
     for (let i = 0; i < Math.min(items.length, maxCards); i++) {
       const it = items[i]!;
       const col = i % cols;
       const row = Math.floor(i / cols);
       const x = gridLeft + col * (cardW + gap) + cardW / 2;
       const y = gridTop + row * (cardH + gap) + cardH / 2;
+      const equippedIdx = this.equippedShipIndex(it.uid, shipsList);
       const card = new ItemCard(this, x, y, {
         width: cardW,
         height: cardH,
         rarity: it.rarity,
-        iconColor: this.iconColorFor(it.typeId),
-        name: this.displayName(it.typeId),
-        subtext: this.subtextFor(it),
-        equippedBadge: this.equippedBadgeFor(it),
+        iconColor: COLORS.ally,
+        name: MODULE_TYPES[it.typeId]?.nameJa ?? it.typeId,
+        subtext: this.shortEffect(it),
+        equippedBadge: equippedIdx >= 0 ? `S${equippedIdx + 1}` : null,
         selected: it.uid === this.selectedUid,
         depth: 3,
         onPointerDown: () => {
           this.selectedUid = it.uid;
-          this.confirmingUse = false;
           this.render();
         },
       });
@@ -306,70 +370,35 @@ export class ItemInventoryScene extends Phaser.Scene {
     if (items.length > maxCards) {
       this.dyn.push(
         this.add
-          .text(gridLeft + gridW / 2, gridTop + cardH * maxRows + gap * (maxRows - 1) + 12,
-            `… ほか ${items.length - maxCards} 件 (右の詳細で個別操作)`, {
-            fontFamily: FONT,
-            fontSize: '11px',
-            color: '#6b7da0',
-          })
+          .text(
+            gridLeft + gridW / 2,
+            gridTop + cardH * maxRows + gap * (maxRows - 1) + 12,
+            `… ほか ${items.length - maxCards} 件`,
+            {
+              fontFamily: FONT,
+              fontSize: '11px',
+              color: '#6b7da0',
+            }
+          )
           .setOrigin(0.5)
           .setDepth(3)
       );
     }
   }
 
-  private headerForCategory(): string {
-    const found = CATEGORIES.find((c) => c.id === this.selectedCategory);
-    return found?.label ?? '';
+  /** モジュールカード下部のサブテキスト (最初の効果 1 行のみ)。 */
+  private shortEffect(it: ItemInstance): string {
+    const lines = moduleEffectLines(it.typeId, it.rarity);
+    return lines[0] ?? '';
   }
 
-  /** カード中央アイコンの色 (カテゴリ別に固定)。 */
-  private iconColorFor(typeId: string): number {
-    if (isModule(typeId))   return COLORS.ally;
-    if (isChemical(typeId)) return COLORS.accent;
-    return COLORS.uiDim;
-  }
-
-  /** カード下部のサブテキスト (効果や状態)。 */
-  private subtextFor(it: ItemInstance): string {
-    if (isChemical(it.typeId)) return '使い切り';
-    return '';
-  }
-
-  /** モジュール装着先を「S1」「S2」形式で返す (未装着は null)。 */
-  private equippedBadgeFor(it: ItemInstance): string | null {
-    if (!isModule(it.typeId)) return null;
-    const idx = this.equippedShipIndex(it.uid);
-    return idx >= 0 ? `S${idx + 1}` : null;
-  }
-
-  /** 選択カテゴリに属する所持アイテム。 */
-  private categoryItems(): ItemInstance[] {
-    if (this.selectedCategory === 'module') {
-      return this.inventory.items.filter((it) => isModule(it.typeId));
-    }
-    if (this.selectedCategory === 'chemical') {
-      return this.inventory.items.filter((it) => isChemical(it.typeId));
-    }
-    return []; // omniCore / codeGacha / moduleGacha はこのシーンに表示しない
-  }
-
-  private displayName(typeId: string): string {
-    return (
-      MODULE_TYPES[typeId]?.nameJa ??
-      CHEMICAL_TYPES[typeId]?.nameJa ??
-      typeId
-    );
-  }
-
-  /** 右: 選択アイテムの詳細パネル (ヒーロー領域 + 説明 + アクション)。 */
+  /** 右: 選択モジュール詳細 + 装着前後 stat プレビュー + アクション。 */
   private renderDetail(): void {
     const x = this.colRightX;
     const w = this.rightW;
     const top = this.cardTop + 60;
-    const h = this.cardH - 60 - 56; // 下端のデバッグ行を避ける
+    const h = this.cardH - 60 - 56;
 
-    // パネル背景
     this.dyn.push(
       this.add
         .rectangle(x + w / 2, top + h / 2, w, h, COLORS.bgAlt, 0.6)
@@ -377,17 +406,18 @@ export class ItemInventoryScene extends Phaser.Scene {
         .setDepth(2)
     );
 
-    const sel =
-      this.selectedUid !== null
-        ? this.inventory.items.find((it) => it.uid === this.selectedUid)
-        : undefined;
-    if (!sel) {
+    const sel = this.selectedUid
+      ? this.inventory.items.find((it) => it.uid === this.selectedUid)
+      : undefined;
+    if (!sel || !isModule(sel.typeId)) {
       this.dyn.push(
         this.add
-          .text(x + w / 2, top + h / 2, '↑ カードを選択してください', {
+          .text(x + w / 2, top + h / 2, 'モジュールを選択してください', {
             fontFamily: FONT,
             fontSize: '13px',
             color: '#6b7da0',
+            align: 'center',
+            wordWrap: { width: w - 32 },
           })
           .setOrigin(0.5)
           .setDepth(3)
@@ -395,32 +425,13 @@ export class ItemInventoryScene extends Phaser.Scene {
       return;
     }
 
-    // ヒーロー領域: 大きい六角アイコン + Rarity 表示
-    const heroH = 180;
-    const heroBg = this.add
-      .rectangle(x + w / 2, top + heroH / 2 + 2, w - 4, heroH, COLORS.bg, 0.55)
-      .setDepth(3);
-    this.dyn.push(heroBg);
-
-    // 大きい六角アイコン (decorative)
-    const heroIcon = this.add.graphics().setDepth(4);
-    const hr = 38;
-    const hcx = x + w / 2;
-    const hcy = top + heroH / 2;
-    const iconColor = this.iconColorFor(sel.typeId);
-    // 外枠
-    this.drawHex(heroIcon, hcx, hcy, hr * 1.25, COLORS.bgAlt, 0.9);
-    this.strokeHex(heroIcon, hcx, hcy, hr * 1.25, RARITY_COLOR[sel.rarity], 1.5);
-    // 内側
-    this.drawHex(heroIcon, hcx, hcy, hr * 0.9, iconColor, 0.9);
-    heroIcon.fillStyle(COLORS.highlight, 0.95);
-    heroIcon.fillCircle(hcx, hcy, hr * 0.2);
-    this.dyn.push(heroIcon);
-
+    const mod = MODULE_TYPES[sel.typeId]!;
     const rc = RARITY_COLOR[sel.rarity];
+
+    // ヘッダ: 名前 + Rarity
     this.dyn.push(
       this.add
-        .text(x + 16, top + heroH + 16, this.displayName(sel.typeId), {
+        .text(x + 16, top + 14, mod.nameJa, {
           fontFamily: FONT,
           fontSize: '17px',
           color: '#cfd6e6',
@@ -429,147 +440,230 @@ export class ItemInventoryScene extends Phaser.Scene {
         })
         .setDepth(4),
       this.add
-        .text(x + 16, top + heroH + 44, RARITY_LABEL[sel.rarity], {
+        .rectangle(x + w - 40, top + 22, 40, 18, rc, 0.18)
+        .setStrokeStyle(1, rc, 1)
+        .setDepth(4),
+      this.add
+        .text(x + w - 40, top + 22, RARITY_SHORT[sel.rarity], {
+          fontFamily: FONT,
+          fontSize: '11px',
+          color: '#' + rc.toString(16).padStart(6, '0'),
+          fontStyle: 'bold',
+        })
+        .setOrigin(0.5)
+        .setDepth(5),
+      this.add
+        .text(x + 16, top + 42, RARITY_LABEL[sel.rarity], {
+          fontFamily: FONT,
+          fontSize: '11px',
+          color: '#' + rc.toString(16).padStart(6, '0'),
+          fontStyle: 'bold',
+        })
+        .setDepth(4),
+      // 説明
+      this.add
+        .text(x + 16, top + 62, mod.descJa, {
           fontFamily: FONT,
           fontSize: '12px',
-          color: '#' + rc.toString(16).padStart(6, '0'),
+          color: '#cfd6e6',
+          lineSpacing: 4,
+          wordWrap: { width: w - 32 },
+        })
+        .setDepth(4),
+      // 効果 (改行で並べる)
+      this.add
+        .text(x + 16, top + 108, '効果', {
+          fontFamily: FONT,
+          fontSize: '11px',
+          color: '#6b7da0',
+          fontStyle: 'bold',
+        })
+        .setDepth(4),
+      this.add
+        .text(x + 16, top + 124, moduleEffectLines(sel.typeId, sel.rarity).join('\n'), {
+          fontFamily: FONT,
+          fontSize: '12px',
+          color: '#3ee0c5',
+          fontStyle: 'bold',
+          lineSpacing: 5,
+          wordWrap: { width: w - 32 },
+        })
+        .setDepth(4)
+    );
+
+    // 装着前後 stat プレビュー
+    const previewTop = top + 200;
+    this.renderStatPreview(sel, x + 16, previewTop, w - 32);
+
+    // アクションボタン
+    this.renderModuleActions(sel, x + 16, top + h - 78, w - 32);
+  }
+
+  /**
+   * 装着前後の stat プレビュー (選択中船に対して)。
+   * 船が居なければ「先に船を選んでください」。
+   * 装着済み (この船) なら「取り外し後」、未装着なら「装着後」を比較。
+   */
+  private renderStatPreview(it: ItemInstance, x: number, y: number, w: number): void {
+    this.dyn.push(
+      this.add
+        .text(x, y, this.selectedShipId ? '装着プレビュー (選択中の船)' : '装着先', {
+          fontFamily: FONT,
+          fontSize: '11px',
+          color: '#6b7da0',
           fontStyle: 'bold',
         })
         .setDepth(4)
     );
-
-    const detailTop = top + heroH + 70;
-    if (isModule(sel.typeId)) this.renderModuleDetail(sel, x, w, detailTop);
-    else if (isChemical(sel.typeId)) this.renderChemicalDetail(sel, x, w, detailTop);
-  }
-
-  // 2026-05-25: renderCoreDetail は OmniCoreStrip 移行に伴い撤去。
-  // renderGachaDetail / openGacha は即時開封フロー (RewardPopupScene) 移行に伴い撤去。
-  // ガチャは Inventory に入らず、報酬ポップアップでその場で消費される。
-
-  private renderModuleDetail(it: ItemInstance, x: number, w: number, top: number): void {
-    const mod = MODULE_TYPES[it.typeId]!;
-    this.dyn.push(
-      this.add
-        .text(x + 16, top, `${mod.descJa}\n\n${moduleEffectText(it.typeId, it.rarity)}`, {
-          fontFamily: FONT,
-          fontSize: '12px',
-          color: '#cfd6e6',
-          lineSpacing: 5,
-          wordWrap: { width: w - 32 },
-        })
-        .setDepth(4)
-    );
-    this.renderModuleActions(it, x + 16, top + 84, w - 32);
-  }
-
-  private renderChemicalDetail(it: ItemInstance, x: number, w: number, top: number): void {
-    const chem = CHEMICAL_TYPES[it.typeId]!;
-    this.dyn.push(
-      this.add
-        .text(x + 16, top, `${chem.descJa}\n\n効果: ${chemicalEffectText(it.typeId, it.rarity)}`, {
-          fontFamily: FONT,
-          fontSize: '12px',
-          color: '#cfd6e6',
-          lineSpacing: 5,
-          wordWrap: { width: w - 32 },
-        })
-        .setDepth(4)
-    );
-
-    const ax = x + 16;
-    const aw = w - 32;
-    let ay = top + 90;
-    if (this.confirmingUse) {
+    const ship = this.getShips().find((s) => s.id === this.selectedShipId) ?? null;
+    if (!ship) {
       this.dyn.push(
         this.add
-          .text(ax, ay, '使用すると消費されます。', {
+          .text(x, y + 18, '船を購入して左から選択してください', {
             fontFamily: FONT,
             fontSize: '11px',
             color: '#6b7da0',
-          })
-          .setDepth(4)
-      );
-      ay += 22;
-      this.makeActionButton(ax, ay, aw, '使用する', COLORS.accent, () => {
-        this.consumeChemical(it);
-      });
-      this.makeActionButton(ax, ay + 34, aw, 'やめる', COLORS.uiDim, () => {
-        this.confirmingUse = false;
-        this.render();
-      });
-    } else {
-      this.makeActionButton(ax, ay, aw, '▶ 使用する', COLORS.accent, () => {
-        this.confirmingUse = true;
-        this.render();
-      });
-    }
-  }
-
-  /** モジュールの装着 / 取り外し操作 UI。 */
-  private renderModuleActions(it: ItemInstance, x: number, y: number, w: number): void {
-    const idx = this.equippedShipIndex(it.uid);
-    if (idx >= 0) {
-      this.dyn.push(
-        this.add
-          .text(x, y, `装着中: 宇宙船 #${idx + 1}`, {
-            fontFamily: FONT,
-            fontSize: '12px',
-            color: '#3ee0c5',
-          })
-          .setDepth(4)
-      );
-      this.makeActionButton(x, y + 22, w, '取り外す', COLORS.enemy, () => {
-        this.detachModule(it.uid);
-      });
-      return;
-    }
-
-    const ships = this.getShips();
-    if (ships.length === 0) {
-      this.dyn.push(
-        this.add
-          .text(x, y, '装着できる宇宙船がありません\n(先に宇宙船を購入してください)', {
-            fontFamily: FONT,
-            fontSize: '11px',
-            color: '#6b7da0',
-            lineSpacing: 4,
+            wordWrap: { width: w },
           })
           .setDepth(4)
       );
       return;
     }
 
-    this.dyn.push(
-      this.add
-        .text(x, y, '装着先を選択:', {
-          fontFamily: FONT,
-          fontSize: '12px',
-          color: '#cfd6e6',
-        })
-        .setDepth(4)
+    // 一時的にモジュール装着構成を変えて effects.shipStat を再計算するヘルパ
+    const effects = this.findEffectSystem();
+    if (!effects) return;
+    const idx = this.equippedShipIndex(it.uid, [ship]);
+    const isOnThisShip = idx === 0;
+    const before = computeShipStats(ship, effects);
+    // 「もし切り替えたら」値: 装着なら追加、装着済みなら外す
+    const after = withToggledModule(this.inventory, ship.id, it.uid, isOnThisShip, () =>
+      computeShipStats(ship, effects)
     );
-    let by = y + 22;
-    ships.forEach((s, i) => {
-      this.makeActionButton(x, by, w, `宇宙船 #${i + 1} に装着`, COLORS.ally, () => {
-        this.attachModule(it.uid, s.id);
-      });
-      by += 32;
-    });
+
+    const rows: Array<[string, number, number]> = [
+      ['最大HP', before.maxHp, after.maxHp],
+      ['最大エネ', before.maxEnergy, after.maxEnergy],
+      ['積載量', before.inventoryCap, after.inventoryCap],
+      ['攻撃力', before.damagePerShot, after.damagePerShot],
+      ['移動速度', before.moveSpeed, after.moveSpeed],
+    ];
+    let ry = y + 18;
+    for (const [label, b, a] of rows) {
+      const diff = a - b;
+      const diffStr =
+        Math.abs(diff) < 0.05 ? '' : diff > 0 ? `  +${formatNum(diff)}` : `  ${formatNum(diff)}`;
+      const diffColor = diff > 0 ? '#3ee0c5' : diff < 0 ? '#ff4d5a' : '#6b7da0';
+      this.dyn.push(
+        this.add
+          .text(x, ry, label, {
+            fontFamily: FONT,
+            fontSize: '11px',
+            color: '#cfd6e6',
+          })
+          .setDepth(4),
+        this.add
+          .text(x + 80, ry, formatNum(b), {
+            fontFamily: FONT,
+            fontSize: '11px',
+            color: '#cfd6e6',
+          })
+          .setDepth(4),
+        this.add
+          .text(x + 130, ry, '→', {
+            fontFamily: FONT,
+            fontSize: '11px',
+            color: '#6b7da0',
+          })
+          .setDepth(4),
+        this.add
+          .text(x + 150, ry, formatNum(a), {
+            fontFamily: FONT,
+            fontSize: '11px',
+            color: diff !== 0 ? diffColor : '#cfd6e6',
+            fontStyle: diff !== 0 ? 'bold' : 'normal',
+          })
+          .setDepth(4),
+        this.add
+          .text(x + 195, ry, diffStr, {
+            fontFamily: FONT,
+            fontSize: '11px',
+            color: diffColor,
+            fontStyle: 'bold',
+          })
+          .setDepth(4)
+      );
+      ry += 16;
+    }
   }
 
-  // ─── アイテム操作 ──────────────────────────────────────────
+  /**
+   * GameScene の EffectSystem を取得する。
+   * Inventory への参照は scene.scene.get('GameScene') 経由で辿らずに、
+   * GameScene が effects を渡してくれていないので、自前で再構築して使う。
+   * → ItemInventoryScene 単体で再構築せずに済むよう、GameScene 側で EffectSystem を
+   *   data で渡すのが本来は綺麗だが、現状の onChanged コールバックで recomputeShipStats
+   *   が実装上動くので、プレビューも GameScene の effects を参照する経路を取る。
+   *
+   * 暫定実装: GameScene の `effects` フィールドを scene.get で読み取る。
+   */
+  private findEffectSystem(): EffectSystem | null {
+    const gs = this.scene.get('GameScene') as Phaser.Scene & { effects?: EffectSystem };
+    return gs.effects ?? null;
+  }
 
-  private equippedShipIndex(uid: string): number {
-    const ships = this.getShips();
+  private equippedShipIndex(uid: string, ships: ReadonlyArray<Ship>): number {
     for (let i = 0; i < ships.length; i++) {
       if ((this.inventory.shipModules[ships[i]!.id] ?? []).includes(uid)) return i;
     }
     return -1;
   }
 
+  /** モジュール装着/取り外しボタン群 (選択船に対して)。 */
+  private renderModuleActions(it: ItemInstance, x: number, y: number, w: number): void {
+    const ships = this.getShips();
+    if (ships.length === 0) {
+      this.dyn.push(
+        this.add
+          .text(x, y, '船がいないため装着できません', {
+            fontFamily: FONT,
+            fontSize: '11px',
+            color: '#6b7da0',
+          })
+          .setDepth(4)
+      );
+      return;
+    }
+
+    const targetShip = ships.find((s) => s.id === this.selectedShipId) ?? null;
+    if (!targetShip) return;
+    const equippedOnTarget = (this.inventory.shipModules[targetShip.id] ?? []).includes(it.uid);
+    const equippedOnAnyOther = this.equippedShipIndex(it.uid, ships) >= 0 && !equippedOnTarget;
+    const targetIdx = ships.indexOf(targetShip);
+
+    if (equippedOnTarget) {
+      this.makeActionButton(x, y, w, `S${targetIdx + 1} から取り外す`, COLORS.enemy, () => {
+        this.detachModule(it.uid);
+      });
+    } else if (equippedOnAnyOther) {
+      const otherIdx = this.equippedShipIndex(it.uid, ships);
+      this.makeActionButton(
+        x,
+        y,
+        w,
+        `S${otherIdx + 1} → S${targetIdx + 1} に移し替える`,
+        COLORS.accent,
+        () => this.attachModule(it.uid, targetShip.id)
+      );
+    } else {
+      this.makeActionButton(x, y, w, `S${targetIdx + 1} に装着`, COLORS.ally, () => {
+        this.attachModule(it.uid, targetShip.id);
+      });
+    }
+  }
+
   private attachModule(uid: string, shipId: string): void {
-    this.detachUid(uid); // 排他: 他 Ship から外してから装着
+    this.detachUid(uid);
     const list = this.inventory.shipModules[shipId] ?? [];
     list.push(uid);
     this.inventory.shipModules[shipId] = list;
@@ -583,7 +677,6 @@ export class ItemInventoryScene extends Phaser.Scene {
     this.render();
   }
 
-  /** uid を全 Ship の装着リストから取り除く。 */
   private detachUid(uid: string): void {
     for (const id of Object.keys(this.inventory.shipModules)) {
       const list = this.inventory.shipModules[id];
@@ -594,23 +687,13 @@ export class ItemInventoryScene extends Phaser.Scene {
     }
   }
 
-  /** ケミカルを使用 (効果適用 + インベントリから消費)。 */
-  private consumeChemical(it: ItemInstance): void {
-    this.useChemicalCb(it.typeId, it.rarity);
-    this.inventory.items = this.inventory.items.filter((i) => i.uid !== it.uid);
-    this.selectedUid = null;
-    this.confirmingUse = false;
-    this.onChanged();
-    this.render();
-  }
-
   // ─── デバッグ獲得行 ────────────────────────────────────────
 
   private makeDebugRow(): void {
     const y = this.cardTop + this.cardH - 38;
     this.chrome.push(
       this.add
-        .text(this.cardLeft + 24, y, 'DEBUG 獲得 (選択中カテゴリ):', {
+        .text(this.cardLeft + 24, y, 'DEBUG モジュール獲得:', {
           fontFamily: FONT,
           fontSize: '12px',
           color: '#6b7da0',
@@ -618,7 +701,7 @@ export class ItemInventoryScene extends Phaser.Scene {
         .setOrigin(0, 0.5)
         .setDepth(3)
     );
-    let x = this.cardLeft + 244;
+    let x = this.cardLeft + 200;
     for (const r of ALL_RARITIES) {
       this.makeDebugButton(x, y, r);
       x += 70;
@@ -650,15 +733,10 @@ export class ItemInventoryScene extends Phaser.Scene {
     this.chrome.push(bg, t);
   }
 
-  /** 選択中カテゴリのアイテムを 1 個獲得する (デバッグ用、module/chemical のみ)。 */
   private debugGrant(rarity: Rarity): void {
-    let granted: ItemInstance | null = null;
-    if (this.selectedCategory === 'module') granted = makeRandomModule(rarity);
-    else if (this.selectedCategory === 'chemical') granted = makeRandomChemical(rarity);
-    if (!granted) return;
+    const granted = makeRandomModule(rarity);
     this.inventory.items.push(granted);
     this.selectedUid = granted.uid;
-    this.confirmingUse = false;
     this.onChanged();
     this.render();
   }
@@ -673,10 +751,10 @@ export class ItemInventoryScene extends Phaser.Scene {
     accent: number,
     onClick: () => void
   ): void {
-    const h = 30;
+    const h = 36;
     const bg = this.add
       .rectangle(x + w / 2, y + h / 2, w, h, COLORS.panelBg, 1)
-      .setStrokeStyle(1, accent, 0.85)
+      .setStrokeStyle(1.5, accent, 0.9)
       .setDepth(4)
       .setInteractive({ useHandCursor: true });
     const t = this.add
@@ -720,36 +798,6 @@ export class ItemInventoryScene extends Phaser.Scene {
     this.chrome.push(bg, t);
   }
 
-  // ─── 六角ヘルパ (詳細ヒーロー用) ──────────────────
-
-  private drawHex(g: Phaser.GameObjects.Graphics, cx: number, cy: number, r: number, color: number, alpha: number): void {
-    g.fillStyle(color, alpha);
-    g.beginPath();
-    for (let i = 0; i < 6; i++) {
-      const a = (i / 6) * Math.PI * 2 - Math.PI / 2;
-      const px = cx + Math.cos(a) * r;
-      const py = cy + Math.sin(a) * r;
-      if (i === 0) g.moveTo(px, py);
-      else g.lineTo(px, py);
-    }
-    g.closePath();
-    g.fillPath();
-  }
-
-  private strokeHex(g: Phaser.GameObjects.Graphics, cx: number, cy: number, r: number, color: number, width: number): void {
-    g.lineStyle(width, color, 1);
-    g.beginPath();
-    for (let i = 0; i < 6; i++) {
-      const a = (i / 6) * Math.PI * 2 - Math.PI / 2;
-      const px = cx + Math.cos(a) * r;
-      const py = cy + Math.sin(a) * r;
-      if (i === 0) g.moveTo(px, py);
-      else g.lineTo(px, py);
-    }
-    g.closePath();
-    g.strokePath();
-  }
-
   private close(): void {
     this.scene.stop();
   }
@@ -766,4 +814,69 @@ export class ItemInventoryScene extends Phaser.Scene {
     this.dynCards = [];
     this.chrome = [];
   }
+}
+
+// ─── ヘルパ (本シーン内専用) ────────────────────────────────
+
+interface ShipStatsSnapshot {
+  maxHp: number;
+  maxEnergy: number;
+  inventoryCap: number;
+  damagePerShot: number;
+  moveSpeed: number;
+}
+
+function computeShipStats(ship: Ship, effects: EffectSystem): ShipStatsSnapshot {
+  return {
+    maxHp: effects.shipStat(ship, 'maxHp', SHIP.hp),
+    maxEnergy: effects.shipStat(ship, 'maxEnergy', SHIP.energy),
+    inventoryCap: effects.shipStat(ship, 'inventoryCap', SHIP.inventoryCap),
+    damagePerShot: effects.shipStat(ship, 'damagePerShot', SHIP.damagePerShot),
+    moveSpeed: effects.shipStat(ship, 'moveSpeed', SHIP.moveSpeed),
+  };
+}
+
+/**
+ * inventory.shipModules を一時的に切り替えて compute を実行し、必ず元に戻す。
+ * プレビュー用 (実装着はしない)。
+ *
+ * - `isOnShip=true`: その船から uid を外した状態で compute
+ * - `isOnShip=false`: その船に uid を一時追加した状態で compute
+ */
+function withToggledModule<T>(
+  inv: Inventory,
+  shipId: string,
+  uid: string,
+  isOnShip: boolean,
+  compute: () => T
+): T {
+  const snapshot: Record<string, string[]> = {};
+  for (const k of Object.keys(inv.shipModules)) {
+    snapshot[k] = [...(inv.shipModules[k] ?? [])];
+  }
+  try {
+    if (isOnShip) {
+      // この船から外し、他船にも一切付いていない状態にする
+      for (const k of Object.keys(inv.shipModules)) {
+        inv.shipModules[k] = (inv.shipModules[k] ?? []).filter((u) => u !== uid);
+      }
+    } else {
+      // 他船から外し、この船に追加する
+      for (const k of Object.keys(inv.shipModules)) {
+        inv.shipModules[k] = (inv.shipModules[k] ?? []).filter((u) => u !== uid);
+      }
+      const list = inv.shipModules[shipId] ?? [];
+      list.push(uid);
+      inv.shipModules[shipId] = list;
+    }
+    return compute();
+  } finally {
+    // 元に戻す
+    inv.shipModules = snapshot;
+  }
+}
+
+function formatNum(n: number): string {
+  if (Math.abs(n - Math.round(n)) < 0.05) return `${Math.round(n)}`;
+  return n.toFixed(1);
 }

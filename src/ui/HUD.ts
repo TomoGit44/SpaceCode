@@ -60,17 +60,17 @@ export class HUD {
     this.hpBar = scene.add.graphics();
     this.drawHpBar(hpMax);
 
-    // 中央: Phase
+    // 中央: Stage / Phase (2026-05-26: 5 Stage × 20 Phase に拡張、2 段表記)
     const cx = GAME_WIDTH / 2;
     this.phaseLabel = scene.add
-      .text(cx, top, 'PHASE', {
+      .text(cx, top, 'STAGE · PHASE', {
         fontFamily: 'system-ui, "Segoe UI", sans-serif',
         fontSize: '12px',
         color: '#6b7da0',
       })
       .setOrigin(0.5, 0);
     this.phaseValue = scene.add
-      .text(cx, top + 14, '0 / 0', {
+      .text(cx, top + 14, '— · —', {
         fontFamily: 'system-ui, "Segoe UI", sans-serif',
         fontSize: '20px',
         color: '#cfd6e6',
@@ -193,8 +193,20 @@ export class HUD {
     });
   }
 
-  public setPhase(current: number, total: number): void {
-    this.phaseValue.setText(`${current} / ${total}`);
+  /**
+   * Stage / Phase 2 段表記 (2026-05-26)。
+   * 例: setStageAndPhase(3, 5, 12, 20) → `3 / 5  ·  12 / 20`
+   * stage または phaseInStage が 0 のときは「— / total」表示にして待機状態を示す。
+   */
+  public setStageAndPhase(
+    stage: number,
+    totalStages: number,
+    phaseInStage: number,
+    phasesPerStage: number,
+  ): void {
+    const s = stage > 0 ? `${stage} / ${totalStages}` : `— / ${totalStages}`;
+    const p = phaseInStage > 0 ? `${phaseInStage} / ${phasesPerStage}` : `— / ${phasesPerStage}`;
+    this.phaseValue.setText(`${s}  ·  ${p}`);
   }
 
   public setStatus(text: string): void {
@@ -203,16 +215,22 @@ export class HUD {
 
   /**
    * 準備時間中の「開始」ボタンを表示する。
-   * onClick はクリック or キー入力 (GameScene 側) から呼ばれる handler を統一するため、
-   * GameScene が SPACE/ENTER をハンドルしたいときは getStartHandler() で取得して使う。
+   * 2026-05-26: Stage 込みの 2 段表記に変更。
+   * 例: ▶ Stage 3 / Phase 12 開始
    */
-  public showStartButton(phaseNumber: number, totalPhases: number, onClick: () => void): void {
+  public showStartButton(
+    stage: number,
+    phaseInStage: number,
+    phasesPerStage: number,
+    onClick: () => void,
+    isFirstPhase: boolean = false,
+  ): void {
     this.startBtnHandler = onClick;
     this.startBtnEnabled = true;
-    const isFirst = phaseNumber === 1;
-    const label = isFirst
-      ? `▶ PHASE ${phaseNumber} / ${totalPhases} 開始`
-      : `▶ 次の PHASE ${phaseNumber} / ${totalPhases} を開始`;
+    const phaseLabel = `Stage ${stage} / Phase ${phaseInStage} / ${phasesPerStage}`;
+    const label = isFirstPhase
+      ? `▶ ${phaseLabel} 開始`
+      : `▶ 次の ${phaseLabel} を開始`;
     this.startBtnLabel.setText(label);
     this.startBtnBg.setFillStyle(COLORS.panelBg, 0.95);
     this.startBtnBg.setStrokeStyle(2, COLORS.accent, 1);
@@ -258,12 +276,16 @@ export class HUD {
     }
   }
 
-  /** 中央に大きく一瞬表示 (Phase 開始/クリア時など)。Phase 5 でイージング強化。 */
-  public showBanner(text: string, durationMs: number = 1400): void {
+  /**
+   * 中央に大きく一瞬表示 (Phase 開始/クリア時など)。Phase 5 でイージング強化。
+   * 2026-05-26: color 引数を追加 (Stage バナー等で文字色を変えるため)。
+   */
+  public showBanner(text: string, durationMs: number = 1400, color: string = '#cfd6e6'): void {
     if (this.bannerTween) {
       this.bannerTween.stop();
     }
     this.bannerText.setText(text);
+    this.bannerText.setColor(color);
     this.bannerText.setAlpha(0);
     this.bannerText.setScale(0.7);
     this.bannerTween = this.scene.tweens.add({

@@ -160,7 +160,7 @@ export class GameScene extends Phaser.Scene {
     this.rewardBanner = new RewardBanner(this);
     this.hud.setHp(this.base.hp);
     this.hud.setCredits(this.economy.credits);
-    this.hud.setPhase(0, this.waves.getTotalPhases());
+    this.hud.setStageAndPhase(0, this.waves.getTotalStages(), 0, this.waves.getPhasesPerStage());
     this.hud.setStatus('準備時間');
 
     // ShopPanel (Phase D Step 4)
@@ -176,22 +176,46 @@ export class GameScene extends Phaser.Scene {
       this.hud.flashCredits(delta);
     });
 
+    // 2026-05-26: Stage 拡張。Stage 先頭 Phase (1/21/41/61/81) では stageStart が先に発火する。
+    this.waves.on('stageStart', (stageNumber) => {
+      // STAGE バナーを先に出す (1.0s)。続く Phase バナーは phaseStart 側で少し遅らせる。
+      this.hud.showBanner(`STAGE ${stageNumber}`, 1000, '#3ee0c5');
+      this.cameras.main.flash(280, 62, 224, 197, true);
+    });
+
     this.waves.on('phaseStart', (n) => {
-      this.hud.setPhase(n, this.waves.getTotalPhases());
+      const stage = this.waves.getStageNumber();
+      const phaseInStage = this.waves.getPhaseInStage();
+      this.hud.setStageAndPhase(
+        stage,
+        this.waves.getTotalStages(),
+        phaseInStage,
+        this.waves.getPhasesPerStage(),
+      );
       this.hud.setStatus('敵が接近中');
-      this.hud.showBanner(`PHASE ${n}`);
+      // Stage 先頭 Phase は stageStart バナー (1.0s) と被るので、Phase バナーを少し遅らせる。
+      if (this.waves.isStageBoundary()) {
+        this.time.delayedCall(1050, () => {
+          if (this.terminating) return;
+          this.hud.showBanner(`PHASE ${phaseInStage}`, 1100);
+        });
+      } else {
+        this.hud.showBanner(`PHASE ${phaseInStage}`);
+      }
       this.hud.hideStartButton();
       // Phase 6 Step 8: 半数ボーナス用カウンタを Phase 開始ごとにリセット
       this.phaseKillCount = 0;
       this.phaseHalfRewarded = false;
+      void n; // n は通し Phase 番号 (1-100)。表示は Stage 内 phase に切替済。
     });
 
     this.waves.on('phaseClear', (n) => {
       this.economy.add(ECONOMY.phaseClearBonus, 'phaseClear');
-      this.hud.showBanner(`PHASE ${n} CLEAR`, 1200);
+      const phaseInStage = this.waves.getPhaseInStage();
+      this.hud.showBanner(`PHASE ${phaseInStage} CLEAR`, 1200);
       // Phase 5: クリア時に薄いカメラフラッシュ (alpha 0.12 / 220ms)
       this.cameras.main.flash(220, 62, 224, 197, true);
-      // Phase 6 Step 6: クリア報酬としてガチャを 1 個付与
+      // Phase 6 Step 6: クリア報酬としてガチャを 1 個付与 (通し Phase 番号 n でカテゴリ交互振り分け)
       this.grantPhaseClearGacha(n);
     });
 
@@ -259,12 +283,19 @@ export class GameScene extends Phaser.Scene {
     if (this.terminating) return;
     if (!this.waves.isAwaitingStart()) return;
     const upcoming = this.waves.getUpcomingPhaseNumber();
-    const total = this.waves.getTotalPhases();
-    this.hud.showStartButton(upcoming, total, () => {
-      if (this.terminating) return;
-      if (this.overlayDepth > 0) return; // オーバーレイ中は弾く (ボタンはバックドロップで隠れる)
-      this.waves.startNextPhase();
-    });
+    const stage = this.waves.getStageNumber();
+    const phaseInStage = this.waves.getPhaseInStage();
+    this.hud.showStartButton(
+      stage,
+      phaseInStage,
+      this.waves.getPhasesPerStage(),
+      () => {
+        if (this.terminating) return;
+        if (this.overlayDepth > 0) return; // オーバーレイ中は弾く (ボタンはバックドロップで隠れる)
+        this.waves.startNextPhase();
+      },
+      upcoming === 1,
+    );
   }
 
   private handleShopRequest(action: ShopAction): void {
@@ -742,8 +773,9 @@ export class GameScene extends Phaser.Scene {
     const state = this.waves.getState();
     switch (state) {
       case 'preparing': {
-        const upcoming = this.waves.getUpcomingPhaseNumber();
-        this.hud.setStatus(`準備時間 — PHASE ${upcoming} 開始待ち`);
+        const stage = this.waves.getStageNumber();
+        const phaseInStage = this.waves.getPhaseInStage();
+        this.hud.setStatus(`準備時間 — Stage ${stage} / Phase ${phaseInStage} 開始待ち`);
         break;
       }
       case 'spawning': {

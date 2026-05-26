@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { PHASES, type EnemySpec } from '../config';
+import { PHASES, STAGE, type EnemySpec } from '../config';
 import { Enemy } from '../entities/Enemy';
 import { SpawnSystem } from './SpawnSystem';
 
@@ -12,6 +12,8 @@ export type WaveState =
 export type WaveEvents = {
   /** Phase 番号 (1-based) が変わったとき */
   phaseStart: (phaseIndex: number) => void;
+  /** Stage 先頭 Phase の開始時 (2026-05-26 Stage 拡張)。phaseStart と同タイミングで先に発火。 */
+  stageStart: (stageNumber: number) => void;
   /** Phase がクリアされたとき */
   phaseClear: (phaseIndex: number) => void;
   /** 全 Phase クリア */
@@ -69,6 +71,39 @@ export class WaveSystem {
 
   public getTotalPhases(): number {
     return PHASES.length;
+  }
+
+  // ─── Stage 派生 API (2026-05-26 Stage 拡張) ──────────────────────────
+  // Stage は phaseIndex からの派生概念。WaveSystem 自体は Phase 単位の線形進行を維持する。
+
+  /** 現 Phase が属する Stage 番号 (1-based)。preparing 中は次に始まる Stage を返す。 */
+  public getStageNumber(): number {
+    return Math.floor(this.phaseIndex / STAGE.phasesPerStage) + 1;
+  }
+
+  /** Stage 内の Phase 番号 (1-based、1〜phasesPerStage)。 */
+  public getPhaseInStage(): number {
+    return (this.phaseIndex % STAGE.phasesPerStage) + 1;
+  }
+
+  public getTotalStages(): number {
+    return STAGE.totalStages;
+  }
+
+  public getPhasesPerStage(): number {
+    return STAGE.phasesPerStage;
+  }
+
+  /** 現 Phase の enemySpecs に boss が含まれるか (= Stage 末尾のボス Phase か)。 */
+  public isBossPhase(): boolean {
+    const def = PHASES[this.phaseIndex];
+    if (!def) return false;
+    return def.enemySpecs.some((s) => s.type === 'boss');
+  }
+
+  /** 現 phaseIndex が Stage の先頭 Phase か (Phase 1/21/41/61/81 で true)。Stage バナー演出に使う。 */
+  public isStageBoundary(): boolean {
+    return this.phaseIndex % STAGE.phasesPerStage === 0;
   }
 
   /** 次 Phase 開始ボタン待ち状態か (UI からの表示判定用)。 */
@@ -156,6 +191,10 @@ export class WaveSystem {
       timerMs: (spec.delayMs ?? 0) + 250, // 入り遅延 + 共通入りラグ
     }));
     this.state = 'spawning';
+    // Stage 先頭 Phase (Phase 1/21/41/61/81) では先に stageStart を発火 (HUD バナー演出用)。
+    if (this.isStageBoundary()) {
+      this.emitter.emit('stageStart', this.getStageNumber());
+    }
     this.emitter.emit('phaseStart', this.phaseIndex + 1);
     this.emitter.emit('state', this.state);
   }

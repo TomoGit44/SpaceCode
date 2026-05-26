@@ -25,11 +25,11 @@ export class VictoryScene extends Phaser.Scene {
     this.cameras.main.fadeIn(380, 5, 7, 13);
     drawStarfield(this, GAME_WIDTH, GAME_HEIGHT);
 
-    // Phase 5: タイトルをスライドイン
+    // Phase 5: タイトルをスライドイン (2026-05-26: 全 5 Stage クリア表示に)
     const title = this.add
-      .text(GAME_WIDTH / 2, GAME_HEIGHT * 0.28 - 30, 'STAGE CLEAR', {
+      .text(GAME_WIDTH / 2, GAME_HEIGHT * 0.28 - 30, 'ALL STAGES CLEAR', {
         fontFamily: 'system-ui, "Segoe UI", sans-serif',
-        fontSize: '96px',
+        fontSize: '76px',
         color: '#3ee0c5',
         fontStyle: 'bold',
       })
@@ -44,7 +44,7 @@ export class VictoryScene extends Phaser.Scene {
     });
 
     const sub = this.add
-      .text(GAME_WIDTH / 2, GAME_HEIGHT * 0.28 + 80, '基地を守り抜いた', {
+      .text(GAME_WIDTH / 2, GAME_HEIGHT * 0.28 + 80, '全 5 Stage を踏破した', {
         fontFamily: 'system-ui, "Segoe UI", sans-serif',
         fontSize: '22px',
         color: '#cfd6e6',

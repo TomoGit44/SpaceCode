@@ -23,7 +23,7 @@
 
 ---
 
-## 現在のステータス (最終更新: 2026-05-25)
+## 現在のステータス (最終更新: 2026-05-26)
 
 | Phase | 内容 | 状態 |
 |---|---|---|
@@ -41,6 +41,7 @@
 | 補追 (Phase 6 後) | **準備時間中はゲーム凍結** (Ship/敵/弾/惑星/Effects すべて停止、UI 演出と入力は維持) | ✅ 完了 (2026-05-25) |
 | 補追 (Phase 6 後) | **遠距離敵 sniper** + **体当たり敵強化 (×1.5 + 電気スタン演出)** + **体当たりモジュール `mod_ram`** (衝角ブレード、contactDps + 移動速度マイナス) | ✅ 完了 (2026-05-25) |
 | 補追 (Phase 6 後) | **オムニ・コア左上 Strip 化** (固有アイコン + 常時表示 + hover ツールチップ) + **3 新コア** (`core_attack_plus` / `core_efficiency` / `core_endurance`、Run 開始時 SR 装着) + **アイテムメニューから omni タブ撤去** + `ShipStat` に `energyConsume` 追加 | ✅ 完了 (2026-05-25) |
+| 補追 (Phase 6 後) | **5 Stage × 各 20 Phase = 100 Phase 化** (`STAGE.totalStages=5` / `phasesPerStage=20`、PHASES 100 要素手書き、ボスは Phase 20/40/60/80/100)。HUD は「STAGE · PHASE」2 段表記 (`3 / 5 · 12 / 20`)、Stage 先頭 Phase で「STAGE N」accent バナー + camera flash、VictoryScene を `ALL STAGES CLEAR` に変更 | ✅ 完了 (2026-05-26) |
 
 通しプレイ可能。コア体験「プログラムを組まないと Ship は動かない」を維持しつつ、Run 中の成長要素 (アイテム) を載せている最中。
 
@@ -204,7 +205,7 @@ src/
 - **資源**: 惑星 2 個 (220,200)/(1060,540) から採掘 → 基地納品で資源 1:お金 2 変換。**枯渇 60s でリスポーン**。
 - **エネルギー**: 宇宙船のみ。移動中 2/s 消費 + 射撃 5/shot 消費。0 で停止 (stalled)。基地納品で全回復。
 - **永続化なし (Phase 6 で撤廃)**: Inventory も Program も localStorage 保存しない。Game Over / Victory / Menu 復帰で Run リセット。Phase 4 の `spacecode.shipTemplate` は廃止
-- **Wave 構成**: 1 Stage = 5 Phase。`config.ts` の `PHASES` を参照。**準備時間は手動開始**: 各 Phase 前にプレイヤーが「▶ PHASE N 開始」ボタンを押すまで進まない
+- **Wave 構成**: **5 Stage × 各 20 Phase = 100 Phase** (2026-05-26 拡張)。`config.ts` の `PHASES` を参照。ボスは Phase 20/40/60/80/100 の 5 箇所。Stage は Phase 番号からの派生概念 (`stage = ceil(phase / 20)`)。**準備時間は手動開始**: 各 Phase 前にプレイヤーが「▶ Stage X / Phase Y 開始」ボタンを押すまで進まない
 - **初期コード (4 種)**: `MOVE_TO` / **`WAIT { seconds }`** / `ATTACK_NEAREST` / `REPEAT`。**所持無制限**
   - **`WAIT`**: 秒数指定 (1〜60s)。**惑星近くで待機 → 自動採掘** / **基地近くで待機 → 自動納品 + エネルギー全回復**。位置で副作用が決まるためターゲット指定不要
   - REPEAT はネスト構造で **特定の行動を N 回繰り返したい時に使う**

@@ -38,8 +38,6 @@ export const RARITY_COLOR: Record<Rarity, number> = {
 
 /**
  * アイテムカテゴリ。
- *
- * 2026-05-25 後: ケミカル / ガチャ系の Inventory 保管を廃止し、
  * Inventory に残るのは実質モジュールのみ。omniCore は左上 Strip 専用。
  */
 export type ItemCategory =
@@ -72,7 +70,7 @@ export type EconomyStat =
   | 'phaseClearBonus';
 
 /**
- * ランタイムのアイテム個体 (オムニ・コア / モジュール / ケミカル / ガチャ)。
+ * ランタイムのアイテム個体 (オムニ・コア / モジュール)。
  * コードアイテムは CodeItemInstance を使う。
  */
 export interface ItemInstance {

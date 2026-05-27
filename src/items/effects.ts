@@ -5,47 +5,22 @@ import { OMNI_CORE_TYPES, type EffectTarget } from './types/omniCores';
 import { MODULE_TYPES } from './types/modules';
 
 /**
- * EffectSystem — 装着中アイテム (オムニ・コア / 各 Ship のモジュール / 時限バフ) を
+ * EffectSystem — 装着中アイテム (オムニ・コア / 各 Ship のモジュール) を
  * 集約し、Ship / Base / Economy の stat に効果を適用する。
  *
  * stat 取得側は `SHIP.damagePerShot` 等の直接参照をやめ、
  * `effects.shipStat(ship, 'damagePerShot', SHIP.damagePerShot)` のように
  * base 値を渡して呼ぶ。EffectSystem は装着効果を載せた値を返す。
  *
- * Phase 6 Step 3 時点:
  *  - オムニ・コア: 全 Ship 共通の加算割合 (§6.1)
  *  - モジュール: 各 Ship 個別の加算割合 + 特殊効果 (連射数)
  *  - 同じ stat への効果はすべて加算スタック (乗算は終盤破綻、§6.1)
- * 時限バフ (Step 4) は後続で足す。
  */
-/** ケミカルが付与する時限バフ (全 Ship 共通)。 */
-interface TimedShipBuff {
-  stat: ShipStat;
-  percent: number;
-  remainingMs: number;
-}
-
 export class EffectSystem {
   private readonly inventory: Inventory;
-  /** ケミカル由来の時限バフ。tick で残り時間を減算し、0 で消える。 */
-  private timedBuffs: TimedShipBuff[] = [];
 
   constructor(inventory: Inventory) {
     this.inventory = inventory;
-  }
-
-  /** 時限バフを追加する (ケミカル使用時)。 */
-  public addTimedShipBuff(stat: ShipStat, percent: number, durationMs: number): void {
-    this.timedBuffs.push({ stat, percent, remainingMs: durationMs });
-  }
-
-  /** 指定 stat に効く有効な時限バフの加算割合の合計。 */
-  private timedPercent(stat: string): number {
-    let sum = 0;
-    for (const b of this.timedBuffs) {
-      if (b.stat === stat) sum += b.percent;
-    }
-    return sum;
   }
 
   /** target/stat に効く全オムニ・コアの加算割合の合計。 */
@@ -102,12 +77,11 @@ export class EffectSystem {
     return sum;
   }
 
-  /** Ship stat に装着効果 (オムニ・コア + モジュール % + モジュール flat + 時限バフ) を適用した値。 */
+  /** Ship stat に装着効果 (オムニ・コア + モジュール % + モジュール flat) を適用した値。 */
   public shipStat(ship: Ship, stat: ShipStat, base: number): number {
     const pct =
       this.omniPercent('ship', stat) +
-      this.shipModulePercent(ship, stat) +
-      this.timedPercent(stat);
+      this.shipModulePercent(ship, stat);
     const flat = this.shipModuleFlat(ship, stat);
     return base * (1 + pct) + flat;
   }
@@ -186,12 +160,5 @@ export class EffectSystem {
   /** 経済 stat に装着効果を適用した値。 */
   public economyStat(stat: EconomyStat, base: number): number {
     return base * (1 + this.omniPercent('economy', stat));
-  }
-
-  /** 時限バフの残り時間を進め、切れたものを除去する。GameScene が毎フレーム呼ぶ。 */
-  public tick(delta: number): void {
-    if (this.timedBuffs.length === 0) return;
-    for (const b of this.timedBuffs) b.remainingMs -= delta;
-    this.timedBuffs = this.timedBuffs.filter((b) => b.remainingMs > 0);
   }
 }

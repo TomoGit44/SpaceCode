@@ -34,7 +34,7 @@
 | **Phase 4** | **統合と難易度調整 / ローカルセーブ**: 射撃エネルギー消費、敵 3 種化 (basic/fast/tank)、Ship Program 永続化 (localStorage)、惑星 60s リスポーン、Wave/経済バランス調整 | ✅ 完了 (※ 永続化は Phase 6 で撤廃) |
 | **Phase 5** | **仕上げ**: 演出強化 (シーン遷移・フラッシュ・バナーイージング)、配色 hardcoded → `COLORS` 統一、README 整備 | ✅ 完了 (**MVP 達成 2026-05-16**) |
 | 補追 (Phase 5 後) | タワー廃止 → 基地砲塔統合 / Program 自動ループバック / 準備時間を手動開始制 | ✅ 完了 |
-| **Phase 6** | **アイテムシステム**: `Inventory` (Run 揮発) + `EffectSystem` (加算スタック) / オムニ・コア 6 / モジュール 5 / ケミカル 6 / **アイテムコード** 3 (ITEM_CODE 条件 wrapper) / `ItemInventoryScene` / **ガチャ系統** (Phase クリア + fast/tank ドロップ + `GachaOpenScene` 3 候補選択) / **ボス敵** (Phase 5 末尾、SR 確定) / **中間ドロップ** (Phase 半数撃破でケミカル N) / **編集画面装着モジュール表示** | 🔧 **Step 0-9 完了** (実プレイ後バランス調整が残作業) |
+| **Phase 6** | **アイテムシステム**: `Inventory` (Run 揮発) + `EffectSystem` (加算スタック) / オムニ・コア 6 / モジュール 5 / **アイテムコード** 3 (ITEM_CODE 条件 wrapper) / `ItemInventoryScene` / **ガチャ系統** (Phase クリア + fast/tank ドロップ + `GachaOpenScene` 3 候補選択) / **ボス敵** (Phase 5 末尾、SR 確定) / **中間ドロップ** (Phase 半数撃破で $80 クレジット) / **編集画面装着モジュール表示** | 🔧 **Step 0-9 完了** (実プレイ後バランス調整が残作業) |
 | 補追 (Phase 6 後) | コード体系縮減: `MINE`/`DEPOSIT`/`WAIT_UNTIL_FULL` を撤廃し **`WAIT { seconds }`** に統合 (位置で挙動が決まる暗黙副作用 — 惑星近くで自動採掘 / 基地近くで自動納品+補給) | ✅ 完了 (2026-05-24) |
 | 補追 (Phase 6 後) | **ダウン状態** (HP 0 で死亡せず敵接触免疫) + **編集画面ステータス UI** (HP/ENE/INV 3 行、INV 整数化、HP/ENE 0 で赤強調) + **クレジット補給 $20 / 修理 $40** (編集画面から常時可) | ✅ 完了 (2026-05-25) |
 | 補追 (Phase 6 後) | **ゲーム全体 0.5x 減速** (`GAME_SPEED = 0.5`、GameScene.update で delta スケール、UI 演出は維持) | ✅ 完了 (2026-05-25) |
@@ -159,13 +159,12 @@ src/
 ├── items/                  # Phase 6: アイテムシステム
 │   ├── itemTypes.ts        # Rarity (N/R/SR/L) / ItemCategory (5) / ItemInstance / CodeItemInstance / ShipStat/BaseStat/EconomyStat + RARITY_LABEL/COLOR
 │   ├── Inventory.ts        # items[] + codes[] + shipModules{shipId: uid[]} + reset()。**メモリ上のみ** (Run 毎リセット)
-│   ├── effects.ts          # EffectSystem: shipStat/baseStat/economyStat (オムニ・コア + モジュール + 時限バフを加算スタックで合成) + shipExtraShots + tick
+│   ├── effects.ts          # EffectSystem: shipStat/baseStat/economyStat (オムニ・コア + モジュールを加算スタックで合成) + shipExtraShots
 │   ├── codePlacement.ts    # ITEM_CODE 配置の真実源走査 (collectPlacedCodeUids / availableCodeCounts / pickUnplacedInstance)
 │   ├── gacha.ts            # Phase 6 Step 6: drawGacha + phaseRewardCategory + rollPhaseRewardRarity + gachaCategoryOf
 │   └── types/              # data-driven なアイテム定義テーブル
 │       ├── omniCores.ts    # OMNI_CORE_TYPES (6 種: 攻撃/推進/採掘/装甲/砲塔/賞金)
 │       ├── modules.ts      # MODULE_TYPES (5 種: ガトリング/装甲/スラスタ/ドリル/カーゴ)
-│       ├── chemicals.ts    # CHEMICAL_TYPES (6 種: 即時 4 + 時限バフ + AoE)
 │       └── itemCodes.ts    # ITEM_CODE_DEFS (3 種: IF_HP_BELOW / IF_ENEMY_IN_RANGE / IF_INVENTORY_FULL) + createItemCodeNode
 ├── systems/                # 横断的なロジック
 │   ├── SpawnSystem.ts      # `spawnAtRandomEdge(type?)` で 1 体生成
@@ -214,8 +213,8 @@ src/
   - 旧 `MINE` / `DEPOSIT` / `WAIT_UNTIL_FULL` は 2026-05-24 改修で `WAIT` に統合 (削除済)
 - **アイテムコード (Phase 6, 3 種)**: `IF_HP_BELOW` / `IF_ENEMY_IN_RANGE` / `IF_INVENTORY_FULL` — 条件 wrapper。所持アイテム個体 (`CodeItemInstance`) と 1:1 対応、配置の真実源は **プログラム内 ITEM_CODE ノード**。同じ個体は 1 箇所しか配置不可、Ship 破壊や wrapper 削除で自動的に「未配置」に戻る
 - **自動ループ (Phase 5 後)**: Program は **置いただけで先頭 → 末尾 → 先頭 → … と無限にループ** する。空 Program のみ idle
-- **アイテム (Phase 6)**: オムニ・コア (装着で全 Ship/基地/経済に永続効果。**画面左上に常時表示**、Run 開始時に 3 新コア = 攻撃 +50% / エネ消費 -50% / HP +50% が自動装着) / モジュール (Ship 個別装着) / ケミカル (消費型・即時 or 時限バフ or AoE) / コードガチャ・モジュールガチャ (`GachaOpenScene` で開封)。効果は加算スタック、`EffectSystem` 経由で集計
-- **リワード経路 (Phase 6 Step 6-8)**: Phase クリアごとに 1 個保証 (code/module 交互 + 重み付きレア度 R55/SR30/L15) + fast/tank 撃破時の低確率 R ドロップ (fast 4% / tank 12%) + **ボス撃破時 SR ガチャ確定** + **Phase 敵半数撃破時にケミカル N 1 個** (Phase ごと 1 回)。basic はドロップなし
+- **アイテム (Phase 6)**: オムニ・コア (装着で全 Ship/基地/経済に永続効果。**画面左上に常時表示**、Run 開始時に 3 新コア = 攻撃 +50% / エネ消費 -50% / HP +50% が自動装着) / モジュール (Ship 個別装着) / コードガチャ・モジュールガチャ (`GachaOpenScene` で開封)。効果は加算スタック、`EffectSystem` 経由で集計
+- **リワード経路 (Phase 6 Step 6-8)**: Phase クリアごとに 1 個保証 (code/module 交互 + 重み付きレア度 R55/SR30/L15) + fast/tank 撃破時の低確率 R ドロップ (fast 4% / tank 12%) + **ボス撃破時 SR ガチャ確定** + **Phase 敵半数撃破時に $80 クレジット** (Phase ごと 1 回)。basic はドロップなし
 
 > ※「Phase」が二重に登場する: **Wave Phase** (敵編成の段階。1 Stage 中で進行) と **開発 Phase** (実装ロードマップ)。コード内では `Wave Phase` を指す。本ドキュメントでは「開発 Phase」と明示する。
 

@@ -6,7 +6,7 @@ import { RARITY_COLOR, RARITY_LABEL, RARITY_SHORT, type Rarity, type ItemInstanc
 const FONT = 'system-ui, "Segoe UI", sans-serif';
 
 /**
- * 報酬の中身 (2026-05-25 後: ケミカル削除に伴いガチャ系のみ)。
+ * 報酬の中身 (現状: ガチャ系のみ)。
  * - gacha: タップでガチャ開封フローに進む (GachaOpenScene を mandatory で起動)
  */
 export type RewardPayload = {
@@ -36,7 +36,6 @@ const CARD_H = 340;
  * プレイヤーがカードをタップすると:
  *   - gacha: GachaOpenScene (3 候補選択) を mandatory モードで起動 →
  *            選択完了後に「飛行演出」(右上アイテムボタンへ縮小フェード) → close
- *   - chemical: Inventory に push → 飛行演出 → close
  *
  * GameScene 側はこのシーンが active な間ゲーム更新を凍結する責務を持つ
  * (本シーンでは関知しない)。

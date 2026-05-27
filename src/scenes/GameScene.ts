@@ -64,9 +64,8 @@ export class GameScene extends Phaser.Scene {
   // > 0 のとき GameScene の入力を抑止する (Phase 6: editorOpen から一般化)。
   private overlayDepth: number = 0;
 
-  // Phase 6 Step 8: 当該 Phase 内の累計撃破数 (基地接触は数えない) と
-  // 半数到達ボーナス (ケミカル N) を 1 回付与したかのフラグ。
-  // phaseStart で 0 / false にリセットする。
+  // 当該 Phase 内の累計撃破数 (基地接触は数えない) と、半数到達ボーナス ($80) を
+  // 1 回付与したかのフラグ。phaseStart で 0 / false にリセットする。
   private phaseKillCount: number = 0;
   private phaseHalfRewarded: boolean = false;
 
@@ -569,11 +568,11 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  /** 半数ボーナスのクレジット額 (2026-05-25 後: ケミカル削除に伴い差し替え)。 */
+  /** 半数ボーナスのクレジット額。 */
   private static readonly HALF_REWARD_CREDITS = 80;
 
   /**
-   * 当該 Phase の累計撃破数が合計の半数以上に達したら、+$80 クレジットを付与 (2026-05-25 後)。
+   * 当該 Phase の累計撃破数が合計の半数以上に達したら、+$80 クレジットを付与する。
    * モーダルポップアップは出さず、横バナー (RewardBanner) で軽量通知する。
    */
   private checkPhaseHalfReward(): void {
@@ -687,9 +686,6 @@ export class GameScene extends Phaser.Scene {
 
     // Wave 進行
     this.waves.update(delta, this.enemies);
-
-    // Phase 6: 装着アイテム効果の時間管理 (時限バフ等。Step 1 は no-op)
-    this.effects.tick(delta);
 
     // 敵更新 (sniper は enemyBullets[] に弾を push する context を受け取る)
     // 2026-05-25 後: hunter の動的ターゲティング用に ships を渡す

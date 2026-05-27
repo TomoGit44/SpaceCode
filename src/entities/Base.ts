@@ -235,12 +235,6 @@ export class Base {
     this.hp = Math.max(0, this.hp - amount);
   }
 
-  /** Phase 6: ケミカルによる回復。最大 HP を超えない。 */
-  public heal(amount: number): void {
-    if (amount <= 0) return;
-    this.hp = Math.min(this.maxHp, this.hp + amount);
-  }
-
   public isDestroyed(): boolean {
     return this.hp <= 0;
   }

@@ -639,7 +639,7 @@ export class Ship {
     });
   }
 
-  /** Phase 6: ケミカルによる HP 回復。最大 HP を超えない。死亡 Ship には効かない。 */
+  /** HP 回復 (編集画面の修理ボタン経由)。最大 HP を超えない。死亡 Ship には効かない。 */
   public heal(amount: number): void {
     if (this.dead || amount <= 0) return;
     this.hp = Math.min(this.maxHp, this.hp + amount);

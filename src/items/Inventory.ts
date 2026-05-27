@@ -10,7 +10,7 @@ import type { ItemInstance, CodeItemInstance } from './itemTypes';
  *  - Run 全体の永続化 (F5 リロード復帰) は Phase 6 スコープ外 (仕様 §11)。
  */
 export class Inventory {
-  /** オムニ・コア / モジュール / ケミカル / ガチャ。 */
+  /** オムニ・コア / モジュール。 */
   public items: ItemInstance[] = [];
 
   /** コードアイテム (プログラムへの配置とは独立に「所持」を管理)。 */

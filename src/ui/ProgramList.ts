@@ -12,6 +12,13 @@ const INDENT_PX = 18;        // ネスト 1 段あたりの左インデント
 const BRACKET_GAP = 4;       // 罫線とコード本体の間隔
 const ROW_BTN_SIZE = 30;     // Phase 7: ▲▼✕ ボタン 24 → 30 (タッチ向け)
 
+/** スクロール: ヘッダ ("プログラム ...") とリスト本体の間。 */
+const HEADER_HEIGHT = 28;
+/** リスト本体の上端から先頭マーカー (「▼ ここから実行」) までの余白。 */
+const START_MARKER_HEIGHT = 20;
+/** 末尾マーカー (「↻ 先頭に戻る」) のぶん下に確保する余白。 */
+const END_MARKER_HEIGHT = 28;
+
 export interface ProgramListEvents {
   select: (path: number[]) => void;
   moveUp: (path: number[]) => void;
@@ -53,6 +60,11 @@ interface Row {
  *   └────────────────────
  *
  * 罫線 (縦線 + 閉じ線) は Graphics で描画。コード本体は Rectangle + Text。
+ *
+ * 2026-05-25 後: 縦スクロールに対応。コード行数が表示領域を超えた場合、
+ *   - マウスホイール / トラックパッド: 領域内で wheel イベントを受けてスクロール
+ *   - 右端に細いスクロールバー (現在位置インジケータ) を表示
+ *  rows をすべて算出した上で表示領域外の row はカリングする (描画コスト抑制)。
  */
 export class ProgramList {
   private scene: Phaser.Scene;
@@ -64,6 +76,25 @@ export class ProgramList {
   private header: Phaser.GameObjects.Text;
   private bracketGfx: Phaser.GameObjects.Graphics;
   private rowObjects: Phaser.GameObjects.GameObject[] = [];
+
+  /** スクロール位置 (px、上端からのオフセット)。 0 = 一番上。 */
+  private scrollY: number = 0;
+  /** 直近 render() のスクロール可能最大値 (= 総コンテンツ高 − 可視高、>= 0)。 */
+  private maxScroll: number = 0;
+  /** 直近 render() のパラメータを保持しておく (wheel イベントで再描画するため)。 */
+  private lastCodes: ReadonlyArray<Code> | null = null;
+  private lastSelectedPath: number[] | null = null;
+  private lastRunningPath: number[] | null = null;
+  /** 領域内ホイールでだけスクロールするためのヒットゾーン (見えない透明 rect)。 */
+  private hitZone: Phaser.GameObjects.Rectangle;
+  /** wheel ハンドラ (destroy で剥がす)。 */
+  private wheelHandler?: (
+    pointer: Phaser.Input.Pointer,
+    over: Phaser.GameObjects.GameObject[],
+    dx: number,
+    dy: number,
+    dz: number
+  ) => void;
 
   constructor(scene: Phaser.Scene, x: number, y: number, width: number, height: number) {
     this.scene = scene;
@@ -84,6 +115,33 @@ export class ProgramList {
 
     this.bracketGfx = scene.add.graphics();
     this.bracketGfx.setDepth(2);
+
+    // ホイール受け取り用の透明ヒットゾーン (リスト本体の表示領域全体)
+    const zoneTop = y + HEADER_HEIGHT;
+    const zoneH = height - HEADER_HEIGHT;
+    this.hitZone = scene.add
+      .rectangle(x + width / 2, zoneTop + zoneH / 2, width, zoneH, 0xffffff, 0)
+      .setDepth(1)
+      .setInteractive();
+
+    // 2026-05-25 後: Phaser の wheel イベントは scene 全体に流れるため、
+    // hitZone の上にポインタが居るかを毎回チェックしてスクロールする。
+    this.wheelHandler = (_pointer, _over, _dx, dy) => {
+      if (!this.lastCodes) return;
+      const p = this.scene.input.activePointer;
+      const inside =
+        p.x >= this.x &&
+        p.x <= this.x + this.width &&
+        p.y >= zoneTop &&
+        p.y <= zoneTop + zoneH;
+      if (!inside) return;
+      // dy > 0 で下スクロール (内容を上に動かす)
+      const next = Math.max(0, Math.min(this.maxScroll, this.scrollY + dy * 0.6));
+      if (next === this.scrollY) return;
+      this.scrollY = next;
+      this.rerenderFromCache();
+    };
+    scene.input.on('wheel', this.wheelHandler);
   }
 
   /**
@@ -98,6 +156,11 @@ export class ProgramList {
     selectedPath: number[] | null,
     runningPath: number[] | null
   ): void {
+    // 内部 cache を更新 (wheel 時の再描画用)
+    this.lastCodes = codes;
+    this.lastSelectedPath = selectedPath;
+    this.lastRunningPath = runningPath;
+
     this.clearRows();
     this.bracketGfx.clear();
 
@@ -111,40 +174,60 @@ export class ProgramList {
         .setOrigin(0.5, 0)
         .setDepth(3);
       this.rowObjects.push(t);
+      this.maxScroll = 0;
+      this.scrollY = 0;
       return;
     }
 
-    // ─── 先頭マーカー: 「▼ ここから実行」 ─────────────────
-    const startY = this.y + 28;
-    const startMarker = this.scene.add
-      .text(this.x + this.width / 2, startY, '▼ ここから実行', {
-        fontFamily: FONT,
-        fontSize: '12px',
-        color: '#3ee0c5',
-        fontStyle: 'bold',
-      })
-      .setOrigin(0.5, 0)
-      .setDepth(3);
-    this.rowObjects.push(startMarker);
+    // 可視領域 (ヘッダの下 → リスト下端の手前)
+    const viewTop = this.y + HEADER_HEIGHT;
+    const viewBottom = this.y + this.height;
+    // 行を並べる上端 (先頭マーカー後)
+    const rowsTopY = viewTop + START_MARKER_HEIGHT - this.scrollY;
 
     const rows = this.expandRows(codes, 0, [], null);
 
+    // 全行の合計高さを先に計算してスクロール上限を確定
+    const contentHeight =
+      START_MARKER_HEIGHT +
+      rows.length * (ROW_HEIGHT + ROW_GAP) +
+      END_MARKER_HEIGHT;
+    const visibleHeight = this.height - HEADER_HEIGHT;
+    this.maxScroll = Math.max(0, contentHeight - visibleHeight);
+    // 行数減少などで scrollY が範囲外になっていたら clamp
+    if (this.scrollY > this.maxScroll) this.scrollY = this.maxScroll;
+
+    // 先頭マーカー (「▼ ここから実行」)。スクロールにより上端の外へ出たら描かない。
+    const startY = viewTop + 4 - this.scrollY;
+    if (startY + 16 > viewTop && startY < viewBottom) {
+      const startMarker = this.scene.add
+        .text(this.x + this.width / 2, startY, '▼ ここから実行', {
+          fontFamily: FONT,
+          fontSize: '12px',
+          color: '#3ee0c5',
+          fontStyle: 'bold',
+        })
+        .setOrigin(0.5, 0)
+        .setDepth(3);
+      this.rowObjects.push(startMarker);
+    }
+
     // 各行を描画 + REPEAT スコープの top/bottom y を集計
     const scopeBounds = new Map<Row, { topY: number; bottomY: number }>();
-    // 先頭マーカー分のオフセット (16px) を加味
-    const rowsTopY = this.y + 48;
     let lastRowBottomY = rowsTopY;
     rows.forEach((row, i) => {
       const rowY = rowsTopY + i * (ROW_HEIGHT + ROW_GAP);
-      if (rowY + ROW_HEIGHT > this.y + this.height - 24) return; // 末尾マーカー分の余白を確保
-      this.makeRow(row, rowY, selectedPath, runningPath);
+      // 可視領域外はカリング (上にも下にも出る可能性あり)
+      const inView = rowY + ROW_HEIGHT > viewTop && rowY < viewBottom;
+      if (inView) {
+        this.makeRow(row, rowY, selectedPath, runningPath);
+      }
       lastRowBottomY = rowY + ROW_HEIGHT;
 
       // この row が wrapper (REPEAT / ITEM_CODE) なら、bounds を初期化 (topY だけ確定)
       if (codeChildren(row.code)) {
         scopeBounds.set(row, { topY: rowY, bottomY: rowY + ROW_HEIGHT });
       }
-
       // 親 row の bottomY を「子 row の下端」まで拡張
       let p = row.parentRow;
       while (p) {
@@ -154,37 +237,81 @@ export class ProgramList {
       }
     });
 
-    // 罫線描画 (REPEAT スコープごとに縦線 + 閉じ線)
+    // 罫線描画 (REPEAT スコープごとに縦線 + 閉じ線)。
+    // 全 row 計算した bounds に対して描画するが、視野外部分は clip。
     for (const [repeatRow, bounds] of scopeBounds.entries()) {
-      this.drawScopeBracket(repeatRow, bounds.topY, bounds.bottomY);
+      this.drawScopeBracket(repeatRow, bounds.topY, bounds.bottomY, viewTop, viewBottom);
     }
 
     // ─── 末尾マーカー: 「↻ 先頭に戻る」 ──────────────────
     const endY = lastRowBottomY + 6;
-    const endMarker = this.scene.add
-      .text(this.x + this.width / 2, endY, '↻ 末尾まで来たら先頭に戻る (自動ループ)', {
-        fontFamily: FONT,
-        fontSize: '12px',
-        color: '#8aa3c8',
-        fontStyle: 'italic',
-      })
-      .setOrigin(0.5, 0)
-      .setDepth(3);
-    this.rowObjects.push(endMarker);
+    if (endY < viewBottom && endY + 16 > viewTop) {
+      const endMarker = this.scene.add
+        .text(this.x + this.width / 2, endY, '↻ 末尾まで来たら先頭に戻る (自動ループ)', {
+          fontFamily: FONT,
+          fontSize: '12px',
+          color: '#8aa3c8',
+          fontStyle: 'italic',
+        })
+        .setOrigin(0.5, 0)
+        .setDepth(3);
+      this.rowObjects.push(endMarker);
+    }
 
-    // ループを示す右側の細い縦線 + 弧 (末尾 → 先頭)
+    // ループ矢印 (右端の縦線 + ▲): 視野内に収まる範囲だけ描く
     const g = this.bracketGfx;
     g.lineStyle(1.5, COLORS.accent, 0.45);
     const loopX = this.x + this.width - 10;
-    const topY2 = this.y + 44;
-    const bottomY2 = endY + 18;
+    const topYLoop = Math.max(viewTop, viewTop + 4 - this.scrollY);
+    const bottomYLoop = Math.min(viewBottom - 4, endY + 18);
+    if (bottomYLoop > topYLoop) {
+      g.beginPath();
+      g.moveTo(loopX, bottomYLoop);
+      g.lineTo(loopX, topYLoop);
+      g.strokePath();
+      // 上端の矢印 (▲): スクロール最上端のときだけ表示
+      if (this.scrollY === 0) {
+        g.fillStyle(COLORS.accent, 0.55);
+        g.fillTriangle(loopX - 4, topYLoop + 6, loopX + 4, topYLoop + 6, loopX, topYLoop);
+      }
+    }
+
+    // スクロールバー (スクロール可能なときだけ表示)
+    if (this.maxScroll > 0) {
+      this.drawScrollbar(viewTop, viewBottom, contentHeight, visibleHeight);
+    }
+  }
+
+  /** wheel イベントから内部で呼び出す再描画 (キャッシュした codes で再 render)。 */
+  private rerenderFromCache(): void {
+    if (!this.lastCodes) return;
+    this.render(this.lastCodes, this.lastSelectedPath, this.lastRunningPath);
+  }
+
+  /** スクロールバーを右端に描画 (本体右端の内側 6px)。 */
+  private drawScrollbar(viewTop: number, viewBottom: number, contentH: number, visibleH: number): void {
+    const g = this.bracketGfx;
+    const trackX = this.x + this.width - 4;
+    const trackTop = viewTop + 4;
+    const trackBottom = viewBottom - 4;
+    const trackH = trackBottom - trackTop;
+    if (trackH <= 0) return;
+    // トラック (薄)
+    g.lineStyle(2, COLORS.panelBorder, 0.55);
     g.beginPath();
-    g.moveTo(loopX, bottomY2);
-    g.lineTo(loopX, topY2);
+    g.moveTo(trackX, trackTop);
+    g.lineTo(trackX, trackBottom);
     g.strokePath();
-    // 上端の矢印 (▲)
-    g.fillStyle(COLORS.accent, 0.55);
-    g.fillTriangle(loopX - 4, topY2 + 6, loopX + 4, topY2 + 6, loopX, topY2);
+    // つまみ
+    const ratio = visibleH / contentH;
+    const thumbH = Math.max(20, trackH * ratio);
+    const thumbStartRatio = this.scrollY / Math.max(1, this.maxScroll);
+    const thumbY = trackTop + (trackH - thumbH) * thumbStartRatio;
+    g.lineStyle(3, COLORS.accent, 0.85);
+    g.beginPath();
+    g.moveTo(trackX, thumbY);
+    g.lineTo(trackX, thumbY + thumbH);
+    g.strokePath();
   }
 
   /** コード列を再帰展開して Row[] にする。 */
@@ -230,11 +357,12 @@ export class ProgramList {
     const onCursor = this.pathEq(row.path, runningPath);
     const isWrapper = codeChildren(row.code) !== null;
 
-    // コード本体の x 範囲
+    // コード本体の x 範囲 (スクロールバー用に右端 6px 確保)
+    const scrollbarPad = 8;
     const leftPad = row.depth * INDENT_PX + (row.depth > 0 ? BRACKET_GAP + 6 : 0);
     const rightBtnSpace = ROW_BTN_SIZE * 3 + 6 * 2 + 8; // ▲ ▼ ✕ のスペース
     const codeX = this.x + leftPad;
-    const codeW = this.width - leftPad - rightBtnSpace;
+    const codeW = this.width - leftPad - rightBtnSpace - scrollbarPad;
 
     const bgColor = selected
       ? COLORS.ally
@@ -286,11 +414,11 @@ export class ProgramList {
 
     this.rowObjects.push(bg, label);
 
-    // 右端のボタン群 ▲▼✕
+    // 右端のボタン群 ▲▼✕ (スクロールバー分だけ内側にずらす)
     const parent = this.parentLength(row.path);
     const btnW = ROW_BTN_SIZE;
     const gap = 6;
-    const rightEdge = this.x + this.width - 6;
+    const rightEdge = this.x + this.width - 6 - scrollbarPad;
     const removeX = rightEdge - btnW / 2;
     const downX = removeX - btnW - gap;
     const upX = downX - btnW - gap;
@@ -318,8 +446,17 @@ export class ProgramList {
     return Number.MAX_SAFE_INTEGER;
   }
 
-  /** REPEAT スコープの罫線 (縦線 + 閉じ線) を描画する。 */
-  private drawScopeBracket(repeatRow: Row, topY: number, bottomY: number): void {
+  /**
+   * REPEAT スコープの罫線 (縦線 + 閉じ線) を描画する。
+   * viewTop / viewBottom で clip して、視野外には描かない。
+   */
+  private drawScopeBracket(
+    repeatRow: Row,
+    topY: number,
+    bottomY: number,
+    viewTop: number,
+    viewBottom: number
+  ): void {
     const g = this.bracketGfx;
     const lineColor = COLORS.accent;
     const lineAlpha = 0.55;
@@ -327,17 +464,23 @@ export class ProgramList {
     // 縦線の x 位置: REPEAT 行の左端より少しだけ左
     const lineX = this.x + (repeatRow.depth + 1) * INDENT_PX + BRACKET_GAP - 8;
     // 縦線: REPEAT 行の下端から、最終子の下端まで
-    const startY = topY + ROW_HEIGHT;
-    const endY = bottomY;
+    let startY = topY + ROW_HEIGHT;
+    let endY = bottomY;
+    // 視野外を clip
+    startY = Math.max(startY, viewTop);
+    endY = Math.min(endY, viewBottom);
+    if (endY <= startY) return;
     g.beginPath();
     g.moveTo(lineX, startY);
     g.lineTo(lineX, endY);
     g.strokePath();
-    // 閉じ線 (└): 縦線の終点から右に短く伸ばす
-    g.beginPath();
-    g.moveTo(lineX, endY);
-    g.lineTo(lineX + 12, endY);
-    g.strokePath();
+    // 閉じ線 (└): 縦線の終点から右に短く伸ばす (元の終点が視野内のときだけ)
+    if (bottomY <= viewBottom && bottomY >= viewTop) {
+      g.beginPath();
+      g.moveTo(lineX, endY);
+      g.lineTo(lineX + 12, endY);
+      g.strokePath();
+    }
   }
 
   private makeRowButton(
@@ -378,8 +521,13 @@ export class ProgramList {
   }
 
   public destroy(): void {
+    if (this.wheelHandler) {
+      this.scene.input.off('wheel', this.wheelHandler);
+      this.wheelHandler = undefined;
+    }
     this.clearRows();
     this.bracketGfx.destroy();
+    this.hitZone.destroy();
     this.header.destroy();
     this.emitter.removeAllListeners();
   }

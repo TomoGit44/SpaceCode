@@ -715,28 +715,19 @@ export class GameScene extends Phaser.Scene {
       b.update(delta, this.enemies);
     }
 
-    // 撃破集計 (Phase 4: 敵種ごとの creditsValue で加算)
-    // Phase 6 Step 6: 撃破時にガチャドロップ判定 (基地接触で死んだ敵は対象外)
-    // Phase 6 Step 8: 当該 Phase の累計撃破数を更新し、半数到達でケミカル N をドロップ
-    let creditsThisFrame = 0;
+    // 撃破集計 (2026-05-25 後: 撃破クレジット報酬を廃止)
+    //   - クレジット獲得経路は「採掘 → 基地納品」と「半数ボーナス」「Phase クリアボーナス」のみ
+    //   - ガチャドロップ判定 / Phase 半数ボーナス判定はそのまま継続
+    //   - 基地接触で死んだ敵 (reachedBase=true) はドロップ対象外
     for (const e of this.enemies) {
       if (e.dead && !(e as Enemy & { _counted?: boolean })._counted) {
-        // 基地接触で死んだ場合は reachedBase=true (報酬なし)
         if (!e.reachedBase) {
-          creditsThisFrame += e.creditsValue;
           this.rollEnemyDropGacha(e);
           this.phaseKillCount += 1;
           this.checkPhaseHalfReward();
         }
         (e as Enemy & { _counted?: boolean })._counted = true;
       }
-    }
-    if (creditsThisFrame > 0) {
-      // Phase 6: 撃破報酬は賞金コア (オムニ・コア) で倍率がかかる
-      const credits = Math.round(
-        this.effects.economyStat('creditsPerKill', creditsThisFrame)
-      );
-      this.economy.add(credits, 'kill');
     }
 
     // 廃棄

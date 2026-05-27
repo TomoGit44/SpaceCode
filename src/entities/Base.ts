@@ -269,8 +269,16 @@ export class Base {
       if (this.cooldownMs <= 0) {
         // Phase 6: 砲塔火力はオムニ・コアで強化されうる (EffectSystem 経由)
         const turretDamage = effects.baseStat('turretDamage', BASE_TURRET.damagePerShot);
+        // 2026-05-25 後: 直進弾化。発射時点の敵座標を照準点として方向確定。
         bullets.push(
-          new Bullet(this.scene, this.x, this.y, this.currentTarget, turretDamage)
+          new Bullet(
+            this.scene,
+            this.x,
+            this.y,
+            this.currentTarget.x,
+            this.currentTarget.y,
+            turretDamage
+          )
         );
         this.cooldownMs = BASE_TURRET.fireIntervalMs;
         this.muzzleFlash();

@@ -238,12 +238,16 @@ export class Ship {
     // Phase 6: 攻撃力はオムニ・コア/モジュールで強化されうる (EffectSystem 経由)
     const damage = world.effects.shipStat(this, 'damagePerShot', SHIP.damagePerShot);
     // Phase 6: モジュール (ガトリング砲等) で 1 射の弾数が増える
+    // 2026-05-25 後: 直進弾化。発射時点の敵座標を照準点として方向確定 +
+    // ガトリング弾は照準点にもばらつき (±10px) を与えて広がりを表現する。
     const shots = 1 + world.effects.shipExtraShots(this);
     for (let i = 0; i < shots; i++) {
       const jx = i === 0 ? 0 : (Math.random() - 0.5) * 12;
       const jy = i === 0 ? 0 : (Math.random() - 0.5) * 12;
+      const ax = i === 0 ? enemy.x : enemy.x + (Math.random() - 0.5) * 20;
+      const ay = i === 0 ? enemy.y : enemy.y + (Math.random() - 0.5) * 20;
       world.bullets.push(
-        new Bullet(this.scene, this.x + jx, this.y + jy, enemy, damage, SHIP.bulletSpeed, COLORS.ally)
+        new Bullet(this.scene, this.x + jx, this.y + jy, ax, ay, damage, SHIP.bulletSpeed, COLORS.ally)
       );
     }
     // 2026-05-25 後: ボム砲装着時は 1 射ごとに低速ボム弾を追加発射 (着弾時に半径 80px AoE)。
@@ -251,9 +255,8 @@ export class Ship {
     const bombDamage = world.effects.shipBombDamage(this);
     if (bombDamage > 0) {
       world.bullets.push(
-        new Bullet(this.scene, this.x, this.y, enemy, bombDamage, SHIP.bulletSpeed * 0.5, COLORS.enemy, {
+        new Bullet(this.scene, this.x, this.y, enemy.x, enemy.y, bombDamage, SHIP.bulletSpeed * 0.5, COLORS.enemy, {
           explosionRadius: 80,
-          getEnemies: () => world.enemies,
         })
       );
     }

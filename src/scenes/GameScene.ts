@@ -710,9 +710,9 @@ export class GameScene extends Phaser.Scene {
       for (const s of this.ships) s.update(delta, world);
     }
 
-    // 弾
+    // 弾 (2026-05-25 後: 直進化に伴い enemies を渡して衝突判定)
     for (const b of this.bullets) {
-      b.update(delta);
+      b.update(delta, this.enemies);
     }
 
     // 撃破集計 (Phase 4: 敵種ごとの creditsValue で加算)

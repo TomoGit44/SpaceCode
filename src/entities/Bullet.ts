@@ -1,25 +1,27 @@
 import Phaser from 'phaser';
-import { COLORS, BASE_TURRET } from '../config';
+import { COLORS, BASE_TURRET, GAME_WIDTH, GAME_HEIGHT } from '../config';
 import { Enemy } from './Enemy';
 
 export interface BulletOptions {
   /**
-   * 0 より大きいとき: 直撃時に半径内の敵全員に AoE ダメージを与える「ボム弾」モード。
-   * 見た目もオレンジ大粒に変わり、命中エフェクトを爆発に差し替える。
+   * 0 より大きいとき: 命中時 (もしくは lifetime 切れ時) に半径内の敵全員に
+   * AoE ダメージを与える「ボム弾」モード。見た目もオレンジ大粒に変わる。
    */
   readonly explosionRadius?: number;
-  /** AoE 適用時に直撃ターゲット以外の敵参照を渡す getter (GameScene が提供)。 */
-  readonly getEnemies?: () => ReadonlyArray<Enemy>;
 }
 
 /**
- * 基地砲塔・宇宙船が共用する弾。指定 Enemy をホーミングする。
- * 対象が消滅したら自壊。
+ * 基地砲塔・宇宙船が共用する弾。**完全直進**。
+ *
+ * 2026-05-25 後: ホーミングを廃止し、発射時の照準点から方向を確定して直進する設計に変更。
+ *  - target Enemy 参照は持たない (`aimX, aimY` から発射方向を 1 度だけ計算)
+ *  - 衝突判定: 毎フレーム update に渡される enemies 配列を走査し、最初に hit-radius
+ *    + 自分の半径内に入った敵にダメージを与えて自壊
+ *  - ボム弾は命中時に AoE 爆発 (もしくは画面外 / lifetime 切れで自壊)
+ *  - 命中しなかったぶんは画面外 (GAME_WIDTH/HEIGHT のはみ出し) で自壊
  *
  * Step 1-B (2026-05-25): 二層 glow 化 + 60ms 間隔の残像トレイル。
- *   `color` は射撃源で変える (基地砲塔 = teal / Ship = blue)。
- *
- * 2026-05-25 後: `explosionRadius` 指定でボム弾モード。低速 + 大粒 + 着弾時 AoE。
+ *   `color` は射撃源で変える (基地砲塔 = teal / Ship = blue / ボム = enemy 色)。
  */
 export class Bullet {
   public x: number;
@@ -28,12 +30,14 @@ export class Bullet {
 
   private scene: Phaser.Scene;
   private gfx: Phaser.GameObjects.Graphics;
-  private target: Enemy;
+  /** 速度ベクトル (発射時に確定、以後変化しない)。 */
+  private readonly vx: number;
+  private readonly vy: number;
+  /** 当たり判定の自分側半径 (ボム弾は大粒なので少し大きめ)。 */
+  private readonly hitRadius: number;
   private damage: number;
-  private speed: number;
   private color: number;
   private explosionRadius: number;
-  private getEnemies?: () => ReadonlyArray<Enemy>;
   private lifeMs: number = 3000; // 安全策の自動破棄
   private trailMs: number = 0;   // 残像生成タイマー
 
@@ -41,7 +45,9 @@ export class Bullet {
     scene: Phaser.Scene,
     x: number,
     y: number,
-    target: Enemy,
+    /** 発射時の照準点 (この点に向かう方向ベクトルを取り、以後直進する)。 */
+    aimX: number,
+    aimY: number,
     damage: number = BASE_TURRET.damagePerShot,
     speed: number = BASE_TURRET.bulletSpeed,
     color: number = COLORS.accent,
@@ -50,12 +56,23 @@ export class Bullet {
     this.scene = scene;
     this.x = x;
     this.y = y;
-    this.target = target;
     this.damage = damage;
-    this.speed = speed;
     this.color = color;
     this.explosionRadius = options.explosionRadius ?? 0;
-    this.getEnemies = options.getEnemies;
+    this.hitRadius = this.explosionRadius > 0 ? 8 : 4;
+
+    // 発射方向を 1 度だけ計算して固定
+    const dx = aimX - x;
+    const dy = aimY - y;
+    const dist = Math.hypot(dx, dy);
+    if (dist < 0.0001) {
+      // 同一点を狙うケースのフォールバック: 右方向に発射
+      this.vx = speed;
+      this.vy = 0;
+    } else {
+      this.vx = (dx / dist) * speed;
+      this.vy = (dy / dist) * speed;
+    }
 
     this.gfx = scene.add.graphics().setDepth(5);
     if (this.explosionRadius > 0) {
@@ -80,41 +97,50 @@ export class Bullet {
     this.gfx.setPosition(x, y);
   }
 
-  /** delta は ms。当たれば damage を target に与えて自壊。 */
-  public update(delta: number): void {
+  /**
+   * delta は ms。
+   * 1. lifetime / 画面外チェック
+   * 2. 直進移動
+   * 3. 全 enemies を走査し、ヒット判定 (自分の半径 + 敵 hit-radius)
+   * 4. 命中したらダメージを与えて自壊 (ボム弾は AoE 爆発)
+   */
+  public update(delta: number, enemies?: ReadonlyArray<Enemy>): void {
     if (this.dead) return;
 
     this.lifeMs -= delta;
     if (this.lifeMs <= 0) {
+      if (this.explosionRadius > 0) this.explode(enemies ?? []);
       this.destroy();
       return;
     }
 
-    if (this.target.dead) {
-      // ターゲット消失時: ボム弾は最後の座標で爆発、通常弾は消える
-      if (this.explosionRadius > 0) {
-        this.explode();
-      }
-      this.destroy();
-      return;
-    }
-
-    const dx = this.target.x - this.x;
-    const dy = this.target.y - this.y;
-    const dist = Math.hypot(dx, dy);
-    const step = (this.speed * delta) / 1000;
-
-    if (dist <= step + 4) {
-      // 命中
-      this.target.takeDamage(this.damage);
-      if (this.explosionRadius > 0) this.explode();
-      this.destroy();
-      return;
-    }
-
-    this.x += (dx / dist) * step;
-    this.y += (dy / dist) * step;
+    const step = delta / 1000;
+    this.x += this.vx * step;
+    this.y += this.vy * step;
     this.gfx.setPosition(this.x, this.y);
+
+    // 画面外: 余裕 20px 持たせて clip
+    if (this.x < -20 || this.x > GAME_WIDTH + 20 || this.y < -20 || this.y > GAME_HEIGHT + 20) {
+      if (this.explosionRadius > 0) this.explode(enemies ?? []);
+      this.destroy();
+      return;
+    }
+
+    // 衝突判定 (最初にヒットした敵で停止)
+    if (enemies) {
+      for (const e of enemies) {
+        if (e.dead) continue;
+        const dx = e.x - this.x;
+        const dy = e.y - this.y;
+        const r = this.hitRadius + e.hitRadius;
+        if (dx * dx + dy * dy <= r * r) {
+          e.takeDamage(this.damage);
+          if (this.explosionRadius > 0) this.explode(enemies, e);
+          this.destroy();
+          return;
+        }
+      }
+    }
 
     // 残像トレイル (60ms ごとに 1 つ、320ms で fade)
     this.trailMs -= delta;
@@ -126,16 +152,14 @@ export class Bullet {
 
   /**
    * ボム弾の爆発処理。
-   * - 半径内のすべての敵に damage の AoE ダメージ (直撃済みは中心 = 0 距離なので二重ダメージしない)
-   * - 視覚: 拡大しながらフェードする 2 重円 + 短い shake
+   *  - 半径内のすべての敵に damage を与える (直撃した敵は除外 = 二重ダメ防止)
+   *  - 視覚: 拡大しながらフェードする 2 重円 + 中心フラッシュ
    */
-  private explode(): void {
+  private explode(enemies: ReadonlyArray<Enemy>, directHit?: Enemy): void {
     const r = this.explosionRadius;
-    const enemies = this.getEnemies?.() ?? [];
     for (const e of enemies) {
       if (e.dead) continue;
-      // 直撃ターゲットは update() 側で既にダメージ済みなのでスキップ
-      if (e === this.target) continue;
+      if (e === directHit) continue; // 直撃は update 側で既に処理済み
       const d = Math.hypot(e.x - this.x, e.y - this.y);
       if (d <= r) e.takeDamage(this.damage);
     }

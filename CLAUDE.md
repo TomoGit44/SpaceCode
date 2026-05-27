@@ -23,7 +23,7 @@
 
 ---
 
-## 現在のステータス (最終更新: 2026-05-26)
+## 現在のステータス (最終更新: 2026-05-28)
 
 | Phase | 内容 | 状態 |
 |---|---|---|
@@ -42,6 +42,7 @@
 | 補追 (Phase 6 後) | **遠距離敵 sniper** + **体当たり敵強化 (×1.5 + 電気スタン演出)** + **体当たりモジュール `mod_ram`** (衝角ブレード、contactDps + 移動速度マイナス) | ✅ 完了 (2026-05-25) |
 | 補追 (Phase 6 後) | **オムニ・コア左上 Strip 化** (固有アイコン + 常時表示 + hover ツールチップ) + **3 新コア** (`core_attack_plus` / `core_efficiency` / `core_endurance`、Run 開始時 SR 装着) + **アイテムメニューから omni タブ撤去** + `ShipStat` に `energyConsume` 追加 | ✅ 完了 (2026-05-25) |
 | 補追 (Phase 6 後) | **5 Stage × 各 20 Phase = 100 Phase 化** (`STAGE.totalStages=5` / `phasesPerStage=20`、PHASES 100 要素手書き、ボスは Phase 20/40/60/80/100)。HUD は「STAGE · PHASE」2 段表記 (`3 / 5 · 12 / 20`)、Stage 先頭 Phase で「STAGE N」accent バナー + camera flash、VictoryScene を `ALL STAGES CLEAR` に変更 | ✅ 完了 (2026-05-26) |
+| 補追 (Phase 6 後) | **モジュール画面 → 宇宙船一覧画面 (`ShipListScene`) に刷新** (Pokemon Box 風 2 列カード + 選択船詳細パネル + ドラッグ&ドロップで装着/移し替え/「外す」ゾーンで取り外し + 右上「プログラムを編集」ボタンで編集オーバーレイを船一覧の上に重ねる)。右端 ShopPanel ボタンも「🚀 宇宙船 (N)」に改称、旧 `ItemInventoryScene` は削除 | ✅ 完了 (2026-05-28) |
 
 通しプレイ可能。コア体験「プログラムを組まないと Ship は動かない」を維持しつつ、Run 中の成長要素 (アイテム) を載せている最中。
 
@@ -130,7 +131,7 @@ git push                            # 直後に必ず push
 
 ```
 src/
-├── main.ts                 # Phaser 起動・シーン登録 (Game / ProgramEditor / ItemInventory / GachaOpen はこの順で並行 active 対応)
+├── main.ts                 # Phaser 起動・シーン登録 (Game / ProgramEditor / ShipList / GachaOpen はこの順で並行 active 対応)
 ├── config.ts               # 全定数 (GAME_*, COLORS (+ rarity*), BASE, BASE_TURRET, SHIP, ENEMY_TYPES, ENEMY_VS_SHIP, ECONOMY, STAGE, PHASES (enemySpecs), SPAWN, PLANETS, PLANET)
 ├── scenes/                 # Phaser シーン (薄く保つ。ロジックは entities/systems/items/program へ)
 │   ├── BootScene.ts        # 即 Menu へ
@@ -139,7 +140,7 @@ src/
 │   ├── GameOverScene.ts    # R リトライ / ESC メニュー
 │   ├── VictoryScene.ts     # STAGE CLEAR
 │   ├── ProgramEditorScene.ts  # 並行 active オーバーレイ。Ship クリックで起動、Program をライブ編集。ITEM_CODE 配置 + 残数管理 + 装着モジュール read-only チップ + Ship ステータス (HP/ENE/INV) + 補給/修理ボタン
-│   ├── ItemInventoryScene.ts  # Phase 6: 並行 active オーバーレイ。カテゴリタブ + 所持一覧 + 詳細 + 装着/使用フロー + ガチャ「開封する」
+│   ├── ShipListScene.ts       # 2026-05-28: 並行 active オーバーレイ。Pokemon Box 風 2 列船カード + 選択船詳細 (大アイコン+ステータス+装着モジュール+所持モジュール) + ドラッグ&ドロップで装着/移し替え/「外す」ゾーンで取り外し + 「プログラム編集」ボタン (本シーン pause で編集を上に重ねる)
 │   └── GachaOpenScene.ts      # Phase 6 Step 6: ガチャ開封オーバーレイ。drawGacha で 3 候補 → 選択 → Inventory に追加
 ├── entities/               # ゲーム内オブジェクト (描画+状態を自分で持つ)
 │   ├── Base.ts             # 基地 HP, takeDamage, heal, 脈動 + 回転リング + 内蔵砲塔 (射程リング表示 + 射撃。火力は effects.baseStat 経由)
@@ -239,6 +240,21 @@ src/
 - 大きな方針転換 (Phase 構成変更等) は `docs/DESIGN.md` を更新して履歴として残す
 
 ---
+
+## ユーザーの心理的フックに基づくゲーム設計方針
+
+本作のゲームシステムを実装・提案する際は、プレイヤーに以下の5つの心理的快感を与える設計を徹底してください。
+
+- **変動比率強化（ランダム報酬の快感）**
+  「次に何が手に入るか分からない（たまに大当たりがある）」という状態を作り、脳内にドーパミンを分泌させ、依存性とリプレイ性を生み出す。
+- **自己決定理論（自律性の欲求）**
+  提示されたランダムな選択肢の中から、プレイヤーが自分の意志でルートやスキルを選び取るプロセスを用意し、満足感と愛着を与える。
+- **シナジー効果の発見（アハ体験）**
+  バラバラだったスキルがプレイヤーのアイデアで噛み合い、爆発的な威力を発揮した瞬間に、仮説が証明されたような強い快感を覚えさせる。
+- **短期的フィードバックと成長の可視化**
+  強化直後にダメージ数値やエフェクト、敵のノックバック量などを目に見えて変化させ、「今すぐ強くなった全能感」を即座に与える。
+- **損失回避バイアス（プロスペクト理論）**
+  ゲームオーバーによるリセットの悔しさを、「次こそはもっと上手くビルドを組んで勝つ」という強いリベンジ欲求へ変換させる。
 
 ## 参照ドキュメント
 

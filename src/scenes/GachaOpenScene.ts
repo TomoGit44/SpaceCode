@@ -35,7 +35,7 @@ export interface GachaOpenData {
 /**
  * ガチャ開封オーバーレイ (Phase 6 Step 6)。
  *
- * 親 (ItemInventoryScene) を pause せず並行 active で起動するが、
+ * 親 (GameScene) を pause せず並行 active で起動するが、
  * 全画面バックドロップ + bringToTop で親への入力を遮断する。
  *
  * フロー:

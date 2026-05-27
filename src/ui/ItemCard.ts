@@ -2,7 +2,7 @@
  * アイテムカード (Step 3-B, 2026-05-25)。
  *
  * Phaser Container 1 つに「Rarity 別装飾 + 六角アイコン + 名前 + (任意) 装着バッジ」を
- * まとめる。ItemInventoryScene / GachaOpenScene の両方で使う。
+ * まとめる。ShipListScene / GachaOpenScene の両方で使う。
  *
  * Rarity 別装飾:
  *   - N: 灰枠 1px

@@ -385,7 +385,7 @@ export class ProgramEditorScene extends Phaser.Scene {
 
   /**
    * Phase 6 Step 9: この Ship に装着中のモジュールを read-only チップで表示する。
-   * 装着なしならその旨のヒント文。装着/取り外しは ItemInventoryScene 側で完結する。
+   * 装着なしならその旨のヒント文。装着/取り外しは ShipListScene 側で完結する。
    */
   private renderEquippedModules(x: number, y: number, w: number): void {
     const uids = this.inventory.shipModules[this.targetShip.id] ?? [];

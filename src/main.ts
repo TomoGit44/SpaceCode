@@ -4,7 +4,7 @@ import { BootScene } from './scenes/BootScene';
 import { MenuScene } from './scenes/MenuScene';
 import { GameScene } from './scenes/GameScene';
 import { ProgramEditorScene } from './scenes/ProgramEditorScene';
-import { ItemInventoryScene } from './scenes/ItemInventoryScene';
+import { ShipListScene } from './scenes/ShipListScene';
 import { GachaOpenScene } from './scenes/GachaOpenScene';
 import { RewardPopupScene } from './scenes/RewardPopupScene';
 import { GameOverScene } from './scenes/GameOverScene';
@@ -30,14 +30,14 @@ const config: Phaser.Types.Core.GameConfig = {
     pixelArt: false,
     antialias: true,
   },
-  // オーバーレイ系 (ProgramEditor / ItemInventory) は GameScene の後ろに登録
+  // オーバーレイ系 (ProgramEditor / ShipList) は GameScene の後ろに登録
   // (並行 active 時に入力レイヤが上に乗る)
   scene: [
     BootScene,
     MenuScene,
     GameScene,
     ProgramEditorScene,
-    ItemInventoryScene,
+    ShipListScene,
     GachaOpenScene,
     RewardPopupScene,
     GameOverScene,

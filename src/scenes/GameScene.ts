@@ -60,7 +60,7 @@ export class GameScene extends Phaser.Scene {
 
   private terminating: boolean = false; // GameOver / Victory 遷移中
 
-  // 並行 active オーバーレイ (ProgramEditor / ItemInventory / Gacha) の開いている数。
+  // 並行 active オーバーレイ (ProgramEditor / ShipList / Gacha) の開いている数。
   // > 0 のとき GameScene の入力を抑止する (Phase 6: editorOpen から一般化)。
   private overlayDepth: number = 0;
 
@@ -459,11 +459,11 @@ export class GameScene extends Phaser.Scene {
     this.scene.bringToTop('ProgramEditorScene');
   }
 
-  /** モジュール画面オーバーレイを開く (ProgramEditor とは排他)。 */
-  private openItemInventory(): void {
+  /** 宇宙船一覧オーバーレイを開く (ProgramEditor とは排他、ただし船一覧の上に編集を重ねるのは可)。 */
+  private openShipList(): void {
     if (this.overlayDepth > 0) return;
     this.overlayDepth += 1;
-    this.scene.launch('ItemInventoryScene', {
+    this.scene.launch('ShipListScene', {
       inventory: this.inventory,
       getShips: () => this.ships,
       onChanged: () => {
@@ -471,16 +471,40 @@ export class GameScene extends Phaser.Scene {
         this.refreshItemButton();
         this.omniCoreStrip?.refresh();
       },
+      onRequestEditProgram: (ship: Ship, onClosed: () => void) =>
+        this.openProgramEditorOnTopOfShipList(ship, onClosed),
     });
-    const ov = this.scene.get('ItemInventoryScene');
+    const ov = this.scene.get('ShipListScene');
     ov.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.overlayDepth -= 1;
       this.refreshItemButton();
     });
-    this.scene.bringToTop('ItemInventoryScene');
+    this.scene.bringToTop('ShipListScene');
   }
 
-  /** 右端「モジュール」ボタンを作る (2026-05-25 後: アイテム → モジュールに名称変更)。 */
+  /**
+   * 船一覧シーンの上に重ねてプログラム編集を起動する。
+   * overlayDepth は ShipList ぶん +1 が既に立っているので、ここでさらに +1 して二重にする。
+   * 編集 SHUTDOWN で -1 + onClosed (ShipList 側 scene.resume) を呼ぶ。
+   */
+  private openProgramEditorOnTopOfShipList(ship: Ship, onClosed: () => void): void {
+    this.overlayDepth += 1;
+    this.scene.launch('ProgramEditorScene', {
+      ship,
+      inventory: this.inventory,
+      getShips: () => this.ships,
+      economy: this.economy,
+    });
+    const editor = this.scene.get('ProgramEditorScene');
+    editor.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.overlayDepth -= 1;
+      this.refreshItemButton();
+      onClosed();
+    });
+    this.scene.bringToTop('ProgramEditorScene');
+  }
+
+  /** 右端「宇宙船」ボタンを作る (2026-05-27 後: モジュール → 宇宙船に再リデザイン)。 */
   private createItemButton(): void {
     const w = 160;
     const h = 44;
@@ -507,16 +531,15 @@ export class GameScene extends Phaser.Scene {
     bg.on('pointerdown', (p: Phaser.Input.Pointer) => {
       if (p.rightButtonDown()) return;
       if (this.terminating || this.overlayDepth > 0) return;
-      this.openItemInventory();
+      this.openShipList();
     });
   }
 
-  /** モジュールボタンのバッジを更新する (所持モジュール数を表示)。 */
+  /** 宇宙船ボタンのバッジを更新する (所持船数を表示)。 */
   private refreshItemButton(): void {
     if (!this.itemBtnLabel) return;
-    // モジュールのみを所持の対象とする (ケミカル/ガチャは保管廃止済み)
-    const n = this.inventory.items.length;
-    this.itemBtnLabel.setText(`🔧 モジュール (${n})`);
+    const n = this.ships.length;
+    this.itemBtnLabel.setText(`🚀 宇宙船 (${n})`);
   }
 
   /** 全 Ship の最大 stat を装着アイテムに合わせて再計算する (アイテム構成変化時)。 */
@@ -812,7 +835,7 @@ export class GameScene extends Phaser.Scene {
 
   private cleanup(): void {
     // オーバーレイを閉じてから GameScene を終了する
-    for (const key of ['ProgramEditorScene', 'ItemInventoryScene', 'GachaOpenScene', 'RewardPopupScene']) {
+    for (const key of ['ProgramEditorScene', 'ShipListScene', 'GachaOpenScene', 'RewardPopupScene']) {
       if (this.scene.isActive(key)) this.scene.stop(key);
     }
     this.overlayDepth = 0;

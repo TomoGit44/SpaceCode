@@ -93,7 +93,8 @@ export const SHIP = {
   attackDurationMs: 500,     // Phase 4: ATTACK_NEAREST コード 1 回ぶんの持続時間 (Phase 3 の 600 から短縮)
   bulletSpeed: 380,          // 攻撃弾速 (タワーより遅め)
   attackRange: 220,          // attackNearest の射程
-  refuelOnDeposit: true,     // 納品時に energy 全回復するか
+  refuelOnDeposit: true,     // 基地待機中に energy を時間回復するか (Wait コード / 納品)
+  refuelDurationMs: 2000,    // 基地での自動補給で maxEnergy を満タンにするまでの所要時間 (ms)。Ship.requestRefuel 経由
   radius: 12,                // 描画基準半径
   // 2026-05-25: 編集画面からクレジット消費で補給/修理 (常時可、ダウン/スタール復帰経路)
   refuelCost: 20,            // エネルギー全回復のクレジット

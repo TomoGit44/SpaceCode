@@ -9,8 +9,9 @@ import type { CodeExecContext } from '../Executor';
  * 副作用:
  *  - **基地の近く** (`base.radius + SHIP.depositRadius`) に居れば
  *    毎フレーム `ship.depositAt(base)` を呼び、Ship.update が
- *    インベントリを納品 (refuelOnDeposit なら同時にエネルギー全回復)。
- *    インベントリが空でも energy < maxEnergy なら直接 `ship.refuel()` を呼んで補給。
+ *    インベントリを納品 (refuelOnDeposit なら同時にエネルギー補給開始)。
+ *    補給は時間ベース (Ship.requestRefuel → Ship.tickRefuelEffect、refuelDurationMs で満タン)。
+ *    インベントリが空でも energy < maxEnergy なら毎フレーム requestRefuel を立て続けて回復させる。
  *  - **惑星の近く** (`planet.mineRadius`) に居れば、その惑星に `ship.mineAt(planet)`
  *    を設定し採掘を継続。複数惑星が範囲内なら最初に見つかったものを優先。
  *    満タンになるか枯渇すると Ship.update 側で自動停止 (本 tick 関数からは無干渉)。
@@ -28,9 +29,10 @@ export function tickWait(
   const atBase = ship.isAt(world.base, world.base.radius + SHIP.depositRadius);
   if (atBase) {
     ship.depositAt(world.base);
-    // インベントリ 0 でも refuel する (Ship.update の deposit 経路は inventory>0 のみ refuel)
+    // インベントリ 0 でも補給する (Ship.update の deposit 経路は inventory>0 のみ requestRefuel)
+    // refuel は時間ベース: 毎フレーム requestRefuel を立てて Ship 側で energy を加算
     if (SHIP.refuelOnDeposit && ship.energy < ship.maxEnergy) {
-      ship.refuel();
+      ship.requestRefuel();
     }
   } else if (!ship.isInventoryFull()) {
     // 2. 惑星の近くなら採掘 (枯渇していない最初の 1 つ)

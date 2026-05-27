@@ -68,7 +68,18 @@ export class Ship {
   private bodyGfx: Phaser.GameObjects.Graphics;
   private barGfx: Phaser.GameObjects.Graphics;
   private thrustGfx: Phaser.GameObjects.Graphics; // Step 2-B: 推進炎 (移動中のみ visible)
+  private refuelGfx: Phaser.GameObjects.Graphics; // 補給中のリング (基地で WAIT/納品中のみ visible)
   private rotation: number = 0;
+
+  // 採掘エフェクトの間引き用 (走るとフレームごとに extract が走るため)
+  private mineFxAccumMs: number = 0;
+  private static readonly MINE_FX_INTERVAL_MS = 400;
+
+  // 自動補給の状態。Wait コードや納品が毎フレーム requestRefuel() を立てる。
+  // Ship.update 末尾で読み取り、立っていれば時間ベースで energy を回復し
+  // リング演出を表示する。フレーム末でフラグはクリアされる。
+  private refuelRequested: boolean = false;
+  private refuelPulse: number = 0;
 
   // 低レベル命令の現在ターゲット
   private moveTarget: { x: number; y: number } | null = null;
@@ -102,6 +113,10 @@ export class Ship {
     this.drawBody();
     this.drawBars();
     this.bodyGfx.setPosition(x, y);
+
+    // 補給リング (本体より前面、bars より背面)
+    this.refuelGfx = scene.add.graphics().setDepth(5);
+    this.refuelGfx.setVisible(false);
   }
 
   /**
@@ -326,6 +341,7 @@ export class Ship {
       this.state = 'downed';
       this.bodyGfx.setAlpha(0.3);
       this.drawBars();
+      this.hideRefuelRing();
       return;
     }
 
@@ -335,6 +351,7 @@ export class Ship {
       this.state = 'stalled';
       this.bodyGfx.setAlpha(0.45);
       this.drawBars();
+      this.hideRefuelRing();
       return;
     }
     this.bodyGfx.setAlpha(1);
@@ -383,10 +400,21 @@ export class Ship {
         const got = p.extract(delta, world.effects.shipStat(this, 'mineRate', SHIP.mineRate));
         this.inventory = Math.min(this.inventoryCap, this.inventory + got);
         this.state = 'mining';
+        // 採掘エフェクト: $マークが Ship 上方に浮上 → フェードアウト
+        if (got > 0) {
+          this.mineFxAccumMs += delta;
+          if (this.mineFxAccumMs >= Ship.MINE_FX_INTERVAL_MS) {
+            this.mineFxAccumMs = 0;
+            this.spawnMineFx();
+          }
+        }
       }
       if (p.depleted) {
         this.mineTarget = null;
       }
+    } else {
+      // 採掘していない間はアキュムをリセット (次の採掘で即発火するため)
+      this.mineFxAccumMs = Ship.MINE_FX_INTERVAL_MS;
     }
 
     // 納品 (depositTarget に到達していれば)
@@ -396,10 +424,15 @@ export class Ship {
         const amount = this.inventory;
         this.inventory = 0;
         world.economy.depositResource(amount);
-        if (SHIP.refuelOnDeposit) this.refuel();
+        // refuel は瞬時ではなく時間ベース: フレームごとに requestRefuel を立てる経路に統一
+        // (Wait コード経由で毎フレーム再リクエストされる)
+        if (SHIP.refuelOnDeposit) this.requestRefuel();
         this.state = 'depositing';
       }
     }
+
+    // 自動補給 (Wait コードや上記納品が requestRefuel を立てている間、時間で energy 回復)
+    this.tickRefuelEffect(delta);
 
     // 敵接触: 被ダメージ + 体当たりモジュール装着時の反撃 (2026-05-25)
     // - charge 種別の接触はスタンガン演出付き
@@ -447,8 +480,97 @@ export class Ship {
     this.hp = Math.max(0, this.hp - amount);
   }
 
+  /**
+   * 即時全回復。手動補給ボタン (クレジット消費) からのみ呼ばれる想定。
+   * 自動補給 (Wait コード / 基地納品) は `requestRefuel()` を使って時間ベースで回復する。
+   */
   public refuel(): void {
     this.energy = this.maxEnergy;
+  }
+
+  /**
+   * 自動補給リクエスト。Wait コードや納品処理がフレームごとに立て、
+   * Ship.update 末尾の `tickRefuelEffect` が時間ベースで energy を加算する。
+   * フラグはフレーム末で必ずクリアされるため、基地から離れた瞬間に回復は止まる。
+   */
+  public requestRefuel(): void {
+    this.refuelRequested = true;
+  }
+
+  /** 自動補給の本処理: energy 加算 + 脈動リング描画。フレーム末でフラグをクリア。 */
+  private tickRefuelEffect(delta: number): void {
+    if (this.refuelRequested && this.energy < this.maxEnergy) {
+      // refuelDurationMs で maxEnergy ぶん回復する一定速度
+      const ratePerMs = this.maxEnergy / SHIP.refuelDurationMs;
+      this.energy = Math.min(this.maxEnergy, this.energy + ratePerMs * delta);
+      this.refuelPulse += delta;
+      this.drawRefuelRing();
+      this.refuelGfx.setVisible(true);
+      this.refuelGfx.setPosition(this.x, this.y);
+    } else {
+      this.refuelPulse = 0;
+      if (this.refuelGfx.visible) {
+        this.refuelGfx.clear();
+        this.refuelGfx.setVisible(false);
+      }
+    }
+    this.refuelRequested = false; // 毎フレームクリア (Wait / 納品が再リクエストする)
+  }
+
+  /** 補給リング: ally 色の脈動 + 円弧で energy 比を可視化。 */
+  private drawRefuelRing(): void {
+    const g = this.refuelGfx;
+    g.clear();
+    const r = SHIP.radius;
+    // 1) 拡張する波紋 (1.0 → 1.8 で拡大しつつ alpha 0.6 → 0)
+    const period = 700;
+    const phase = (this.refuelPulse % period) / period;
+    const rippleR = r * (1.4 + phase * 1.2);
+    const rippleA = 0.55 * (1 - phase);
+    g.lineStyle(2, COLORS.ally, rippleA);
+    g.strokeCircle(0, 0, rippleR);
+    // 2) energy 進捗弧 (満タンに近づくほど 360° に伸びる)
+    const ratio = Math.max(0, Math.min(1, this.energy / this.maxEnergy));
+    g.lineStyle(3, COLORS.ally, 0.9);
+    g.beginPath();
+    g.arc(0, 0, r + 5, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * ratio, false);
+    g.strokePath();
+    // 3) 中心ハイライト (脈動)
+    const corePulse = 0.6 + Math.sin(this.refuelPulse / 120) * 0.25;
+    g.fillStyle(COLORS.highlight, corePulse * 0.35);
+    g.fillCircle(0, 0, r * 0.6);
+  }
+
+  /** stalled/downed などで update 中断する時に補給リングを確実に非表示化。 */
+  private hideRefuelRing(): void {
+    this.refuelRequested = false;
+    this.refuelPulse = 0;
+    if (this.refuelGfx.visible) {
+      this.refuelGfx.clear();
+      this.refuelGfx.setVisible(false);
+    }
+  }
+
+  /** 採掘成功時にクレジットマーク "$" を Ship 上方に浮かせてフェードアウトさせる。 */
+  private spawnMineFx(): void {
+    const t = this.scene.add
+      .text(this.x, this.y - SHIP.radius - 4, '$', {
+        fontFamily: 'Courier New, monospace',
+        fontSize: '18px',
+        color: '#ffd24a',
+        fontStyle: 'bold',
+      })
+      .setOrigin(0.5, 1)
+      .setDepth(6);
+    this.scene.tweens.add({
+      targets: t,
+      y: t.y - 22,
+      alpha: 0,
+      scale: 1.15,
+      duration: 650,
+      ease: 'Cubic.easeOut',
+      onComplete: () => t.destroy(),
+    });
   }
 
   /** Phase 6: ケミカルによる HP 回復。最大 HP を超えない。死亡 Ship には効かない。 */
@@ -496,6 +618,7 @@ export class Ship {
     });
     this.barGfx.destroy();
     this.thrustGfx.destroy();
+    this.refuelGfx.destroy();
   }
 
   public destroy(): void {
@@ -503,6 +626,7 @@ export class Ship {
       this.bodyGfx.destroy();
       this.barGfx.destroy();
       this.thrustGfx.destroy();
+      this.refuelGfx.destroy();
     }
     this.dead = true;
   }

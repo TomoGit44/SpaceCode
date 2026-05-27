@@ -69,6 +69,13 @@ export class Ship {
   private barGfx: Phaser.GameObjects.Graphics;
   private thrustGfx: Phaser.GameObjects.Graphics; // Step 2-B: 推進炎 (移動中のみ visible)
   private refuelGfx: Phaser.GameObjects.Graphics; // 補給中のリング (基地で WAIT/納品中のみ visible)
+  /**
+   * エネルギー切れ警告アイコン (2026-05-25 後追加)。
+   * 船本体の上に黄色の ⚠ 三角を浮かべて pulse させ、ゲーム画面上で一目で
+   * 「補給が必要」と分かるようにする。stalled 状態でのみ visible。
+   */
+  private lowEnergyGfx: Phaser.GameObjects.Graphics;
+  private lowEnergyTween?: Phaser.Tweens.Tween;
   private rotation: number = 0;
 
   // 採掘エフェクトの間引き用 (走るとフレームごとに extract が走るため)
@@ -117,6 +124,48 @@ export class Ship {
     // 補給リング (本体より前面、bars より背面)
     this.refuelGfx = scene.add.graphics().setDepth(5);
     this.refuelGfx.setVisible(false);
+
+    // 2026-05-25 後: エネルギー切れ警告アイコン (黄色 ⚠ 三角)。
+    // ship body より上 depth で常に視認可能、stalled でのみ visible。
+    this.lowEnergyGfx = scene.add.graphics().setDepth(6);
+    this.drawLowEnergyIcon();
+    this.lowEnergyGfx.setVisible(false);
+    // 注意喚起の pulse (yoyo alpha)
+    this.lowEnergyTween = scene.tweens.add({
+      targets: this.lowEnergyGfx,
+      alpha: 0.45,
+      duration: 520,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
+  }
+
+  /** 黄色 ⚠ 三角 + 中央 ! を Graphics で描画 (画像アセット不使用)。 */
+  private drawLowEnergyIcon(): void {
+    const g = this.lowEnergyGfx;
+    g.clear();
+    const size = 9; // 三角形 半高さ
+    // 三角形 (黄)
+    g.fillStyle(0xffdd44, 1);
+    g.beginPath();
+    g.moveTo(0, -size);
+    g.lineTo(size * 1.05, size * 0.85);
+    g.lineTo(-size * 1.05, size * 0.85);
+    g.closePath();
+    g.fillPath();
+    // 黒い縁取りで視認性 up
+    g.lineStyle(1.4, 0x05070d, 1);
+    g.beginPath();
+    g.moveTo(0, -size);
+    g.lineTo(size * 1.05, size * 0.85);
+    g.lineTo(-size * 1.05, size * 0.85);
+    g.closePath();
+    g.strokePath();
+    // 中央の "!" (縦バー + ドット)
+    g.fillStyle(0x05070d, 1);
+    g.fillRect(-1.1, -size * 0.45, 2.2, size * 0.8);
+    g.fillCircle(0, size * 0.55, 1.4);
   }
 
   /**
@@ -342,6 +391,7 @@ export class Ship {
       this.bodyGfx.setAlpha(0.3);
       this.drawBars();
       this.hideRefuelRing();
+      this.setLowEnergyVisible(false); // ダウン優先 (HP 0 のほうが重い)
       return;
     }
 
@@ -352,9 +402,11 @@ export class Ship {
       this.bodyGfx.setAlpha(0.45);
       this.drawBars();
       this.hideRefuelRing();
+      this.setLowEnergyVisible(true); // 警告アイコン表示
       return;
     }
     this.bodyGfx.setAlpha(1);
+    this.setLowEnergyVisible(false);
 
     // Behavior が命令 API を呼ぶ
     if (this.behavior) {
@@ -541,6 +593,20 @@ export class Ship {
     g.fillCircle(0, 0, r * 0.6);
   }
 
+  /**
+   * エネルギー切れ警告アイコンの表示制御 (2026-05-25 後追加)。
+   * visible=true のとき船の上に位置を合わせて表示、false で隠す。
+   * pulse tween は常時動かしっぱなしで visible だけ切り替える。
+   */
+  private setLowEnergyVisible(visible: boolean): void {
+    if (visible) {
+      this.lowEnergyGfx.setPosition(this.x, this.y - SHIP.radius - 12);
+      if (!this.lowEnergyGfx.visible) this.lowEnergyGfx.setVisible(true);
+    } else {
+      if (this.lowEnergyGfx.visible) this.lowEnergyGfx.setVisible(false);
+    }
+  }
+
   /** stalled/downed などで update 中断する時に補給リングを確実に非表示化。 */
   private hideRefuelRing(): void {
     this.refuelRequested = false;
@@ -609,6 +675,8 @@ export class Ship {
 
   private die(): void {
     this.dead = true;
+    this.lowEnergyTween?.stop();
+    this.lowEnergyTween = undefined;
     this.scene.tweens.add({
       targets: this.bodyGfx,
       alpha: 0,
@@ -619,14 +687,18 @@ export class Ship {
     this.barGfx.destroy();
     this.thrustGfx.destroy();
     this.refuelGfx.destroy();
+    this.lowEnergyGfx.destroy();
   }
 
   public destroy(): void {
     if (!this.dead) {
+      this.lowEnergyTween?.stop();
+      this.lowEnergyTween = undefined;
       this.bodyGfx.destroy();
       this.barGfx.destroy();
       this.thrustGfx.destroy();
       this.refuelGfx.destroy();
+      this.lowEnergyGfx.destroy();
     }
     this.dead = true;
   }

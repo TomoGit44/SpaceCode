@@ -59,6 +59,12 @@ export class Executor implements ShipBehavior {
       this.stack[0]!.cursor = this.program.cursorIndex;
     }
     let advances = 0;
+    // 2026-05-25 後: root 末尾のループバック回数を tick 内で数える。
+    // すべてのコードが即時 done を返すケース (例: 同じ目的地への MOVE_TO 連続) では、
+    // 1 tick の間に何周もループしてしまい、走行マーカーが上下に高速で飛ぶ視覚バグになる。
+    // 2 度目のループバックを検出したら tight-cycle と判定し、cursor=0 に戻して return —
+    // 次フレームで再評価することで 1 tick ぶんの時間消費を強制する。
+    let rootWraparounds = 0;
     while (advances < MAX_ADVANCES_PER_TICK) {
       if (this.stack.length === 0) {
         ship.stop();
@@ -79,6 +85,17 @@ export class Executor implements ShipBehavior {
             ship.stop();
             return;
           }
+          // tight-cycle 検出: tick 内で既に 1 回ループバック済みなら、これ以上回さず終了。
+          // running が一度でも返っていれば早期 return しているのでここには来ない。
+          // したがってこのケースは「全コード即時 done」確定。
+          if (rootWraparounds >= 1) {
+            top.cursor = 0;
+            this.program.reset();
+            this.codeElapsedMs = 0;
+            this.justEntered = true;
+            return;
+          }
+          rootWraparounds += 1;
           top.cursor = 0;
           this.program.reset();
           this.codeElapsedMs = 0;

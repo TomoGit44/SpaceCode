@@ -12,6 +12,6 @@ export function conditionIfHpBelow(
 ): boolean {
   void world;
   if (ship.maxHp <= 0) return false;
-  const threshold = code.params.hpPercent ?? 100;
+  const threshold = (code.params.hpPercent as number) ?? 100;
   return (ship.hp / ship.maxHp) * 100 <= threshold;
 }

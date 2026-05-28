@@ -7,13 +7,33 @@ import { tickWait } from './codes/Wait';
 import { conditionIfHpBelow } from './codes/IfHpBelow';
 import { conditionIfEnemyInRange } from './codes/IfEnemyInRange';
 import { conditionIfInventoryFull } from './codes/IfInventoryFull';
+import { conditionIfEnergyBelow } from './codes/IfEnergyBelow';
+import { conditionIfBaseHpBelow } from './codes/IfBaseHpBelow';
+import { conditionIfAllyDowned } from './codes/IfAllyDowned';
+import { conditionIfBossAlive } from './codes/IfBossAlive';
+import { conditionIfNearestEnemyIs } from './codes/IfNearestEnemyIs';
+import { conditionIfPlanetEmpty } from './codes/IfPlanetEmpty';
+import { conditionIfRandom } from './codes/IfRandom';
+import { conditionIfSignal } from './codes/IfSignal';
+import { tickBroadcastSignal } from './codes/BroadcastSignal';
+import { ITEM_CODE_DEFS } from '../items/types/itemCodes';
 
 const MAX_ADVANCES_PER_TICK = 16;
+/** WHILE / LOOP_UNTIL の安全装置: 1 tick 内の最大反復回数。 */
+const MAX_LOOP_ITERATIONS_PER_TICK = 32;
 
 interface Frame {
   codes: ReadonlyArray<Code>;
   cursor: number;
   remainingIterations: number; // -1: root, >0: REPEAT 残り回数
+  /**
+   * 2026-05-28: WHILE / LOOP_UNTIL 用。設定されていれば cursor が末尾に達した時に
+   * これを評価し、true なら cursor=0 で続行、false なら frame を pop する。
+   * 'while': 条件 true で続行 / 'until': 条件 false で続行 (= true で終了)
+   */
+  loopMode?: 'while' | 'until';
+  loopCondition?: (ship: Ship, world: ShipWorld) => boolean;
+  loopIterations?: number; // 安全装置: tick あたりの累積反復数
 }
 
 export interface CodeExecContext {
@@ -31,6 +51,11 @@ export interface CodeExecContext {
  *   - **root 末尾は自動で先頭にループバック** (Phase 5 後の改善)。
  *     プログラムを置いただけで上から下に無限ループする挙動が前提。
  *     REPEAT は「特定の行動を N 回だけ繰り返したい」ときの専用コード。
+ *
+ * 2026-05-28: ITEM_CODE_DEFS の `kind` (wrapper / wrapperLoop / action) に応じて分岐:
+ *   - wrapper:     既存どおり、条件成立時に子を 1 周
+ *   - wrapperLoop: 条件で繰り返す (WHILE = 条件 true で継続、LOOP_UNTIL = 条件 false で継続)
+ *   - action:      子を持たない leaf として 1 ステップ実行
  *
  * コードには「現在コードに留まっている時間 (elapsedMs)」と「入った最初の tick か (justEntered)」
  * を CodeExecContext で渡す。ATTACK_NEAREST のような持続時間コードがこれを使う。
@@ -73,6 +98,26 @@ export class Executor implements ShipBehavior {
       const top = this.stack[this.stack.length - 1]!;
 
       if (top.cursor >= top.codes.length) {
+        // wrapperLoop フレームの終端: 条件を再評価して継続/終了を決める。
+        if (top.loopCondition && top.loopMode) {
+          const condTrue = top.loopCondition(ship, world);
+          const shouldContinue = top.loopMode === 'while' ? condTrue : !condTrue;
+          const iters = (top.loopIterations ?? 0) + 1;
+          if (shouldContinue && iters <= MAX_LOOP_ITERATIONS_PER_TICK) {
+            top.loopIterations = iters;
+            top.cursor = 0;
+            this.codeElapsedMs = 0;
+            this.justEntered = true;
+            advances += 1;
+            continue;
+          }
+          // 終了
+          this.stack.pop();
+          this.codeElapsedMs = 0;
+          this.justEntered = true;
+          advances += 1;
+          continue;
+        }
         if (top.remainingIterations > 1) {
           top.remainingIterations -= 1;
           top.cursor = 0;
@@ -133,7 +178,68 @@ export class Executor implements ShipBehavior {
       }
 
       if (code.type === 'ITEM_CODE') {
-        // 条件 wrapper: cursor を先に進め、条件成立なら子コード列を 1 周だけ実行。
+        const def = ITEM_CODE_DEFS[code.itemCodeType];
+        // 2026-05-28: kind 別に分岐。
+        if (def && def.kind === 'action') {
+          // leaf アクション: evaluate に委譲して結果を見る (BROADCAST_SIGNAL は即時 done)
+          const ctxA: CodeExecContext = {
+            elapsedMs: this.codeElapsedMs,
+            justEntered: this.justEntered,
+          };
+          const result = this.evaluateAction(code, ship, world, ctxA);
+          if (result.status === 'done') {
+            top.cursor += 1;
+            if (this.isRootFrame(top)) this.program.advance();
+            this.codeElapsedMs = 0;
+            this.justEntered = true;
+            advances += 1;
+            continue;
+          }
+          this.codeElapsedMs += delta;
+          this.justEntered = false;
+          return;
+        }
+        if (def && def.kind === 'wrapperLoop') {
+          // ループ wrapper: cursor を先に進め、初回 (まだ入っていない) は子配列を push、
+          // 条件を毎反復で再評価して継続判定する (Frame.loopCondition に保存)。
+          top.cursor += 1;
+          if (this.isRootFrame(top)) this.program.advance();
+          if (code.children.length === 0) {
+            this.codeElapsedMs = 0;
+            this.justEntered = true;
+            advances += 1;
+            continue;
+          }
+          const condFn = this.buildLoopCondition(code);
+          const loopMode: 'while' | 'until' = code.itemCodeType === 'WHILE' ? 'while' : 'until';
+          // 初回: 開始前に条件チェック。
+          //   - while: 条件 false なら 1 度も実行しない
+          //   - until: 条件 true なら 1 度も実行しない
+          const initialPass = condFn
+            ? loopMode === 'while'
+              ? condFn(ship, world)
+              : !condFn(ship, world)
+            : false;
+          if (!initialPass) {
+            this.codeElapsedMs = 0;
+            this.justEntered = true;
+            advances += 1;
+            continue;
+          }
+          this.stack.push({
+            codes: code.children,
+            cursor: 0,
+            remainingIterations: -1,
+            loopMode,
+            ...(condFn ? { loopCondition: condFn } : {}),
+            loopIterations: 0,
+          });
+          this.codeElapsedMs = 0;
+          this.justEntered = true;
+          advances += 1;
+          continue;
+        }
+        // wrapper (デフォルト): 条件 wrapper として 1 周のみ実行
         top.cursor += 1;
         if (this.isRootFrame(top)) this.program.advance();
         const pass =
@@ -252,7 +358,23 @@ export class Executor implements ShipBehavior {
     }
   }
 
-  /** ITEM_CODE (条件 wrapper) の条件を評価する。 */
+  /** ITEM_CODE (kind='action') のアクション本体を実行する。 */
+  private evaluateAction(
+    code: Extract<Code, { type: 'ITEM_CODE' }>,
+    ship: Ship,
+    world: ShipWorld,
+    ctx: CodeExecContext
+  ): CodeStepResult {
+    void ctx;
+    switch (code.itemCodeType) {
+      case 'BROADCAST_SIGNAL':
+        return tickBroadcastSignal(code, ship, world);
+      default:
+        return { status: 'done' };
+    }
+  }
+
+  /** ITEM_CODE (kind='wrapper') の条件を評価する。 */
   private evaluateItemCondition(
     code: Extract<Code, { type: 'ITEM_CODE' }>,
     ship: Ship,
@@ -265,10 +387,70 @@ export class Executor implements ShipBehavior {
         return conditionIfEnemyInRange(code, ship, world);
       case 'IF_INVENTORY_FULL':
         return conditionIfInventoryFull(code, ship, world);
-      default: {
-        const exhaustive: never = code.itemCodeType;
-        return exhaustive;
+      case 'IF_ENERGY_BELOW':
+        return conditionIfEnergyBelow(code, ship, world);
+      case 'IF_BASE_HP_BELOW':
+        return conditionIfBaseHpBelow(code, ship, world);
+      case 'IF_ALLY_DOWNED':
+        return conditionIfAllyDowned(code, ship, world);
+      case 'IF_BOSS_ALIVE':
+        return conditionIfBossAlive(code, ship, world);
+      case 'IF_NEAREST_ENEMY_IS':
+        return conditionIfNearestEnemyIs(code, ship, world);
+      case 'IF_PLANET_EMPTY':
+        return conditionIfPlanetEmpty(code, ship, world);
+      case 'IF_RANDOM':
+        return conditionIfRandom(code, ship, world);
+      case 'IF_SIGNAL':
+        return conditionIfSignal(code, ship, world);
+      default:
+        // wrapperLoop / action はここに来ない
+        return false;
+    }
+  }
+
+  /**
+   * WHILE / LOOP_UNTIL の condType + threshold を、ship/world を取って bool を返す関数に変換する。
+   * threshold の意味は condType によって変わる:
+   *  - enemyInRange: 距離 (px)
+   *  - hpBelow / energyBelow: しきい値 (%)
+   *  - inventoryFull / inventoryEmpty / bossAlive: 未使用
+   */
+  private buildLoopCondition(
+    code: Extract<Code, { type: 'ITEM_CODE' }>
+  ): ((ship: Ship, world: ShipWorld) => boolean) | null {
+    const cond = (code.params.condType as string) ?? '';
+    const thr = (code.params.threshold as number) ?? 0;
+    switch (cond) {
+      case 'enemyInRange': {
+        const r2 = thr * thr;
+        return (ship, world) => {
+          for (const e of world.enemies) {
+            if (e.dead) continue;
+            const dx = e.x - ship.x;
+            const dy = e.y - ship.y;
+            if (dx * dx + dy * dy <= r2) return true;
+          }
+          return false;
+        };
       }
+      case 'hpBelow':
+        return (ship) => ship.maxHp > 0 && (ship.hp / ship.maxHp) * 100 <= thr;
+      case 'energyBelow':
+        return (ship) => ship.maxEnergy > 0 && (ship.energy / ship.maxEnergy) * 100 <= thr;
+      case 'inventoryFull':
+        return (ship) => ship.isInventoryFull();
+      case 'inventoryEmpty':
+        return (ship) => ship.inventory <= 0;
+      case 'bossAlive':
+        return (_ship, world) => {
+          for (const e of world.enemies) {
+            if (!e.dead && e.type === 'boss') return true;
+          }
+          return false;
+        };
+      default:
+        return null;
     }
   }
 }

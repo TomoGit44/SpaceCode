@@ -1,11 +1,12 @@
 import type { Rarity, ItemInstance } from './itemTypes';
-import { ALL_ITEM_CODE_TYPES } from './types/itemCodes';
-import { ALL_MODULE_IDS } from './types/modules';
+import { ALL_ITEM_CODE_TYPES, ITEM_CODE_DEFS } from './types/itemCodes';
+import { ALL_MODULE_IDS, MODULE_TYPES } from './types/modules';
 
 /**
  * ガチャの抽選ロジック (仕様 §6.5 / §6.6)。
  *
- * ガチャ自体に R / SR / L のレア度がある (N ガチャは存在しない)。
+ * 2026-05-28 後: **固定レア度制**を導入。各 typeId は単一の rarity を持ち、
+ * ガチャレア度 R で引けば R-tier の typeId しか出ない (混在なし)。
  * 開封すると 3 候補が提示され、プレイヤーが 1 つ選ぶ。
  */
 
@@ -21,26 +22,6 @@ export interface GachaCandidate {
   rarity: Rarity;
 }
 
-const RARITY_SEQ: ReadonlyArray<Rarity> = ['N', 'R', 'SR', 'L'];
-/** ガチャ枠の非保証スロット用のレア度重み (§4.3 のドロップ確率に準拠)。 */
-const RARITY_WEIGHT: Record<Rarity, number> = { N: 60, R: 25, SR: 12, L: 3 };
-
-/** max 以下のレア度一覧。 */
-function raritiesUpTo(max: Rarity): Rarity[] {
-  return RARITY_SEQ.slice(0, RARITY_SEQ.indexOf(max) + 1);
-}
-
-/** 重み付きでレア度を 1 つ選ぶ。 */
-function weightedRarity(pool: Rarity[]): Rarity {
-  const total = pool.reduce((s, r) => s + RARITY_WEIGHT[r], 0);
-  let roll = Math.random() * total;
-  for (const r of pool) {
-    roll -= RARITY_WEIGHT[r];
-    if (roll <= 0) return r;
-  }
-  return pool[pool.length - 1]!;
-}
-
 function shuffle<T>(arr: ReadonlyArray<T>): T[] {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
@@ -50,20 +31,38 @@ function shuffle<T>(arr: ReadonlyArray<T>): T[] {
   return a;
 }
 
+/** 指定 rarity の typeId 一覧。 */
+function typeIdsForRarity(category: GachaCategory, rarity: Rarity): string[] {
+  if (category === 'code') {
+    return ALL_ITEM_CODE_TYPES.filter((t) => ITEM_CODE_DEFS[t].rarity === rarity);
+  }
+  return ALL_MODULE_IDS.filter((id) => MODULE_TYPES[id]!.rarity === rarity);
+}
+
+/** 指定カテゴリで、現在排出可能なレア度 (1 種以上ある rarity) の一覧。 */
+export function availableGachaRarities(category: GachaCategory): Rarity[] {
+  const out: Rarity[] = [];
+  for (const r of GACHA_RARITIES) {
+    if (typeIdsForRarity(category, r).length > 0) out.push(r);
+  }
+  return out;
+}
+
 /**
- * ガチャを 1 回引いて 3 候補を返す (仕様 §6.5):
- *  - すべての候補はガチャレア度以下
- *  - 同レア度を最低 1 枚保証
- *  - 3 枚は重複なし (異なる typeId)
+ * ガチャを 1 回引いて 3 候補を返す (固定レア度制):
+ *  - 候補はすべてガチャレア度と同じ rarity の typeId
+ *  - 3 枚は可能なら異なる typeId、足りない場合は重複で埋める (UI 互換)
  */
 export function drawGacha(category: GachaCategory, gachaRarity: Rarity): GachaCandidate[] {
-  const typePool: ReadonlyArray<string> =
-    category === 'code' ? ALL_ITEM_CODE_TYPES : ALL_MODULE_IDS;
-  const types = shuffle(typePool).slice(0, 3);
-  const rPool = raritiesUpTo(gachaRarity);
-  // スロット 0 はガチャレア度を保証、残り 2 つは重み付き抽選。最後にシャッフル。
-  const rarities = shuffle([gachaRarity, weightedRarity(rPool), weightedRarity(rPool)]);
-  return types.map((typeId, i) => ({ category, typeId, rarity: rarities[i]! }));
+  const pool = typeIdsForRarity(category, gachaRarity);
+  if (pool.length === 0) return [];
+  const out: GachaCandidate[] = [];
+  const shuffled = shuffle(pool);
+  for (let i = 0; i < 3; i++) {
+    const typeId = shuffled[i % shuffled.length]!;
+    out.push({ category, typeId, rarity: gachaRarity });
+  }
+  return out;
 }
 
 // ─── ガチャ「アイテム」(インベントリに入る開封前の個体) ───────────────
@@ -111,15 +110,23 @@ const PHASE_REWARD_RARITY_WEIGHTS: ReadonlyArray<readonly [Rarity, number]> = [
   ['L', 15],
 ];
 
-/** Phase クリア報酬のレア度をランダムに 1 つ選ぶ。 */
-export function rollPhaseRewardRarity(): Rarity {
-  const total = PHASE_REWARD_RARITY_WEIGHTS.reduce((s, [, w]) => s + w, 0);
+/**
+ * Phase クリア報酬のレア度をランダムに 1 つ選ぶ。
+ * 固定レア度制下では category によって排出可能 rarity が異なるため、
+ * 引いた rarity に typeId が無ければ近傍 rarity にフォールバックする。
+ */
+export function rollPhaseRewardRarity(category: GachaCategory): Rarity {
+  const available = availableGachaRarities(category);
+  if (available.length === 0) return 'R'; // 排出 0 ならフォールバック (drawGacha が空配列を返す)
+  // available に絞り込んだ上で重み抽選
+  const filtered = PHASE_REWARD_RARITY_WEIGHTS.filter(([r]) => available.includes(r));
+  const total = filtered.reduce((s, [, w]) => s + w, 0);
   let roll = Math.random() * total;
-  for (const [r, w] of PHASE_REWARD_RARITY_WEIGHTS) {
+  for (const [r, w] of filtered) {
     roll -= w;
     if (roll <= 0) return r;
   }
-  return 'R';
+  return filtered[0]![0];
 }
 
 /** Phase 番号 → カテゴリの交互振り分け (奇数=code / 偶数=module)。 */

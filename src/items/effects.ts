@@ -47,7 +47,7 @@ export class EffectSystem {
       if (!mt) continue;
       for (const eff of mt.effects) {
         if (eff.stat === stat && eff.kind === 'percent') {
-          sum += eff.rarityValue[it.rarity];
+          sum += eff.value;
         }
       }
     }
@@ -70,7 +70,7 @@ export class EffectSystem {
       if (!mt) continue;
       for (const eff of mt.effects) {
         if (eff.stat === stat && eff.kind === 'flat') {
-          sum += eff.rarityValue[it.rarity];
+          sum += eff.value;
         }
       }
     }
@@ -101,7 +101,7 @@ export class EffectSystem {
       if (!mt) continue;
       for (const eff of mt.effects) {
         if (eff.stat === 'extraShots' && eff.kind === 'flat') {
-          sum += eff.rarityValue[it.rarity];
+          sum += eff.value;
         }
       }
     }
@@ -123,7 +123,7 @@ export class EffectSystem {
       if (!mt) continue;
       for (const eff of mt.effects) {
         if (eff.stat === 'bombDamage' && eff.kind === 'flat') {
-          sum += eff.rarityValue[it.rarity];
+          sum += eff.value;
         }
       }
     }
@@ -145,7 +145,7 @@ export class EffectSystem {
       if (!mt) continue;
       for (const eff of mt.effects) {
         if (eff.stat === 'contactDps' && eff.kind === 'flat') {
-          sum += eff.rarityValue[it.rarity];
+          sum += eff.value;
         }
       }
     }

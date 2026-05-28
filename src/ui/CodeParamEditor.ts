@@ -135,7 +135,11 @@ export class CodeParamEditor {
     this.controls.push(hint);
   }
 
-  /** ITEM_CODE のパラメータ編集 (レア度で最大値が変わる、§2.4)。 */
+  /**
+   * ITEM_CODE のパラメータ編集 (2026-05-28: 固定レア度制 + enum 対応)。
+   * - number: スピナー
+   * - enum:   チップ選択
+   */
   private renderItemCode(code: Extract<Code, { type: 'ITEM_CODE' }>): void {
     const def = ITEM_CODE_DEFS[code.itemCodeType];
     if (!def || def.params.length === 0) {
@@ -144,41 +148,95 @@ export class CodeParamEditor {
     }
     let cy = this.y + 28;
     for (const spec of def.params) {
-      const max = spec.rarityMax[code.rarity];
-      const cur = code.params[spec.key] ?? spec.fallbackDefault;
-      const title = this.scene.add
-        .text(this.x + 4, cy, `${spec.label} (${spec.min}〜${max}${spec.unit})`, {
-          fontFamily: FONT,
-          fontSize: '12px',
-          color: '#cfd6e6',
-        })
-        .setDepth(3);
-      this.controls.push(title);
+      if (spec.kind === 'number') {
+        const max = spec.max;
+        const cur = (code.params[spec.key] as number | undefined) ?? spec.fallbackDefault;
+        const title = this.scene.add
+          .text(this.x + 4, cy, `${spec.label} (${spec.min}〜${max}${spec.unit})`, {
+            fontFamily: FONT,
+            fontSize: '12px',
+            color: '#cfd6e6',
+          })
+          .setDepth(3);
+        this.controls.push(title);
 
-      const rowY = cy + 22;
-      const emit = (next: number): void => {
-        const clamped = Math.min(max, Math.max(spec.min, next));
-        if (clamped === cur) return;
-        this.emitter.emit('change', {
-          ...code,
-          params: { ...code.params, [spec.key]: clamped },
-        } as Code);
-      };
-      const minus = this.makeStepButton(this.x + 4, rowY, '−', () => emit(cur - spec.step));
-      const value = this.scene.add
-        .text(this.x + this.width / 2, rowY + SPIN_BTN_SIZE / 2, `${cur}${spec.unit}`, {
-          fontFamily: FONT,
-          fontSize: '18px',
-          color: '#cfd6e6',
-          fontStyle: 'bold',
-        })
-        .setOrigin(0.5)
-        .setDepth(3);
-      const plus = this.makeStepButton(this.x + this.width - 4 - SPIN_BTN_SIZE, rowY, '+', () =>
-        emit(cur + spec.step)
-      );
-      this.controls.push(value, ...minus, ...plus);
-      cy = rowY + SPIN_BTN_SIZE + 14;
+        const rowY = cy + 22;
+        const emit = (next: number): void => {
+          const clamped = Math.min(max, Math.max(spec.min, next));
+          if (clamped === cur) return;
+          this.emitter.emit('change', {
+            ...code,
+            params: { ...code.params, [spec.key]: clamped },
+          } as Code);
+        };
+        const minus = this.makeStepButton(this.x + 4, rowY, '−', () => emit(cur - spec.step));
+        const value = this.scene.add
+          .text(this.x + this.width / 2, rowY + SPIN_BTN_SIZE / 2, `${cur}${spec.unit}`, {
+            fontFamily: FONT,
+            fontSize: '18px',
+            color: '#cfd6e6',
+            fontStyle: 'bold',
+          })
+          .setOrigin(0.5)
+          .setDepth(3);
+        const plus = this.makeStepButton(this.x + this.width - 4 - SPIN_BTN_SIZE, rowY, '+', () =>
+          emit(cur + spec.step)
+        );
+        this.controls.push(value, ...minus, ...plus);
+        cy = rowY + SPIN_BTN_SIZE + 14;
+      } else {
+        // enum: チップ列で選択
+        const cur = (code.params[spec.key] as string | undefined) ?? spec.fallbackDefault;
+        const title = this.scene.add
+          .text(this.x + 4, cy, spec.label, {
+            fontFamily: FONT,
+            fontSize: '12px',
+            color: '#cfd6e6',
+          })
+          .setDepth(3);
+        this.controls.push(title);
+        cy += 22;
+        for (const opt of spec.options) {
+          const selected = opt.value === cur;
+          const w = this.width - 8;
+          const h = CHIP_HEIGHT;
+          const bg = this.scene.add
+            .rectangle(
+              this.x + 4 + w / 2,
+              cy + h / 2,
+              w,
+              h,
+              selected ? COLORS.ally : COLORS.panelBg,
+              selected ? 0.4 : 1
+            )
+            .setStrokeStyle(1, selected ? COLORS.accent : COLORS.ally, selected ? 1 : 0.5)
+            .setDepth(2)
+            .setInteractive({ useHandCursor: true });
+          const label = this.scene.add
+            .text(this.x + 4 + w / 2, cy + h / 2, opt.labelJa, {
+              fontFamily: FONT,
+              fontSize: '14px',
+              color: selected ? '#3ee0c5' : '#cfd6e6',
+              fontStyle: selected ? 'bold' : 'normal',
+            })
+            .setOrigin(0.5)
+            .setDepth(3);
+          if (!selected) {
+            bg.on('pointerover', () => bg.setFillStyle(COLORS.panelHover, 1));
+            bg.on('pointerout', () => bg.setFillStyle(COLORS.panelBg, 1));
+            bg.on('pointerdown', (p: Phaser.Input.Pointer) => {
+              if (p.rightButtonDown()) return;
+              this.emitter.emit('change', {
+                ...code,
+                params: { ...code.params, [spec.key]: opt.value },
+              } as Code);
+            });
+          }
+          this.controls.push(bg, label);
+          cy += h + 4;
+        }
+        cy += 6;
+      }
     }
   }
 

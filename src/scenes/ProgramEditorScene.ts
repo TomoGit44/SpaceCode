@@ -658,7 +658,9 @@ export class ProgramEditorScene extends Phaser.Scene {
       bg.on('pointerout', () => bg.setFillStyle(COLORS.panelBg, 1));
       bg.on('pointerdown', (p: Phaser.Input.Pointer) => {
         if (p.rightButtonDown()) return;
-        this.inventory.codes.push(makeRandomItemCode(r));
+        const granted = makeRandomItemCode(r);
+        if (!granted) return; // 該当 rarity のコードがなければ no-op
+        this.inventory.codes.push(granted);
         this.refresh();
       });
       this.chrome.push(bg, t);

@@ -6,12 +6,13 @@ import type { Rarity, ShipStat, ItemInstance } from '../itemTypes';
  * data-driven: 新モジュールは `MODULE_TYPES` に 1 エントリ追加するだけ。
  * 効果は複数持てる (例: ガトリング = 連射↑ + 攻撃力↓ のトレードオフ)。
  *
+ * 2026-05-28: 固定レア度制を導入。各モジュールは 1 つの `rarity` を持ち、
+ * その rarity でしかガチャ排出されない。`rarityValue: Record<Rarity, number>` は
+ * 廃止し、単一の `value` を持つ。
+ *
  * - 各 Ship に好きなだけ装着可能 (スロット上限なし)。同種は加算スタック。
  * - モジュール個体は 1 つの Ship にしか装着できない (排他)。
  * - 装着先は `Inventory.shipModules[ship.id]` が uid 配列で保持する。
- *
- * 2026-05-25 後: 重複していた % 系の装甲/カーゴを flat 系に置換し、
- * バッテリー (最大エネルギー flat) とボム砲 (範囲攻撃) を追加。
  */
 
 /**
@@ -26,13 +27,15 @@ export interface ModuleEffect {
   readonly stat: ModuleStatTarget;
   /** percent: 対象 stat に加算割合 (omni-core と合算) / flat: 整数加算。 */
   readonly kind: 'percent' | 'flat';
-  readonly rarityValue: Record<Rarity, number>;
+  /** 固定値。固定レア度制下では rarity による分岐なし。 */
+  readonly value: number;
 }
 
 export interface ModuleType {
   readonly id: string;
   readonly nameJa: string;
   readonly descJa: string;
+  readonly rarity: Rarity;
   readonly effects: ReadonlyArray<ModuleEffect>;
 }
 
@@ -50,33 +53,38 @@ export const MODULE_STAT_LABEL: Record<ModuleStatTarget, string> = {
   bombDamage: 'ボム威力',
 };
 
-const PCT = (n: Record<Rarity, number>): Record<Rarity, number> => n;
-
+/**
+ * 既存 8 モジュールに固定レア度を割り当て (2026-05-28)。
+ * 値は旧 rarityValue の該当 rarity の値を採用する。
+ */
 export const MODULE_TYPES: Record<string, ModuleType> = {
   mod_gatling: {
     id: 'mod_gatling',
     nameJa: 'ガトリング砲',
     descJa: '1 射あたりの弾数を増やすが、1 発の威力は下がる',
+    rarity: 'SR',
     effects: [
-      { stat: 'extraShots',    kind: 'flat',    rarityValue: { N: 2, R: 3, SR: 4, L: 6 } },
-      { stat: 'damagePerShot', kind: 'percent', rarityValue: PCT({ N: -0.45, R: -0.42, SR: -0.4, L: -0.35 }) },
+      { stat: 'extraShots',    kind: 'flat',    value: 4 },
+      { stat: 'damagePerShot', kind: 'percent', value: -0.4 },
     ],
   },
   mod_thruster: {
     id: 'mod_thruster',
     nameJa: '補助スラスタ',
     descJa: '移動速度を上げる',
+    rarity: 'R',
     effects: [
-      { stat: 'moveSpeed', kind: 'percent', rarityValue: PCT({ N: 0.2, R: 0.35, SR: 0.5, L: 0.8 }) },
+      { stat: 'moveSpeed', kind: 'percent', value: 0.35 },
     ],
   },
   mod_drill: {
     id: 'mod_drill',
     nameJa: '強化ドリル',
     descJa: '採掘速度を大きく上げるが、移動が少し遅くなる',
+    rarity: 'R',
     effects: [
-      { stat: 'mineRate',  kind: 'percent', rarityValue: PCT({ N: 0.4, R: 0.6, SR: 0.9, L: 1.4 }) },
-      { stat: 'moveSpeed', kind: 'percent', rarityValue: PCT({ N: -0.15, R: -0.13, SR: -0.1, L: -0.08 }) },
+      { stat: 'mineRate',  kind: 'percent', value: 0.6 },
+      { stat: 'moveSpeed', kind: 'percent', value: -0.13 },
     ],
   },
   // 体当たり攻撃。装着すると敵接触中ずっと DPS でダメージを与える。
@@ -85,37 +93,40 @@ export const MODULE_TYPES: Record<string, ModuleType> = {
     id: 'mod_ram',
     nameJa: '衝角ブレード',
     descJa: '体当たりで敵にダメージを与える。引き換えに移動速度が少し遅くなる',
+    rarity: 'SR',
     effects: [
-      { stat: 'contactDps', kind: 'flat',    rarityValue: { N: 8, R: 14, SR: 22, L: 35 } },
-      { stat: 'moveSpeed',  kind: 'percent', rarityValue: PCT({ N: -0.12, R: -0.10, SR: -0.08, L: -0.05 }) },
+      { stat: 'contactDps', kind: 'flat',    value: 22 },
+      { stat: 'moveSpeed',  kind: 'percent', value: -0.08 },
     ],
   },
-  // 新 4 種 (2026-05-25 後): flat ベース。
-  // 装甲: 最大 HP を flat で加算する。base 30 に対して R で +25 = 約 1.8 倍。
+  // 装甲: 最大 HP を flat で加算する。
   mod_armor: {
     id: 'mod_armor',
     nameJa: '装甲',
     descJa: '最大 HP を増やす',
+    rarity: 'R',
     effects: [
-      { stat: 'maxHp', kind: 'flat', rarityValue: { N: 15, R: 25, SR: 40, L: 70 } },
+      { stat: 'maxHp', kind: 'flat', value: 25 },
     ],
   },
-  // 貯蔵庫: 積載量を flat で加算する。base 20 に対して R で +10 = 1.5 倍。
+  // 貯蔵庫: 積載量を flat で加算する。
   mod_cargo: {
     id: 'mod_cargo',
     nameJa: '貯蔵庫',
     descJa: '資源の積載量を増やす',
+    rarity: 'N',
     effects: [
-      { stat: 'inventoryCap', kind: 'flat', rarityValue: { N: 7, R: 12, SR: 20, L: 35 } },
+      { stat: 'inventoryCap', kind: 'flat', value: 7 },
     ],
   },
-  // バッテリー: 最大エネルギーを flat で加算する。base 100 に対して R で +50 = 1.5 倍。
+  // バッテリー: 最大エネルギーを flat で加算する。
   mod_battery: {
     id: 'mod_battery',
     nameJa: 'バッテリー',
     descJa: '最大エネルギーを増やす',
+    rarity: 'R',
     effects: [
-      { stat: 'maxEnergy', kind: 'flat', rarityValue: { N: 30, R: 50, SR: 80, L: 150 } },
+      { stat: 'maxEnergy', kind: 'flat', value: 50 },
     ],
   },
   // ボム砲: ATTACK_NEAREST 1 回ぶんでボム弾を追加発射。弾速は遅いが着弾時に範囲攻撃。
@@ -124,8 +135,9 @@ export const MODULE_TYPES: Record<string, ModuleType> = {
     id: 'mod_bomb',
     nameJa: 'ボム砲',
     descJa: '一射ごとに低速のボム弾を追加発射する。着弾時に範囲爆発',
+    rarity: 'SR',
     effects: [
-      { stat: 'bombDamage', kind: 'flat', rarityValue: { N: 15, R: 25, SR: 40, L: 65 } },
+      { stat: 'bombDamage', kind: 'flat', value: 40 },
     ],
   },
 };
@@ -148,23 +160,26 @@ function effectText(stat: ModuleStatTarget, kind: 'percent' | 'flat', value: num
 }
 
 /** モジュールの全効果をまとめた表示文字列。 */
-export function moduleEffectText(typeId: string, rarity: Rarity): string {
+export function moduleEffectText(typeId: string): string {
   const mt = MODULE_TYPES[typeId];
   if (!mt) return '';
   return mt.effects
-    .map((e) => effectText(e.stat, e.kind, e.rarityValue[rarity]))
+    .map((e) => effectText(e.stat, e.kind, e.value))
     .join('  /  ');
 }
 
 /** モジュールの効果を 1 つずつ配列で返す (UI で行ごとに表示する用)。 */
-export function moduleEffectLines(typeId: string, rarity: Rarity): string[] {
+export function moduleEffectLines(typeId: string): string[] {
   const mt = MODULE_TYPES[typeId];
   if (!mt) return [];
-  return mt.effects.map((e) => effectText(e.stat, e.kind, e.rarityValue[rarity]));
+  return mt.effects.map((e) => effectText(e.stat, e.kind, e.value));
 }
 
-/** デバッグ用: 指定レア度のモジュールをランダムに 1 個生成する。 */
-export function makeRandomModule(rarity: Rarity): ItemInstance {
-  const typeId = ALL_MODULE_IDS[Math.floor(Math.random() * ALL_MODULE_IDS.length)]!;
+/** デバッグ用: 指定レア度のモジュールをランダムに 1 個生成する。
+ *  該当 rarity がなければ null。 */
+export function makeRandomModule(rarity: Rarity): ItemInstance | null {
+  const pool = ALL_MODULE_IDS.filter((id) => MODULE_TYPES[id]!.rarity === rarity);
+  if (pool.length === 0) return null;
+  const typeId = pool[Math.floor(Math.random() * pool.length)]!;
   return { uid: crypto.randomUUID(), typeId, rarity };
 }

@@ -10,7 +10,7 @@ export function conditionIfEnemyInRange(
   ship: Ship,
   world: ShipWorld
 ): boolean {
-  const range = code.params.range ?? 0;
+  const range = (code.params.range as number) ?? 0;
   const r2 = range * range;
   for (const e of world.enemies) {
     if (e.dead) continue;

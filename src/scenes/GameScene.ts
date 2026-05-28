@@ -9,6 +9,7 @@ import { Planet } from '../entities/Planet';
 import { Ship } from '../entities/Ship';
 import { Executor } from '../program/Executor';
 import { Program } from '../program/Program';
+import { SignalBus } from '../program/SignalBus';
 import { Inventory } from '../items/Inventory';
 import { EffectSystem } from '../items/effects';
 import { OmniCoreStrip } from '../ui/OmniCoreStrip';
@@ -55,6 +56,8 @@ export class GameScene extends Phaser.Scene {
   // (localStorage 非永続、仕様 §8.5)。
   private inventory!: Inventory;
   private effects!: EffectSystem;
+  // 2026-05-28: Ship 間シグナル通信 (BROADCAST_SIGNAL / IF_SIGNAL)。Run 毎にリセット
+  private signals!: SignalBus;
   // 2026-05-25: 画面左上に常時表示する所持オムニ・コアの帯
   private omniCoreStrip!: OmniCoreStrip;
 
@@ -139,6 +142,8 @@ export class GameScene extends Phaser.Scene {
     // Phase 6: アイテムシステム (新しい Run = 空のインベントリから開始)
     this.inventory = new Inventory();
     this.effects = new EffectSystem(this.inventory);
+    // 2026-05-28: Ship 間シグナルバス
+    this.signals = new SignalBus();
 
     // 2026-05-25: スターターオムニ・コア 3 個を装着済みで開始
     // (新コア core_attack_plus / core_efficiency / core_endurance)。
@@ -559,7 +564,7 @@ export class GameScene extends Phaser.Scene {
    */
   private grantPhaseClearGacha(phaseNumber: number): void {
     const category = phaseRewardCategory(phaseNumber);
-    const rarity = rollPhaseRewardRarity();
+    const rarity = rollPhaseRewardRarity(category);
     this.enqueueReward({
       kind: 'gacha',
       category,
@@ -717,6 +722,8 @@ export class GameScene extends Phaser.Scene {
     }
 
     // 宇宙船 (Phase D)
+    // 2026-05-28: signals.tick で TTL を進める。ships を world に含めて IF_ALLY_DOWNED 等で参照可能に
+    this.signals.tick(delta);
     if (this.ships.length > 0) {
       const world = {
         base: this.base,
@@ -725,6 +732,8 @@ export class GameScene extends Phaser.Scene {
         bullets: this.bullets,
         economy: this.economy,
         effects: this.effects,
+        ships: this.ships,
+        signals: this.signals,
       };
       for (const s of this.ships) s.update(delta, world);
     }

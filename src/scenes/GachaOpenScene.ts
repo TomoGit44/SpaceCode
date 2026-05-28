@@ -364,12 +364,20 @@ export class GachaOpenScene extends Phaser.Scene {
   private candEffect(cand: GachaCandidate): string {
     if (cand.category === 'module') {
       const m = MODULE_TYPES[cand.typeId];
-      return m ? `${m.descJa}\n\n${moduleEffectText(cand.typeId, cand.rarity)}` : '';
+      return m ? `${m.descJa}\n\n${moduleEffectText(cand.typeId)}` : '';
     }
     const def = ITEM_CODE_DEFS[cand.typeId as ItemCodeType];
     if (!def) return '';
     const first = def.params[0];
-    const range = first ? `\n\n最大: ${first.label} = ${first.rarityMax[cand.rarity]}${first.unit}` : '';
+    let range = '';
+    if (first) {
+      if (first.kind === 'number') {
+        range = `\n\n${first.label}: ${first.min}〜${first.max}${first.unit}`;
+      } else {
+        const opts = first.options.map((o) => o.labelJa).join(' / ');
+        range = `\n\n${first.label}: ${opts}`;
+      }
+    }
     return `${def.descJa}${range}`;
   }
 

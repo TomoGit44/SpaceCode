@@ -1,6 +1,6 @@
 # 新コード・モジュール案 (ブレインストーミング)
 
-> 作成日: 2026-05-27 / ステータス: **アイデア出し段階** (実装可否は未決定)
+> 作成日: 2026-05-27 / 最終更新: 2026-05-28
 >
 > 目的: CLAUDE.md「ユーザーの心理的フックに基づくゲーム設計方針」に基づき、
 > プレイヤーが「組み合わせる楽しみ」「次に何を引くかの期待」「シナジー発見の快感」
@@ -11,6 +11,12 @@
 > - シナジー前提の案を多めに
 > - デメリット付きで「組み込み方を考える楽しみ」が出る案を歓迎
 > - 新システム提案も歓迎
+>
+> ## 実装状況 (2026-05-28)
+>
+> - **固定レア度制**を導入: 各コード / モジュールは 1 つの rarity を持ち、その rarity でのみガチャ排出
+> - Part 1.1 / 1.2 で「採用」マーク済の 10 コード + BROADCAST_SIGNAL を実装済 (計 11 コード)
+> - 新システム (Part 4) は未実装。マルチ Ship 連携の前提となる Ship 識別 UI も未実装
 
 ---
 
@@ -35,16 +41,16 @@
 
 | ID 案 | 効果 | シナジー先 | フック |
 |---|---|---|---|
-| `IF_ENERGY_BELOW` | エネルギーが N% 以下なら 1 周実行 | `mod_solar_panel`, WAIT (基地補給) | 🎯💡 |
-| `IF_BASE_HP_BELOW` | 基地 HP が低い時 1 周 (例: 緊急時のみ防衛配置に戻る) | `DEFEND_BASE`, 採掘モード切替 | 🎯💢 |
-| `IF_ALLY_DOWNED` | 他の Ship がダウン状態にいる時 1 周 (代わりに前線へ) | multi-ship 編成 | 💡💢 |
-| `IF_BOSS_ALIVE` | 現 Phase にボスが出現中の時 (Phase 20/40/60/80/100 で活きる) | ボム砲、IF_ENEMY_IN_RANGE | 🎯💡 |
-| `IF_NEAREST_ENEMY_IS` | 最寄り敵が指定種別 (basic/fast/tank/sniper/boss) の時 | 採掘時の sniper 優先撃破 | 🎯💡 |
-| `IF_PLANET_EMPTY` | 指定惑星 (or 全惑星) 枯渇時 1 周 | 待機・別惑星へ移動 | 🎯 |
-| `IF_INVENTORY_EMPTY` | 積載 0 の時 (採掘モードへ戻す) | `mod_refinery`, REPEAT | 💡 |
-| `IF_PHASE_RANGE` | 現 Phase が N〜M の範囲内なら | Stage 別動作 | 🎯 |
-| `IF_RANDOM` | 確率 N% で 1 周 (ギャンブル分岐) | 🎰 全般 | 🎰💡 |
-| `IF_SIGNAL` | 他 Ship からの `BROADCAST_SIGNAL` を受信中の時 (multi-ship coord) | `BROADCAST_SIGNAL` | 💡🎯 |
+| `IF_ENERGY_BELOW` | エネルギーが N% 以下なら 1 周実行 | `mod_solar_panel`, WAIT (基地補給) | 🎯💡 | 採用 |　スパーレア |
+| `IF_BASE_HP_BELOW` | 基地 HP が低い時 1 周 (例: 緊急時のみ防衛配置に戻る) | `DEFEND_BASE`, 採掘モード切替 | 🎯💢 |採用 |レジェンド |
+| `IF_ALLY_DOWNED` | 他の Ship がダウン状態にいる時 1 周 (代わりに前線へ) | multi-ship 編成 | 💡💢 |採用 |ノーマル |
+| `IF_BOSS_ALIVE` | 現 Phase にボスが出現中の時 (Phase 20/40/60/80/100 で活きる) | ボム砲、IF_ENEMY_IN_RANGE | 🎯💡 |採用 |ノーマル |
+| `IF_NEAREST_ENEMY_IS` | 最寄り敵が指定種別 (basic/fast/tank/sniper/boss) の時 | 採掘時の sniper 優先撃破 | 🎯💡 |採用 |レア |
+| `IF_PLANET_EMPTY` | 指定惑星 (or 全惑星) 枯渇時 1 周 | 待機・別惑星へ移動 | 🎯 |採用 |ノーマル |
+| `IF_INVENTORY_EMPTY` | 積載 0 の時 (採掘モードへ戻す) | `mod_refinery`, REPEAT | 💡 |不採用 |
+| `IF_PHASE_RANGE` | 現 Phase が N〜M の範囲内なら | Stage 別動作 | 🎯 |不採用 |レジェンド |
+| `IF_RANDOM` | 確率 N% で 1 周 (ギャンブル分岐) | 🎰 全般 | 🎰💡 |採用 |ノーマル |
+| `IF_SIGNAL` | 他 Ship からの `BROADCAST_SIGNAL` を受信中の時 (multi-ship coord) | `BROADCAST_SIGNAL` | 💡🎯 |採用 |レア |
 
 ### 設計メモ
 - 既存 `ITEM_CODE` ノード機構をそのまま使える (wrapper 型)
@@ -56,10 +62,10 @@
 
 | ID 案 | 効果 | シナジー先 | フック |
 |---|---|---|---|
-| `WHILE` | 条件を満たす間繰り返す (REPEAT の条件版) | 条件 wrapper 群 | 🎯💡 |
-| `LOOP_UNTIL` | 条件を満たすまで繰り返す | IF 系 | 🎯 |
-| `FOR_EACH_PLANET` | 全惑星に対して順に処理を実行 (惑星 ID 引数不要化) | 採掘 build | 🎯 |
-| `RANDOM_CHOICE` | 子の中からランダムに 1 つだけ実行 | 🎰 ビルド | 🎰💡 |
+| `WHILE` | 条件を満たす間繰り返す (REPEAT の条件版) | 条件 wrapper 群 | 🎯💡 |採用 |レア |
+| `LOOP_UNTIL` | 条件を満たすまで繰り返す | IF 系 | 🎯  |採用 |レア |
+| `FOR_EACH_PLANET` | 全惑星に対して順に処理を実行 (惑星 ID 引数不要化) | 採掘 build | 🎯  |不採用 |
+| `RANDOM_CHOICE` | 子の中からランダムに 1 つだけ実行 | 🎰 ビルド | 🎰💡 |不採用 |
 
 ---
 

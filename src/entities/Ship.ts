@@ -9,6 +9,7 @@ import { muzzleFlash } from '../systems/CombatFx';
 import type { EconomySystem } from '../systems/EconomySystem';
 import type { EffectSystem } from '../items/effects';
 import type { Program } from '../program/Program';
+import type { SignalBus } from '../program/SignalBus';
 
 export type ShipState =
   | 'idle'
@@ -29,6 +30,9 @@ export interface ShipWorld {
   readonly bullets: Bullet[]; // attackNearest 時に push
   readonly economy: EconomySystem;
   readonly effects: EffectSystem; // Phase 6: 装着アイテムによる stat 補正
+  // 2026-05-28: マルチ Ship 連携 / 新条件コード用
+  readonly ships: ReadonlyArray<Ship>; // IF_ALLY_DOWNED の判定で他 Ship を走査
+  readonly signals: SignalBus;        // BROADCAST_SIGNAL / IF_SIGNAL
 }
 
 /**

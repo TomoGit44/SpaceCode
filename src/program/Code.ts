@@ -22,12 +22,15 @@ export type Code =
   | { type: 'WAIT'; seconds: number }
   | { type: 'REPEAT'; times: number; children: Code[] }
   | {
-      // Phase 6: アイテムコード。条件 wrapper として子コード列を持つ (§2.5)。
+      // Phase 6: アイテムコード。kind に応じて wrapper / wrapperLoop / action として振る舞う。
+      // - wrapper / wrapperLoop は children を子コード列として使う
+      // - action は children を持たない (空配列のまま)
+      // params は enum パラメータ (signal/enemyType 等) を含むため string も許容する。
       type: 'ITEM_CODE';
       itemUid: string; // 対応する CodeItemInstance.uid (配置の真実源, §8.4)
       itemCodeType: ItemCodeType;
       rarity: Rarity;
-      params: Record<string, number>;
+      params: Record<string, number | string>;
       children: Code[];
     };
 

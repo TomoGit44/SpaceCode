@@ -42,6 +42,7 @@
 | 補追 (Phase 6 後) | **遠距離敵 sniper** + **体当たり敵強化 (×1.5 + 電気スタン演出)** + **体当たりモジュール `mod_ram`** (衝角ブレード、contactDps + 移動速度マイナス) | ✅ 完了 (2026-05-25) |
 | 補追 (Phase 6 後) | **オムニ・コア左上 Strip 化** (固有アイコン + 常時表示 + hover ツールチップ) + **3 新コア** (`core_attack_plus` / `core_efficiency` / `core_endurance`、Run 開始時 SR 装着) + **アイテムメニューから omni タブ撤去** + `ShipStat` に `energyConsume` 追加 | ✅ 完了 (2026-05-25) |
 | 補追 (Phase 6 後) | **5 Stage × 各 20 Phase = 100 Phase 化** (`STAGE.totalStages=5` / `phasesPerStage=20`、PHASES 100 要素手書き、ボスは Phase 20/40/60/80/100)。HUD は「STAGE · PHASE」2 段表記 (`3 / 5 · 12 / 20`)、Stage 先頭 Phase で「STAGE N」accent バナー + camera flash、VictoryScene を `ALL STAGES CLEAR` に変更 | ✅ 完了 (2026-05-26) |
+| 補追 (Phase 6 後) | **固定レア度制** + **新アイテムコード 11 種**: ModuleType/ItemCodeDef に `rarity: Rarity` を追加し、`rarityValue/rarityMax: Record` を単一値化。ガチャは type の rarity で完全一致フィルタ。新条件 wrapper 8 種 (IF_ENERGY_BELOW/IF_BASE_HP_BELOW/IF_ALLY_DOWNED/IF_BOSS_ALIVE/IF_NEAREST_ENEMY_IS/IF_PLANET_EMPTY/IF_RANDOM/IF_SIGNAL)、ループ wrapper 2 種 (WHILE/LOOP_UNTIL、条件成立で繰り返し/終了)、アクション 1 種 (BROADCAST_SIGNAL)。Ship 間シグナル通信は `SignalBus` (TTL 1500ms)、ShipWorld に `ships`/`signals` を追加。enum パラメータ対応のため `params: Record<string, number \| string>` に拡張、`CodeParamEditor` がチップ選択 UI を描画 | ✅ 完了 (2026-05-28) |
 | 補追 (Phase 6 後) | **モジュール画面 → 宇宙船一覧画面 (`ShipListScene`) に刷新** (Pokemon Box 風 2 列カード + 選択船詳細パネル + ドラッグ&ドロップで装着/移し替え/「外す」ゾーンで取り外し + 右上「プログラムを編集」ボタンで編集オーバーレイを船一覧の上に重ねる)。右端 ShopPanel ボタンも「🚀 宇宙船 (N)」に改称、旧 `ItemInventoryScene` は削除 | ✅ 完了 (2026-05-28) |
 
 通しプレイ可能。コア体験「プログラムを組まないと Ship は動かない」を維持しつつ、Run 中の成長要素 (アイテム) を載せている最中。
@@ -211,9 +212,15 @@ src/
   - REPEAT はネスト構造で **特定の行動を N 回繰り返したい時に使う**
   - ATTACK_NEAREST は持続時間コード (1 発撃って 500ms 留まる)
   - 旧 `MINE` / `DEPOSIT` / `WAIT_UNTIL_FULL` は 2026-05-24 改修で `WAIT` に統合 (削除済)
-- **アイテムコード (Phase 6, 3 種)**: `IF_HP_BELOW` / `IF_ENEMY_IN_RANGE` / `IF_INVENTORY_FULL` — 条件 wrapper。所持アイテム個体 (`CodeItemInstance`) と 1:1 対応、配置の真実源は **プログラム内 ITEM_CODE ノード**。同じ個体は 1 箇所しか配置不可、Ship 破壊や wrapper 削除で自動的に「未配置」に戻る
+- **アイテムコード (Phase 6 + 2026-05-28 拡張, 計 14 種)**:
+  - 条件 wrapper 11 種 (N): `IF_HP_BELOW` / `IF_ENEMY_IN_RANGE` / `IF_INVENTORY_FULL` / `IF_ALLY_DOWNED` / `IF_BOSS_ALIVE` / `IF_PLANET_EMPTY` / `IF_RANDOM` (R): `IF_NEAREST_ENEMY_IS` / `IF_SIGNAL` (SR): `IF_ENERGY_BELOW` (L): `IF_BASE_HP_BELOW`
+  - ループ wrapper 2 種 (R): `WHILE` / `LOOP_UNTIL` — `condType` enum (enemyInRange/hpBelow/energyBelow/inventoryFull/inventoryEmpty/bossAlive) + threshold で毎反復判定。1 tick 32 反復が安全上限
+  - アクション 1 種 (R): `BROADCAST_SIGNAL` — `SignalBus` に A/B/C のシグナル発信 (TTL 1500ms)
+  - 配置の真実源は **プログラム内 ITEM_CODE ノード**。同じ個体は 1 箇所しか配置不可、Ship 破壊や wrapper 削除で自動的に「未配置」に戻る
+  - 固定レア度制下では `ITEM_CODE_DEFS[type].rarity` が固定。ガチャはレア度完全一致でのみ排出
 - **自動ループ (Phase 5 後)**: Program は **置いただけで先頭 → 末尾 → 先頭 → … と無限にループ** する。空 Program のみ idle
-- **アイテム (Phase 6)**: オムニ・コア (装着で全 Ship/基地/経済に永続効果。**画面左上に常時表示**、Run 開始時に 3 新コア = 攻撃 +50% / エネ消費 -50% / HP +50% が自動装着) / モジュール (Ship 個別装着) / コードガチャ・モジュールガチャ (`GachaOpenScene` で開封)。効果は加算スタック、`EffectSystem` 経由で集計
+- **アイテム (Phase 6)**: オムニ・コア (装着で全 Ship/基地/経済に永続効果。**画面左上に常時表示**、Run 開始時に 3 新コア = 攻撃 +50% / エネ消費 -50% / HP +50% が自動装着) / モジュール (Ship 個別装着、**固定レア度制**: 各 typeId は 1 つの rarity を持ち、`value` 単一値) / コードガチャ・モジュールガチャ (`GachaOpenScene` で開封、ガチャレア度と type の rarity が完全一致したものだけ排出)。効果は加算スタック、`EffectSystem` 経由で集計
+- **既存モジュールのレア度割り当て (2026-05-28)**: N = cargo / R = thruster, drill, armor, battery / SR = gatling, ram, bomb / L = (未実装)
 - **リワード経路 (Phase 6 Step 6-8)**: Phase クリアごとに 1 個保証 (code/module 交互 + 重み付きレア度 R55/SR30/L15) + fast/tank 撃破時の低確率 R ドロップ (fast 4% / tank 12%) + **ボス撃破時 SR ガチャ確定** + **Phase 敵半数撃破時に $80 クレジット** (Phase ごと 1 回)。basic はドロップなし
 
 > ※「Phase」が二重に登場する: **Wave Phase** (敵編成の段階。1 Stage 中で進行) と **開発 Phase** (実装ロードマップ)。コード内では `Wave Phase` を指す。本ドキュメントでは「開発 Phase」と明示する。

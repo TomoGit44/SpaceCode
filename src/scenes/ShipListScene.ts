@@ -973,7 +973,7 @@ export class ShipListScene extends Phaser.Scene {
   }
 
   private shortEffect(it: ItemInstance): string {
-    const lines = moduleEffectLines(it.typeId, it.rarity);
+    const lines = moduleEffectLines(it.typeId);
     return lines[0] ?? '';
   }
 
@@ -1041,6 +1041,7 @@ export class ShipListScene extends Phaser.Scene {
     bg.on('pointerdown', (p: Phaser.Input.Pointer) => {
       if (p.rightButtonDown()) return;
       const granted = makeRandomModule(rarity);
+      if (!granted) return; // 該当 rarity のモジュールがなければ no-op
       this.inventory.items.push(granted);
       this.onChanged();
       this.render();

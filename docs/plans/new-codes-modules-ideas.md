@@ -118,6 +118,7 @@
 | `mod_dual_wield` | extraShots を持つモジュールの効果を 2 倍に | 単体だと無意味 | `mod_gatling` 必須 | 💡 |
 | `mod_chain_reactor` | ボム弾の爆発が範囲内の他ボム弾と連鎖発火 | bomb がないと無意味 | `mod_bomb` 複数 | 💡⚡ |
 | `mod_amplifier` | extraShots / bombDamage / contactDps の **flat 系全効果** を 1.5 倍 | percent 系には効かない | gatling, bomb, ram | 💡 |
+| `mod_sequece` | 攻撃コードが連続していると次の攻撃力を 1.5 倍 していく| エネルギー切れの可能性が高くなる |攻撃力 | 💡 |
 
 ## 2.2 トレードオフ系モジュール (デメリット強め)
 

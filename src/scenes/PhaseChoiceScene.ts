@@ -25,6 +25,10 @@ export interface PhaseChoiceData {
   readonly onClosed: () => void;
   /** ガチャ確定の選択肢を選んだ時、親シーン経由で GachaOpenScene を mandatory 起動する。 */
   readonly launchGachaOpen: (gachaItem: ItemInstance, onAfter: () => void) => void;
+  /** trial 用: 次 Phase 強化倍率を WaveSystem にセット (2026-06-05 Step 4)。 */
+  readonly setNextPhaseMultiplier: (mul: { hp: number; count: number }) => void;
+  /** bossBoost 用: 全 Ship の HP/エネルギーをフル回復 (2026-06-05 Step 4)。 */
+  readonly healAndRefuelAllShips: () => void;
 }
 
 /**
@@ -49,6 +53,8 @@ export class PhaseChoiceScene extends Phaser.Scene {
   private economy!: EconomySystem;
   private onClosed!: () => void;
   private launchGachaOpen!: (gachaItem: ItemInstance, onAfter: () => void) => void;
+  private setNextPhaseMultiplier!: (mul: { hp: number; count: number }) => void;
+  private healAndRefuelAllShips!: () => void;
 
   private choices: PhaseChoice[] = [];
   private selectedIndex: number | null = null;
@@ -71,6 +77,8 @@ export class PhaseChoiceScene extends Phaser.Scene {
     this.economy = data.economy;
     this.onClosed = data.onClosed;
     this.launchGachaOpen = data.launchGachaOpen;
+    this.setNextPhaseMultiplier = data.setNextPhaseMultiplier;
+    this.healAndRefuelAllShips = data.healAndRefuelAllShips;
     this.selectedIndex = null;
     this.consumed = false;
     this.choices = [];
@@ -260,54 +268,114 @@ export class PhaseChoiceScene extends Phaser.Scene {
   /** kind 別のメインアイコン (画像アセット不使用、Graphics で記号的に表現)。 */
   private drawChoiceIcon(g: Phaser.GameObjects.Graphics, choice: PhaseChoice, rc: number): void {
     g.clear();
-    if (choice.kind === 'gacha') {
-      // ガチャ: 開いた箱風 (台 + 蓋)
-      g.fillStyle(rc, 0.3);
-      g.fillRect(-22, -6, 44, 18);
-      g.lineStyle(2, rc, 1);
-      g.strokeRect(-22, -6, 44, 18);
-      g.fillStyle(rc, 0.85);
-      g.fillTriangle(-22, -6, 22, -6, 0, -22);
-      // 中央の星 (ガチャ感)
-      g.fillStyle(COLORS.highlight, 1);
-      g.fillCircle(0, 4, 3);
-    } else if (choice.kind === 'credits') {
-      // クレジット: $ マーク + 円
-      g.fillStyle(rc, 0.18);
-      g.fillCircle(0, 0, 22);
-      g.lineStyle(2, rc, 1);
-      g.strokeCircle(0, 0, 22);
-      // $ シンボルは Text で別途出すと縦中心が合わないので、棒+S で代用
-      g.fillStyle(rc, 1);
-      g.fillRect(-1.5, -16, 3, 32);
-      g.lineStyle(3, rc, 1);
-      g.beginPath();
-      g.arc(0, -6, 8, Math.PI * 0.2, Math.PI * 1.4, false);
-      g.strokePath();
-      g.beginPath();
-      g.arc(0, 6, 8, Math.PI * 1.2, Math.PI * 0.4, false);
-      g.strokePath();
-    } else {
-      // guaranteedItem: モジュール = 歯車風
-      g.fillStyle(rc, 0.2);
-      g.fillCircle(0, 0, 22);
-      g.lineStyle(2, rc, 1);
-      g.strokeCircle(0, 0, 22);
-      // 中央コア
-      g.fillStyle(rc, 0.9);
-      g.fillCircle(0, 0, 8);
-      // 6 つの突起
-      for (let i = 0; i < 6; i++) {
-        const a = (i / 6) * Math.PI * 2;
-        const x1 = Math.cos(a) * 18;
-        const y1 = Math.sin(a) * 18;
-        const x2 = Math.cos(a) * 28;
-        const y2 = Math.sin(a) * 28;
-        g.lineStyle(4, rc, 1);
+    switch (choice.kind) {
+      case 'gacha': {
+        g.fillStyle(rc, 0.3);
+        g.fillRect(-22, -6, 44, 18);
+        g.lineStyle(2, rc, 1);
+        g.strokeRect(-22, -6, 44, 18);
+        g.fillStyle(rc, 0.85);
+        g.fillTriangle(-22, -6, 22, -6, 0, -22);
+        g.fillStyle(COLORS.highlight, 1);
+        g.fillCircle(0, 4, 3);
+        return;
+      }
+      case 'credits': {
+        g.fillStyle(rc, 0.18);
+        g.fillCircle(0, 0, 22);
+        g.lineStyle(2, rc, 1);
+        g.strokeCircle(0, 0, 22);
+        g.fillStyle(rc, 1);
+        g.fillRect(-1.5, -16, 3, 32);
+        g.lineStyle(3, rc, 1);
         g.beginPath();
-        g.moveTo(x1, y1);
-        g.lineTo(x2, y2);
+        g.arc(0, -6, 8, Math.PI * 0.2, Math.PI * 1.4, false);
         g.strokePath();
+        g.beginPath();
+        g.arc(0, 6, 8, Math.PI * 1.2, Math.PI * 0.4, false);
+        g.strokePath();
+        return;
+      }
+      case 'guaranteedItem': {
+        g.fillStyle(rc, 0.2);
+        g.fillCircle(0, 0, 22);
+        g.lineStyle(2, rc, 1);
+        g.strokeCircle(0, 0, 22);
+        g.fillStyle(rc, 0.9);
+        g.fillCircle(0, 0, 8);
+        for (let i = 0; i < 6; i++) {
+          const a = (i / 6) * Math.PI * 2;
+          g.lineStyle(4, rc, 1);
+          g.beginPath();
+          g.moveTo(Math.cos(a) * 18, Math.sin(a) * 18);
+          g.lineTo(Math.cos(a) * 28, Math.sin(a) * 28);
+          g.strokePath();
+        }
+        return;
+      }
+      case 'runMod': {
+        // RunMod: 上向き矢印 (永続強化を表現)
+        g.fillStyle(rc, 0.18);
+        g.fillCircle(0, 0, 22);
+        g.lineStyle(2, rc, 1);
+        g.strokeCircle(0, 0, 22);
+        g.fillStyle(rc, 1);
+        g.beginPath();
+        g.moveTo(0, -16);
+        g.lineTo(12, 0);
+        g.lineTo(5, 0);
+        g.lineTo(5, 14);
+        g.lineTo(-5, 14);
+        g.lineTo(-5, 0);
+        g.lineTo(-12, 0);
+        g.closePath();
+        g.fillPath();
+        return;
+      }
+      case 'trial': {
+        // 試練: ドクロ風 (リスク感)、ただし画像不使用なので「!」記号で代替
+        g.fillStyle(rc, 0.18);
+        g.fillCircle(0, 0, 24);
+        g.lineStyle(2.5, rc, 1);
+        g.strokeCircle(0, 0, 24);
+        // 中央 ! (棒 + 点)
+        g.fillStyle(COLORS.enemy, 1);
+        g.fillRect(-3, -14, 6, 18);
+        g.fillCircle(0, 11, 3.5);
+        return;
+      }
+      case 'bossBoost': {
+        // ボス前ブースト: 王冠風 (3 角 + 4 角 + 円)
+        g.fillStyle(rc, 0.22);
+        g.fillCircle(0, 0, 24);
+        g.lineStyle(2, rc, 1);
+        g.strokeCircle(0, 0, 24);
+        g.fillStyle(rc, 1);
+        // 冠台
+        g.fillRect(-16, 6, 32, 4);
+        // 3 つの突起
+        g.beginPath();
+        g.moveTo(-16, 6);
+        g.lineTo(-10, -10);
+        g.lineTo(-4, 6);
+        g.closePath();
+        g.fillPath();
+        g.beginPath();
+        g.moveTo(-4, 6);
+        g.lineTo(0, -14);
+        g.lineTo(4, 6);
+        g.closePath();
+        g.fillPath();
+        g.beginPath();
+        g.moveTo(4, 6);
+        g.lineTo(10, -10);
+        g.lineTo(16, 6);
+        g.closePath();
+        g.fillPath();
+        // 中央宝石
+        g.fillStyle(COLORS.highlight, 1);
+        g.fillCircle(0, -6, 3);
+        return;
       }
     }
   }
@@ -442,6 +510,8 @@ export class PhaseChoiceScene extends Phaser.Scene {
           inventory: this.inventory,
           economy: this.economy,
           launchGachaOpen: this.launchGachaOpen,
+          setNextPhaseMultiplier: this.setNextPhaseMultiplier,
+          healAndRefuelAllShips: this.healAndRefuelAllShips,
           onImmediateDone: () => this.close(),
         });
       },

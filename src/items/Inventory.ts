@@ -1,4 +1,5 @@
 import type { ItemInstance, CodeItemInstance } from './itemTypes';
+import type { RunMod } from './runMods';
 
 /**
  * Inventory — 1 Run ぶんの所持アイテム。
@@ -19,10 +20,17 @@ export class Inventory {
   /** ship.id -> 装着 module の uid 配列。 */
   public shipModules: Record<string, string[]> = {};
 
+  /**
+   * Run 限定永続バフ (2026-06-05 ローグライト Step 4)。
+   * Phase 間選択イベントの「永続バフ」枠で獲得し、その Run 中ずっと効果が乗る。
+   */
+  public runMods: RunMod[] = [];
+
   /** 全所持を空にする (Run リセット用)。 */
   public reset(): void {
     this.items = [];
     this.codes = [];
     this.shipModules = {};
+    this.runMods = [];
   }
 }

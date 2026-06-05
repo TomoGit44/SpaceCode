@@ -48,6 +48,23 @@ export class EffectSystem {
     return sum;
   }
 
+  /** RunMod (2026-06-05 Step 4) の target/stat への加算寄与 (% / flat 別)。 */
+  private runModPercent(target: EffectTarget, stat: string): number {
+    let sum = 0;
+    for (const rm of this.inventory.runMods) {
+      if (rm.target === target && rm.stat === stat && rm.kind === 'percent') sum += rm.value;
+    }
+    return sum;
+  }
+
+  private runModFlat(target: EffectTarget, stat: string): number {
+    let sum = 0;
+    for (const rm of this.inventory.runMods) {
+      if (rm.target === target && rm.stat === stat && rm.kind === 'flat') sum += rm.value;
+    }
+    return sum;
+  }
+
   /** 指定 Ship に装着中の全モジュールから stat への加算割合の合計。 */
   private shipModulePercent(ship: Ship, stat: string): number {
     let sum = 0;
@@ -90,14 +107,16 @@ export class EffectSystem {
     return sum;
   }
 
-  /** Ship stat に装着効果 (オムニ・コア + モジュール % + モジュール flat + シナジー) を適用した値。 */
+  /** Ship stat に装着効果 (オムニ・コア + モジュール + シナジー + RunMod) を適用した値。 */
   public shipStat(ship: Ship, stat: ShipStat, base: number): number {
     const pct =
       this.omniPercent('ship', stat) +
       this.shipModulePercent(ship, stat) +
+      this.runModPercent('ship', stat) +
       (this.synergies?.passivePercent(ship.id, stat) ?? 0);
     const flat =
       this.shipModuleFlat(ship, stat) +
+      this.runModFlat('ship', stat) +
       (this.synergies?.passiveFlat(ship.id, stat) ?? 0);
     return base * (1 + pct) + flat;
   }
@@ -174,13 +193,17 @@ export class EffectSystem {
     return Math.max(0, sum);
   }
 
-  /** 基地 stat に装着効果を適用した値。 */
+  /** 基地 stat に装着効果 + RunMod を適用した値。 */
   public baseStat(stat: BaseStat, base: number): number {
-    return base * (1 + this.omniPercent('base', stat));
+    const pct = this.omniPercent('base', stat) + this.runModPercent('base', stat);
+    const flat = this.runModFlat('base', stat);
+    return base * (1 + pct) + flat;
   }
 
-  /** 経済 stat に装着効果を適用した値。 */
+  /** 経済 stat に装着効果 + RunMod を適用した値。 */
   public economyStat(stat: EconomyStat, base: number): number {
-    return base * (1 + this.omniPercent('economy', stat));
+    const pct = this.omniPercent('economy', stat) + this.runModPercent('economy', stat);
+    const flat = this.runModFlat('economy', stat);
+    return base * (1 + pct) + flat;
   }
 }

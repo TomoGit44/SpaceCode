@@ -47,6 +47,12 @@ export class WaveSystem {
   private phaseIndex: number = 0;          // 0-based 内部
   private runners: SpecRunner[] = [];      // Phase 4: 並行スポーンタイマー群
 
+  // 2026-06-05 ローグライト Step 4: 試練 (Trial) 用の次 Phase 強化倍率。
+  // PhaseChoice 適用時に setNextPhaseMultiplier() でセットされ、次の startPhase で 1 回限り消費される。
+  private nextPhaseMul: { hp: number; count: number } | null = null;
+  /** 現 Phase スポーン中に Enemy.hp に掛ける倍率 (試練で適用、completePhase でリセット)。 */
+  private activePhaseHpMul: number = 1;
+
   constructor(spawner: SpawnSystem) {
     this.spawner = spawner;
     this.emitter = new Phaser.Events.EventEmitter();
@@ -153,6 +159,10 @@ export class WaveSystem {
           r.timerMs -= delta;
           if (r.timerMs <= 0) {
             const e = this.spawner.spawnAtRandomEdge(r.spec.type);
+            // 2026-06-05 Step 4: 試練適用時は spawn 直後に HP を倍率変更
+            if (this.activePhaseHpMul !== 1) {
+              e.hp = Math.ceil(e.hp * this.activePhaseHpMul);
+            }
             enemies.push(e);
             this.emitter.emit('enemySpawned', e);
             r.remaining -= 1;
@@ -184,10 +194,15 @@ export class WaveSystem {
 
   private startPhase(): void {
     const def = PHASES[this.phaseIndex];
+    // 2026-06-05 Step 4: 試練 (nextPhaseMul) があれば 1 回限り消費 + count に倍率適用
+    const mul = this.nextPhaseMul;
+    this.nextPhaseMul = null;
+    this.activePhaseHpMul = mul ? mul.hp : 1;
+    const countMul = mul ? mul.count : 1;
     // 各 spec ごとに独立したランナー初期化。delayMs を初期 timerMs に詰める
     this.runners = def.enemySpecs.map((spec) => ({
       spec,
-      remaining: spec.count,
+      remaining: Math.max(1, Math.ceil(spec.count * countMul)),
       timerMs: (spec.delayMs ?? 0) + 250, // 入り遅延 + 共通入りラグ
     }));
     this.state = 'spawning';
@@ -201,6 +216,8 @@ export class WaveSystem {
 
   private completePhase(): void {
     this.emitter.emit('phaseClear', this.phaseIndex + 1);
+    // 2026-06-05 Step 4: 試練の HP 倍率はその Phase 限定なのでリセット
+    this.activePhaseHpMul = 1;
     this.phaseIndex += 1;
     if (this.phaseIndex >= PHASES.length) {
       this.state = 'victory';
@@ -211,6 +228,19 @@ export class WaveSystem {
     // 次 Phase 準備中。プレイヤーが startNextPhase() を呼ぶまで待機。
     this.state = 'preparing';
     this.emitter.emit('state', this.state);
+  }
+
+  /**
+   * 試練 (Trial) 適用 (2026-06-05 Step 4)。次の startPhase で 1 回限り消費される。
+   * hp/count は ENEMY_TYPES.<type>.hp と EnemySpec.count に乗算で適用。
+   */
+  public setNextPhaseMultiplier(mul: { hp: number; count: number }): void {
+    this.nextPhaseMul = mul;
+  }
+
+  /** 試練の有効/無効を UI から問い合わせる用 (ボス前ブースト等の重み調整に使う)。 */
+  public hasNextPhaseMultiplier(): boolean {
+    return this.nextPhaseMul !== null;
   }
 
   public destroy(): void {

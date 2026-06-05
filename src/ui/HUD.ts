@@ -159,6 +159,14 @@ export class HUD {
     this.drawHpBar(clamped);
   }
 
+  /**
+   * 2026-06-05 Step 4: RunMod (基地強化キット) で基地 maxHp が増えた時に呼ぶ。
+   * 表示用分母を更新し、現 HP の比率を再描画する。
+   */
+  public setMaxHp(maxHp: number): void {
+    this.hpMax = Math.max(1, maxHp);
+  }
+
   private drawHpBar(hp: number): void {
     const ratio = hp / this.hpMax;
     this.hpBar.clear();

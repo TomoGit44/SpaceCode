@@ -14,7 +14,8 @@ import type { EffectSystem } from '../items/effects';
  */
 export class Base {
   public hp: number = BASE.hp;
-  public readonly maxHp: number = BASE.hp;
+  // 2026-06-05 ローグライト Step 4: RunMod (基地強化キット) で増減するため mutable に。
+  public maxHp: number = BASE.hp;
   public readonly radius: number = BASE.radius;
 
   private scene: Phaser.Scene;
@@ -233,6 +234,18 @@ export class Base {
   /** ダメージ。後フェーズで敵衝突から呼ばれる。 */
   public takeDamage(amount: number): void {
     this.hp = Math.max(0, this.hp - amount);
+  }
+
+  /**
+   * 2026-06-05 Step 4: RunMod / オムニ・コアによる maxHp 変動を反映する。
+   * Ship.applyMaxStats と同じく、増加分は現在 HP に差分回復、減少時は clamp。
+   */
+  public applyMaxStats(effects: EffectSystem): void {
+    const newMax = Math.round(effects.baseStat('maxHp', BASE.hp));
+    const delta = newMax - this.maxHp;
+    this.maxHp = newMax;
+    if (delta > 0) this.hp += delta;
+    if (this.hp > this.maxHp) this.hp = this.maxHp;
   }
 
   public isDestroyed(): boolean {

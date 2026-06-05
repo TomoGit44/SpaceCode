@@ -588,6 +588,11 @@ export class GameScene extends Phaser.Scene {
         this.overlayDepth -= 1;
         this.recomputeShipStats();
         this.refreshItemButton();
+        // 基地 maxHp 系の RunMod 反映 (rm_base_hp 等)
+        this.base.applyMaxStats(this.effects);
+        // HUD の max HP 表示も更新
+        this.hud.setMaxHp(this.base.maxHp);
+        this.hud.setHp(this.base.hp);
       },
       launchGachaOpen: (gachaItem: ItemInstance, onAfter: () => void) => {
         this.overlayDepth += 1;
@@ -602,6 +607,18 @@ export class GameScene extends Phaser.Scene {
           },
         });
         this.scene.bringToTop('GachaOpenScene');
+      },
+      setNextPhaseMultiplier: (mul: { hp: number; count: number }) => {
+        this.waves.setNextPhaseMultiplier(mul);
+        this.hud.showBanner(`⚔ 試練適用 — 次 Phase 敵 HP +${Math.round((mul.hp - 1) * 100)}% / 数 +${Math.round((mul.count - 1) * 100)}%`, 1800, '#ff8a8a');
+      },
+      healAndRefuelAllShips: () => {
+        for (const s of this.ships) {
+          if (s.dead) continue;
+          s.heal(s.maxHp); // フル回復 (heal は maxHp clamp)
+          s.refuel();
+        }
+        this.hud.showBanner('🛠 全宇宙船フル回復', 1400, '#3ee0c5');
       },
     });
     this.scene.bringToTop('PhaseChoiceScene');

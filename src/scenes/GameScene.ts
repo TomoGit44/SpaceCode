@@ -14,6 +14,7 @@ import { Inventory } from '../items/Inventory';
 import { EffectSystem } from '../items/effects';
 import { SynergySystem, type SynergyDef } from '../items/synergies';
 import type { ItemInstance } from '../items/itemTypes';
+import { registerDiscovery } from '../items/codex';
 import { OmniCoreStrip } from '../ui/OmniCoreStrip';
 import { type GachaCategory } from '../items/gacha';
 import type { RewardPayload } from './RewardPopupScene';
@@ -64,6 +65,9 @@ export class GameScene extends Phaser.Scene {
 
   private terminating: boolean = false; // GameOver / Victory 遷移中
 
+  // 2026-06-05 Step 5: Run 開始時刻 (clearTimeMs 計算用)
+  private runStartedAt: number = 0;
+
   // 並行 active オーバーレイ (ProgramEditor / ShipList / Gacha) の開いている数。
   // > 0 のとき GameScene の入力を抑止する (Phase 6: editorOpen から一般化)。
   private overlayDepth: number = 0;
@@ -104,6 +108,7 @@ export class GameScene extends Phaser.Scene {
     this.ships = [];
     this.terminating = false;
     this.overlayDepth = 0;
+    this.runStartedAt = performance.now(); // Run 計時開始 (Step 5: ベストスコア用)
     this.itemBtnLabel = undefined;
     this.itemBtnCenter = { x: 0, y: 0 };
     this.rewardQueue = [];
@@ -156,9 +161,11 @@ export class GameScene extends Phaser.Scene {
       },
     );
     this.effects.setSynergies(this.synergies);
-    this.synergies.setOnNewActivation((_id, def: SynergyDef) => {
+    this.synergies.setOnNewActivation((id, def: SynergyDef) => {
       this.hud.showBanner(`⚡ シナジー発動: ${def.nameJa}`, 1400, '#3ee0c5');
       this.recomputeShipStats();
+      // 2026-06-05 Step 5: 図鑑に登録 (初回発動なら永続化)
+      registerDiscovery('synergy', id);
     });
 
     // 2026-05-25: スターターオムニ・コア 3 個を装着済みで開始
@@ -873,10 +880,18 @@ export class GameScene extends Phaser.Scene {
   private endGame(targetScene: 'GameOverScene' | 'VictoryScene'): void {
     if (this.terminating) return;
     this.terminating = true;
+    // 2026-06-05 Step 5: ベストスコア用に到達 Phase + クリア時間を payload に積む
+    // Victory 時のみ clearTimeMs を計上 (Game Over は null)
+    const phaseReached = this.waves.getPhaseNumber();
+    const clearTimeMs = targetScene === 'VictoryScene'
+      ? Math.max(0, Math.round(performance.now() - this.runStartedAt))
+      : null;
     const payload = {
       hp: this.base.hp,
       maxHp: this.base.maxHp,
       credits: this.economy.credits,
+      phaseReached,
+      clearTimeMs,
     };
     this.cameras.main.fadeOut(400, 5, 7, 13);
     this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {

@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
-import { GAME_WIDTH, GAME_HEIGHT } from '../config';
+import { GAME_WIDTH, GAME_HEIGHT, COLORS } from '../config';
 import { drawStarfield } from '../utils/starfield';
+import { getBestScore, formatClearTime, totalDiscoveredCount } from '../items/codex';
 
 /**
  * タイトル画面。SPACE / クリックでゲーム開始。
@@ -90,6 +91,10 @@ export class MenuScene extends Phaser.Scene {
       },
     });
 
+    // 2026-06-05 Step 5: ベストスコア + 図鑑ボタン
+    this.renderBestScore();
+    this.makeCodexButton();
+
     // フッター
     this.add
       .text(GAME_WIDTH / 2, GAME_HEIGHT - 24, 'MVP v1.0 — Phase 5 完成', {
@@ -99,9 +104,71 @@ export class MenuScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    // 入力
-    this.input.once('pointerdown', () => this.startGame());
+    // 入力 (背景クリック = スタート、ボタンは自分のクリックを stopPropagation 不要なので
+    // 図鑑ボタンを押した時に startGame が走らないよう、図鑑ボタン側で flag を立てる)
+    this.input.on('pointerdown', (_p: Phaser.Input.Pointer, targets: Phaser.GameObjects.GameObject[]) => {
+      // 何かボタンが押されている (= targets が非空) ならスタートさせない
+      if (targets && targets.length > 0) return;
+      this.startGame();
+    });
     this.input.keyboard?.once('keydown-SPACE', () => this.startGame());
+  }
+
+  private renderBestScore(): void {
+    const best = getBestScore();
+    if (!best) return;
+    const phaseText = best.phaseReached >= 100 ? 'ALL CLEAR' : `Phase ${best.phaseReached}`;
+    const timeText = best.clearTimeMs !== null
+      ? ` / ${formatClearTime(best.clearTimeMs)}`
+      : '';
+    this.add
+      .text(GAME_WIDTH / 2, GAME_HEIGHT - 78, `ベスト: ${phaseText}${timeText}`, {
+        fontFamily: 'system-ui, "Segoe UI", sans-serif',
+        fontSize: '14px',
+        color: '#3ee0c5',
+      })
+      .setOrigin(0.5);
+  }
+
+  private makeCodexButton(): void {
+    const x = GAME_WIDTH / 2;
+    const y = GAME_HEIGHT - 116;
+    const w = 200;
+    const h = 36;
+    const bg = this.add
+      .rectangle(x, y, w, h, COLORS.panelBg, 0.9)
+      .setStrokeStyle(2, COLORS.accent, 0.7)
+      .setInteractive({ useHandCursor: true })
+      .setAlpha(0);
+    const discovered = totalDiscoveredCount();
+    const label = this.add
+      .text(x, y, `📖 図鑑 (${discovered} 発見)`, {
+        fontFamily: 'system-ui, "Segoe UI", sans-serif',
+        fontSize: '14px',
+        color: '#cfd6e6',
+        fontStyle: 'bold',
+      })
+      .setOrigin(0.5)
+      .setAlpha(0);
+    this.tweens.add({
+      targets: [bg, label],
+      alpha: 1,
+      duration: 320,
+      delay: 700,
+    });
+    bg.on('pointerover', () => bg.setFillStyle(COLORS.panelHover, 1));
+    bg.on('pointerout', () => bg.setFillStyle(COLORS.panelBg, 0.9));
+    bg.on('pointerdown', (p: Phaser.Input.Pointer) => {
+      if (p.rightButtonDown()) return;
+      this.openCodex();
+    });
+  }
+
+  private openCodex(): void {
+    this.cameras.main.fadeOut(280, 5, 7, 13);
+    this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
+      this.scene.start('CodexScene');
+    });
   }
 
   private startGame(): void {

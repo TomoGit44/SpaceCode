@@ -9,6 +9,7 @@ import {
 } from './gacha';
 import { ALL_MODULE_IDS, MODULE_TYPES } from './types/modules';
 import { type RunMod, pickRandomRunMod } from './runMods';
+import { registerDiscovery } from './codex';
 
 /**
  * Phase クリア時の 3 択イベント (2026-06-05 追加, ローグライト Step 3)。
@@ -286,11 +287,15 @@ export function applyPhaseChoice(choice: PhaseChoice, ctx: ApplyContext): void {
         rarity: choice.rarity,
       };
       ctx.inventory.items.push(item);
+      // Step 5: 図鑑登録
+      registerDiscovery('module', choice.typeId);
       ctx.onImmediateDone();
       return;
     }
     case 'runMod':
       ctx.inventory.runMods.push(choice.mod);
+      // Step 5: 図鑑登録
+      registerDiscovery('runMod', choice.mod.id);
       ctx.onImmediateDone();
       return;
     case 'trial': {

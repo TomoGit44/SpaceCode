@@ -10,6 +10,7 @@ import { PhaseChoiceScene } from './scenes/PhaseChoiceScene';
 import { RewardPopupScene } from './scenes/RewardPopupScene';
 import { GameOverScene } from './scenes/GameOverScene';
 import { VictoryScene } from './scenes/VictoryScene';
+import { CodexScene } from './scenes/CodexScene';
 
 /**
  * Phaser ゲームインスタンス起動点。
@@ -44,6 +45,7 @@ const config: Phaser.Types.Core.GameConfig = {
     RewardPopupScene,
     GameOverScene,
     VictoryScene,
+    CodexScene,
   ],
 };
 

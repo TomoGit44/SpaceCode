@@ -1,24 +1,39 @@
 import Phaser from 'phaser';
 import { GAME_WIDTH, GAME_HEIGHT } from '../config';
 import { drawStarfield } from '../utils/starfield';
+import { updateBestScore, formatClearTime } from '../items/codex';
 
 /**
  * 全 Phase クリア時の勝利画面。
- * 残 HP / 獲得クレジットを表示。R で再挑戦、ESC でメニュー。
+ * 残 HP / 獲得クレジット / クリア時間 / ベスト更新表示。
+ * R で再挑戦、ESC でメニュー。
  */
 export class VictoryScene extends Phaser.Scene {
   private finalHp: number = 0;
   private finalMaxHp: number = 0;
   private finalCredits: number = 0;
+  private phaseReached: number = 100;
+  private clearTimeMs: number | null = null;
+  private isNewBest: boolean = false;
 
   constructor() {
     super({ key: 'VictoryScene' });
   }
 
-  init(data: { hp: number; maxHp: number; credits: number }): void {
+  init(data: {
+    hp: number;
+    maxHp: number;
+    credits: number;
+    phaseReached?: number;
+    clearTimeMs?: number | null;
+  }): void {
     this.finalHp = data?.hp ?? 0;
     this.finalMaxHp = data?.maxHp ?? 100;
     this.finalCredits = data?.credits ?? 0;
+    this.phaseReached = data?.phaseReached ?? 100;
+    this.clearTimeMs = data?.clearTimeMs ?? null;
+    // 2026-06-05 Step 5: ベスト更新判定 (init で実行 → create での表示に使う)
+    this.isNewBest = updateBestScore(this.phaseReached, this.clearTimeMs);
   }
 
   create(): void {
@@ -71,7 +86,23 @@ export class VictoryScene extends Phaser.Scene {
       })
       .setOrigin(0.5)
       .setAlpha(0);
-    this.tweens.add({ targets: [hp, cr], alpha: 1, duration: 380, delay: 520 });
+    // Step 5: クリア時間 + ベスト更新表示
+    const timeStr = formatClearTime(this.clearTimeMs);
+    const time = this.add
+      .text(
+        GAME_WIDTH / 2,
+        summaryY + 60,
+        this.isNewBest ? `★ クリア時間   ${timeStr}   ★ NEW BEST` : `クリア時間   ${timeStr}`,
+        {
+          fontFamily: 'system-ui, "Segoe UI", sans-serif',
+          fontSize: '20px',
+          color: this.isNewBest ? '#3ee0c5' : '#cfd6e6',
+          fontStyle: this.isNewBest ? 'bold' : 'normal',
+        }
+      )
+      .setOrigin(0.5)
+      .setAlpha(0);
+    this.tweens.add({ targets: [hp, cr, time], alpha: 1, duration: 380, delay: 520 });
 
     const retry = this.add
       .text(GAME_WIDTH / 2, GAME_HEIGHT * 0.72, '[ R ] もう一度', {

@@ -1,14 +1,24 @@
 import Phaser from 'phaser';
 import { GAME_WIDTH, GAME_HEIGHT } from '../config';
 import { drawStarfield } from '../utils/starfield';
+import { updateBestScore, getBestScore } from '../items/codex';
 
 /**
  * ゲームオーバー画面。
- * Phase B 時点ではメニューへ戻る/リトライのみ。
+ * 到達 Phase + ベスト記録 (Step 5)。
  */
 export class GameOverScene extends Phaser.Scene {
+  private phaseReached: number = 0;
+  private isNewBest: boolean = false;
+
   constructor() {
     super({ key: 'GameOverScene' });
+  }
+
+  init(data: { phaseReached?: number }): void {
+    this.phaseReached = data?.phaseReached ?? 0;
+    // 2026-06-05 Step 5: Game Over でも到達 Phase でベスト更新を試みる (clearTimeMs は null)
+    this.isNewBest = updateBestScore(this.phaseReached, null);
   }
 
   create(): void {
@@ -42,6 +52,26 @@ export class GameOverScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setAlpha(0);
     this.tweens.add({ targets: sub, alpha: 1, duration: 320, delay: 260 });
+
+    // Step 5: 到達 Phase + ベスト表示
+    const best = getBestScore();
+    const reached = this.add
+      .text(
+        GAME_WIDTH / 2,
+        GAME_HEIGHT * 0.35 + 120,
+        this.isNewBest
+          ? `★ 到達 Phase ${this.phaseReached}   ★ NEW BEST`
+          : `到達 Phase ${this.phaseReached}${best ? `   (BEST: ${best.phaseReached})` : ''}`,
+        {
+          fontFamily: 'system-ui, "Segoe UI", sans-serif',
+          fontSize: '18px',
+          color: this.isNewBest ? '#3ee0c5' : '#9aa4ba',
+          fontStyle: this.isNewBest ? 'bold' : 'normal',
+        }
+      )
+      .setOrigin(0.5)
+      .setAlpha(0);
+    this.tweens.add({ targets: reached, alpha: 1, duration: 320, delay: 380 });
 
     const retry = this.add
       .text(GAME_WIDTH / 2, GAME_HEIGHT * 0.6, '[ R ] リトライ', {

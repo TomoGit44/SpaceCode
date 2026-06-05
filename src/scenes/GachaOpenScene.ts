@@ -13,6 +13,7 @@ import { OMNI_CORE_TYPES, omniCorePercent } from '../items/types/omniCores';
 import { MODULE_TYPES, moduleEffectText } from '../items/types/modules';
 import { ITEM_CODE_DEFS, type ItemCodeType } from '../items/types/itemCodes';
 import { hoverPop } from '../ui/uiAnim';
+import { registerDiscovery } from '../items/codex';
 
 const FONT = 'system-ui, "Segoe UI", sans-serif';
 
@@ -500,6 +501,8 @@ export class GachaOpenScene extends Phaser.Scene {
         rarity: cand.rarity,
       };
       this.inventory.items.push(item);
+      // 2026-06-05 Step 5: 図鑑に登録
+      registerDiscovery('module', cand.typeId);
     } else {
       const code: CodeItemInstance = {
         uid: crypto.randomUUID(),
@@ -507,6 +510,8 @@ export class GachaOpenScene extends Phaser.Scene {
         rarity: cand.rarity,
       };
       this.inventory.codes.push(code);
+      // 2026-06-05 Step 5: 図鑑に登録
+      registerDiscovery('itemCode', cand.typeId);
     }
 
     // Step 3-C: 確定演出 — 選んだカードを光らせて拡大 fade

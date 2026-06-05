@@ -80,12 +80,12 @@ export class OmniCoreStrip {
     const rc = RARITY_COLOR[rarity];
     const half = ICON_SIZE / 2;
 
-    // 背景四角 (角丸風に Graphics で塗り + ボーダー)
+    // 背景四角 (M-1: design system のハード角に統一、fillRoundedRect → fillRect)
     const bg = this.scene.add.graphics().setDepth(20);
     bg.fillStyle(COLORS.bgAlt, 0.92);
-    bg.fillRoundedRect(cx - half, cy - half, ICON_SIZE, ICON_SIZE, 4);
+    bg.fillRect(cx - half, cy - half, ICON_SIZE, ICON_SIZE);
     bg.lineStyle(2, rc, 0.95);
-    bg.strokeRoundedRect(cx - half, cy - half, ICON_SIZE, ICON_SIZE, 4);
+    bg.strokeRect(cx - half, cy - half, ICON_SIZE, ICON_SIZE);
     this.objects.push(bg);
 
     // 型別シンボル

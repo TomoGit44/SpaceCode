@@ -406,7 +406,7 @@ export class ProgramList {
     const label = this.scene.add
       .text(labelX, rowY + ROW_HEIGHT / 2, codeLabel(row.code), {
         fontFamily: FONT,
-        fontSize: '15px',
+        fontSize: '14px',
         color: '#cfd6e6',
         fontStyle: isWrapper ? 'bold' : 'normal',
       })
@@ -498,7 +498,7 @@ export class ProgramList {
     const t = this.scene.add
       .text(cx, cy, label, {
         fontFamily: FONT,
-        fontSize: '15px',
+        fontSize: '14px',
         color: enabled ? '#cfd6e6' : '#6b7da0',
         fontStyle: 'bold',
       })

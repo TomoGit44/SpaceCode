@@ -419,7 +419,7 @@ export class ShipListScene extends Phaser.Scene {
     const badgeText = this.add
       .text(cx + w / 2 - 24, cy + h / 2 - 12, `M${moduleCount}`, {
         fontFamily: FONT,
-        fontSize: '10px',
+        fontSize: '11px',
         color: moduleCount > 0 ? '#3ee0c5' : '#6b7da0',
         fontStyle: 'bold',
       })
@@ -782,7 +782,7 @@ export class ShipListScene extends Phaser.Scene {
       this.add
         .text(x, y + 20, '船カードへドラッグして装着 / 下の「外す」エリアへドラッグで取り外し', {
           fontFamily: FONT,
-          fontSize: '10px',
+          fontSize: '11px',
           color: '#6b7da0',
         })
         .setDepth(2)
@@ -919,7 +919,7 @@ export class ShipListScene extends Phaser.Scene {
     const effect = this.add
       .text(-w / 2 + 30, 9, this.shortEffect(it), {
         fontFamily: FONT,
-        fontSize: '10px',
+        fontSize: '11px',
         color: '#3ee0c5',
       })
       .setOrigin(0, 0.5);

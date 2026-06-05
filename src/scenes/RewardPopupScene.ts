@@ -223,7 +223,7 @@ export class RewardPopupScene extends Phaser.Scene {
       this.add
         .text(0, CARD_H / 2 - 26, this.cardSubtitle(), {
           fontFamily: FONT,
-          fontSize: '10px',
+          fontSize: '11px',
           color: '#6b7da0',
         })
         .setOrigin(0.5)

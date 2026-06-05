@@ -142,7 +142,7 @@ export class ItemCard {
       const eqText = scene.add
         .text(w / 2 - 18, -h / 2 + 12, opts.equippedBadge, {
           fontFamily: FONT,
-          fontSize: '10px',
+          fontSize: '11px',
           color: '#05070d',
           fontStyle: 'bold',
         })
@@ -168,7 +168,7 @@ export class ItemCard {
       const sub = scene.add
         .text(0, h / 2 - 8, opts.subtext, {
           fontFamily: FONT,
-          fontSize: '10px',
+          fontSize: '11px',
           color: '#3ee0c5',
           align: 'center',
         })

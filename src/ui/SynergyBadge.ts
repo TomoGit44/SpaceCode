@@ -60,7 +60,7 @@ export function createSynergyBadge(
   const rarityChip = scene.add
     .text(leftX + 12, centerY, rarityText, {
       fontFamily: FONT,
-      fontSize: '10px',
+      fontSize: '11px',
       color: '#' + rc.toString(16).padStart(6, '0'),
       fontStyle: 'bold',
     })
@@ -74,7 +74,7 @@ export function createSynergyBadge(
     const tip = scene.add
       .text(cx, centerY + 16, hideName ? '装着構成で発動した隠しシナジー' : def.descJa, {
         fontFamily: FONT,
-        fontSize: '10px',
+        fontSize: '11px',
         color: '#3ee0c5',
         backgroundColor: '#05070d',
         padding: { x: 6, y: 3 },

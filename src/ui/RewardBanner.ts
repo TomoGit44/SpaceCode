@@ -84,7 +84,7 @@ export class RewardBanner {
     this.nameText = scene.add
       .text(-BANNER_W / 2 + 86, 10, '', {
         fontFamily: FONT,
-        fontSize: '15px',
+        fontSize: '14px',
         color: '#cfd6e6',
         fontStyle: 'bold',
       })

@@ -88,7 +88,7 @@ export class ShopPanel {
     const text = this.scene.add
       .text(x, y, label, {
         fontFamily: 'system-ui, "Segoe UI", sans-serif',
-        fontSize: '16px',
+        fontSize: '14px',
         color: '#cfd6e6',
         fontStyle: 'bold',
       })

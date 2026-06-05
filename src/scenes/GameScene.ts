@@ -540,7 +540,7 @@ export class GameScene extends Phaser.Scene {
     this.itemBtnLabel = this.add
       .text(cx, cy, '', {
         fontFamily: FONT,
-        fontSize: '16px',
+        fontSize: '14px',
         color: '#cfd6e6',
         fontStyle: 'bold',
       })

@@ -1,13 +1,25 @@
 import Phaser from 'phaser';
 import { GAME_WIDTH, GAME_HEIGHT, COLORS } from '../config';
+import { popText, tweenBarWidth, valueTweenInt } from './uiAnim';
 
 const START_BUTTON_WIDTH = 280;
 const START_BUTTON_HEIGHT = 56;
 const SHOP_PANEL_HEIGHT = 64; // ShopPanel と一致 (HUD はその上に乗る)。Phase 7: 60 → 64
 
+const HP_BAR_X = 16;
+const HP_BAR_Y = 14 + 38;
+const HP_BAR_W = 180;
+const HP_BAR_H = 6;
+
 /**
  * 画面上部の HUD。基地 HP / 所持クレジット / Phase 進行 / 状態テキストを表示。
  * GameScene からプッシュベースで更新する設計 (HUD 側は描画と簡易演出だけ持つ)。
+ *
+ * M-2 (2026-06-06): 値変化アニメを導入。
+ *  - HP バー: tweenBarWidth で 280ms Quad.easeOut 滑らか遷移
+ *  - HP 数値: 減少時は popText + 軽い shake
+ *  - Phase 数値: setStageAndPhase で popText
+ *  - Credits 数値: valueTweenInt で滑らかなカウント
  */
 export class HUD {
   private scene: Phaser.Scene;
@@ -17,16 +29,23 @@ export class HUD {
   private hpBarBg: Phaser.GameObjects.Graphics;
   private hpBar: Phaser.GameObjects.Graphics;
   private hpMax: number;
+  private hpCurrentRatio: number = 1; // tween 用に直前 ratio を保持
 
   private creditsLabel: Phaser.GameObjects.Text;
   private creditsValue: Phaser.GameObjects.Text;
+  private creditsCurrent: number = 0;
 
   private phaseLabel: Phaser.GameObjects.Text;
   private phaseValue: Phaser.GameObjects.Text;
+  private prevPhaseString: string = '';
 
   private statusText: Phaser.GameObjects.Text;
+  private prevStatus: string = '';
   private bannerText: Phaser.GameObjects.Text;
   private bannerTween?: Phaser.Tweens.Tween;
+
+  // 直前 HP (減少検知用)
+  private prevHp: number;
 
   // 準備時間中の「開始」ボタン (Phase 5 後)
   private startBtnBg: Phaser.GameObjects.Rectangle;
@@ -39,6 +58,8 @@ export class HUD {
   constructor(scene: Phaser.Scene, hpMax: number) {
     this.scene = scene;
     this.hpMax = hpMax;
+    this.prevHp = hpMax;
+    this.creditsCurrent = 0;
 
     const top = 14;
 
@@ -56,9 +77,9 @@ export class HUD {
     });
     this.hpBarBg = scene.add.graphics();
     this.hpBarBg.fillStyle(COLORS.panelBg, 1);
-    this.hpBarBg.fillRect(16, top + 38, 180, 6);
+    this.hpBarBg.fillRect(HP_BAR_X, HP_BAR_Y, HP_BAR_W, HP_BAR_H);
     this.hpBar = scene.add.graphics();
-    this.drawHpBar(hpMax);
+    this.drawHpBarAtRatio(1);
 
     // 中央: Stage / Phase (2026-05-26: 5 Stage × 20 Phase に拡張、2 段表記)
     const cx = GAME_WIDTH / 2;
@@ -155,8 +176,27 @@ export class HUD {
 
   public setHp(hp: number): void {
     const clamped = Math.max(0, hp);
+    const decreased = clamped < this.prevHp;
+    const newRatio = clamped / this.hpMax;
+
+    // 数値テキスト (減少時は popText + 軽い shake で警告)
     this.hpValue.setText(`${clamped}/${this.hpMax}`);
-    this.drawHpBar(clamped);
+    if (decreased) {
+      popText(this.scene, this.hpValue, { from: 1.18, to: 1, duration: 220 });
+      this.shakeText(this.hpValue, 3, 120);
+    }
+
+    // バー (色は ratio に応じて変わるため毎フレーム再計算)
+    tweenBarWidth(
+      this.scene,
+      this.hpBar,
+      (r) => this.drawHpBarAtRatio(r),
+      this.hpCurrentRatio,
+      newRatio,
+      280,
+    );
+    this.hpCurrentRatio = newRatio;
+    this.prevHp = clamped;
   }
 
   /**
@@ -167,17 +207,45 @@ export class HUD {
     this.hpMax = Math.max(1, maxHp);
   }
 
-  private drawHpBar(hp: number): void {
-    const ratio = hp / this.hpMax;
+  /** ratio (0..1) で HP バーを描画。tweenBarWidth から毎フレーム呼ばれる。 */
+  private drawHpBarAtRatio(ratio: number): void {
+    const r = Math.max(0, Math.min(1, ratio));
     this.hpBar.clear();
     const color =
-      ratio > 0.5 ? 0x3ee0c5 : ratio > 0.25 ? 0xffd24a : 0xff4d5a;
+      r > 0.5 ? 0x3ee0c5 : r > 0.25 ? 0xffd24a : 0xff4d5a;
     this.hpBar.fillStyle(color, 1);
-    this.hpBar.fillRect(16, 14 + 38, 180 * Math.max(0, ratio), 6);
+    this.hpBar.fillRect(HP_BAR_X, HP_BAR_Y, HP_BAR_W * r, HP_BAR_H);
+  }
+
+  /** Text を軽く左右シェイクして「変化したぞ」感を出す (chain で 3 段)。 */
+  private shakeText(t: Phaser.GameObjects.Text, amp: number, duration: number): void {
+    const origin = (t as Phaser.GameObjects.Text & { _origX?: number })._origX ?? t.x;
+    (t as Phaser.GameObjects.Text & { _origX?: number })._origX = origin;
+    this.scene.tweens.killTweensOf(t);
+    this.scene.tweens.chain({
+      targets: t,
+      tweens: [
+        { x: origin + amp, duration: duration / 4, ease: 'Sine.easeOut' },
+        { x: origin - amp, duration: duration / 2, ease: 'Sine.easeInOut' },
+        { x: origin,       duration: duration / 4, ease: 'Sine.easeIn' },
+      ],
+    });
   }
 
   public setCredits(credits: number): void {
-    this.creditsValue.setText(`$${credits}`);
+    if (credits === this.creditsCurrent) {
+      this.creditsValue.setText(`$${credits}`);
+      return;
+    }
+    valueTweenInt(
+      this.scene,
+      this.creditsValue,
+      this.creditsCurrent,
+      credits,
+      260,
+      (n) => `$${Math.round(n)}`,
+    );
+    this.creditsCurrent = credits;
   }
 
   public flashCredits(delta: number): void {
@@ -205,6 +273,8 @@ export class HUD {
    * Stage / Phase 2 段表記 (2026-05-26)。
    * 例: setStageAndPhase(3, 5, 12, 20) → `3 / 5  ·  12 / 20`
    * stage または phaseInStage が 0 のときは「— / total」表示にして待機状態を示す。
+   *
+   * M-2: 値が変わったら popText で scale ポップさせる。
    */
   public setStageAndPhase(
     stage: number,
@@ -214,11 +284,25 @@ export class HUD {
   ): void {
     const s = stage > 0 ? `${stage} / ${totalStages}` : `— / ${totalStages}`;
     const p = phaseInStage > 0 ? `${phaseInStage} / ${phasesPerStage}` : `— / ${phasesPerStage}`;
-    this.phaseValue.setText(`${s}  ·  ${p}`);
+    const next = `${s}  ·  ${p}`;
+    if (next !== this.prevPhaseString) {
+      this.phaseValue.setText(next);
+      if (this.prevPhaseString !== '') {
+        // 初回 (— / 0) からの変化は静かに、以降は popText
+        popText(this.scene, this.phaseValue);
+      }
+      this.prevPhaseString = next;
+    }
   }
 
   public setStatus(text: string): void {
+    if (text === this.prevStatus) return;
     this.statusText.setText(text);
+    if (this.prevStatus !== '') {
+      // 微かに pop (status は頻繁に変わるので控えめ)
+      popText(this.scene, this.statusText, { from: 0.92, to: 1, duration: 140 });
+    }
+    this.prevStatus = text;
   }
 
   /**

@@ -12,6 +12,7 @@ import { Program } from '../program/Program';
 import { SignalBus } from '../program/SignalBus';
 import { Inventory } from '../items/Inventory';
 import { EffectSystem } from '../items/effects';
+import { SynergySystem, type SynergyDef } from '../items/synergies';
 import { OmniCoreStrip } from '../ui/OmniCoreStrip';
 import {
   rollPhaseRewardRarity,
@@ -58,6 +59,8 @@ export class GameScene extends Phaser.Scene {
   private effects!: EffectSystem;
   // 2026-05-28: Ship 間シグナル通信 (BROADCAST_SIGNAL / IF_SIGNAL)。Run 毎にリセット
   private signals!: SignalBus;
+  // 2026-06-05: シナジー機構 (装着の組み合わせで発火する隠れ効果)。Run 毎にリセット
+  private synergies!: SynergySystem;
   // 2026-05-25: 画面左上に常時表示する所持オムニ・コアの帯
   private omniCoreStrip!: OmniCoreStrip;
 
@@ -144,6 +147,21 @@ export class GameScene extends Phaser.Scene {
     this.effects = new EffectSystem(this.inventory);
     // 2026-05-28: Ship 間シグナルバス
     this.signals = new SignalBus();
+    // 2026-06-05: シナジー機構。EffectSystem に後付け注入して passive 寄与を加算スタックに合流。
+    // 新規発動時はバナー + 全 Ship の max stat 再計算を行う (maxHp +15% 系の即時反映用)。
+    this.synergies = new SynergySystem(
+      this.inventory,
+      () => this.ships,
+      (shipId) => {
+        const s = this.ships.find((sh) => sh.id === shipId);
+        return s ? s.getProgram() : null;
+      },
+    );
+    this.effects.setSynergies(this.synergies);
+    this.synergies.setOnNewActivation((_id, def: SynergyDef) => {
+      this.hud.showBanner(`⚡ シナジー発動: ${def.nameJa}`, 1400, '#3ee0c5');
+      this.recomputeShipStats();
+    });
 
     // 2026-05-25: スターターオムニ・コア 3 個を装着済みで開始
     // (新コア core_attack_plus / core_efficiency / core_endurance)。
@@ -724,6 +742,8 @@ export class GameScene extends Phaser.Scene {
     // 宇宙船 (Phase D)
     // 2026-05-28: signals.tick で TTL を進める。ships を world に含めて IF_ALLY_DOWNED 等で参照可能に
     this.signals.tick(delta);
+    // 2026-06-05: シナジー発動状態を毎フレーム評価し、新規発動分にバナー + 再計算
+    this.synergies.refreshActivationDiff();
     if (this.ships.length > 0) {
       const world = {
         base: this.base,
@@ -734,6 +754,7 @@ export class GameScene extends Phaser.Scene {
         effects: this.effects,
         ships: this.ships,
         signals: this.signals,
+        synergies: this.synergies,
       };
       for (const s of this.ships) s.update(delta, world);
     }

@@ -8,6 +8,7 @@ import { Bullet } from './Bullet';
 import { muzzleFlash } from '../systems/CombatFx';
 import type { EconomySystem } from '../systems/EconomySystem';
 import type { EffectSystem } from '../items/effects';
+import type { SynergySystem } from '../items/synergies';
 import type { Program } from '../program/Program';
 import type { SignalBus } from '../program/SignalBus';
 
@@ -33,6 +34,9 @@ export interface ShipWorld {
   // 2026-05-28: マルチ Ship 連携 / 新条件コード用
   readonly ships: ReadonlyArray<Ship>; // IF_ALLY_DOWNED の判定で他 Ship を走査
   readonly signals: SignalBus;        // BROADCAST_SIGNAL / IF_SIGNAL
+  // 2026-06-05: シナジーシステム (装着の組み合わせで発火する隠れ効果)。
+  // Ship.update から onMine / onContact / onFire hook を呼ぶ。
+  readonly synergies: SynergySystem;
 }
 
 /**
@@ -463,6 +467,8 @@ export class Ship {
             this.mineFxAccumMs = 0;
             this.spawnMineFx();
           }
+          // 2026-06-05: シナジー onMine hook (例: 採掘修復 = 採掘中 HP 自動回復)
+          world.synergies.onMine(this, delta);
         }
       }
       if (p.depleted) {

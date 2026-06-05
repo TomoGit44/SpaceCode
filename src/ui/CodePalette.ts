@@ -3,6 +3,7 @@ import { COLORS } from '../config';
 import type { CodeType } from '../program/Code';
 import type { ItemCodeType } from '../items/types/itemCodes';
 import { RARITY_COLOR } from '../items/itemTypes';
+import { hoverPop } from './uiAnim';
 
 const FONT = 'system-ui, "Segoe UI", sans-serif';
 
@@ -184,6 +185,8 @@ export class CodePalette {
         if (p.rightButtonDown()) return;
         onClick();
       });
+      // M-3: hover で scale + accent 色 halo
+      hoverPop(this.scene, bg, { halo: accent });
     }
     sink.push(bg, text);
   }

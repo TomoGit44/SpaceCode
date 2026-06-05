@@ -12,6 +12,7 @@ import { drawGacha, gachaCategoryOf, type GachaCandidate } from '../items/gacha'
 import { OMNI_CORE_TYPES, omniCorePercent } from '../items/types/omniCores';
 import { MODULE_TYPES, moduleEffectText } from '../items/types/modules';
 import { ITEM_CODE_DEFS, type ItemCodeType } from '../items/types/itemCodes';
+import { hoverPop } from '../ui/uiAnim';
 
 const FONT = 'system-ui, "Segoe UI", sans-serif';
 
@@ -221,6 +222,8 @@ export class GachaOpenScene extends Phaser.Scene {
       if (p.rightButtonDown()) return;
       this.selectCard(index);
     });
+    // M-3: ガチャカード hover で scale + Rarity 色 halo
+    hoverPop(this, bg, { scaleTo: 1.03, halo: rc, haloAlpha: 0.22, haloPad: 8 });
 
     this.chrome.push(border, bg);
 
@@ -474,6 +477,8 @@ export class GachaOpenScene extends Phaser.Scene {
       if (p.rightButtonDown()) return;
       onClick();
     });
+    // M-3: フッターボタンに hover scale + accent halo
+    hoverPop(this, bg, { halo: accent });
     this.dyn.push(bg, t);
   }
 

@@ -23,6 +23,7 @@ import { EconomySystem } from '../systems/EconomySystem';
 import { HUD } from '../ui/HUD';
 import { RewardBanner } from '../ui/RewardBanner';
 import { ShopPanel, type ShopAction } from '../ui/ShopPanel';
+import { hoverPop } from '../ui/uiAnim';
 
 const FONT = 'system-ui, "Segoe UI", sans-serif';
 
@@ -553,6 +554,8 @@ export class GameScene extends Phaser.Scene {
       if (this.terminating || this.overlayDepth > 0) return;
       this.openShipList();
     });
+    // M-3: 宇宙船ボタン hover で accent halo
+    hoverPop(this, bg, { halo: COLORS.accent });
   }
 
   /** 宇宙船ボタンのバッジを更新する (所持船数を表示)。 */

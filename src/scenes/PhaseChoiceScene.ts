@@ -14,6 +14,7 @@ import {
   rollPhaseChoices,
   applyPhaseChoice,
 } from '../items/phaseChoices';
+import { hoverPop } from '../ui/uiAnim';
 
 const FONT = 'system-ui, "Segoe UI", sans-serif';
 
@@ -167,6 +168,8 @@ export class PhaseChoiceScene extends Phaser.Scene {
       if (p.rightButtonDown()) return;
       this.selectCard(index);
     });
+    // M-3: 選択カード hover で scale + Rarity 色 halo
+    hoverPop(this, bg, { scaleTo: 1.03, halo: rc, haloAlpha: 0.22, haloPad: 8 });
 
     this.chrome.push(border, bg);
     this.cardObjects.push({ bg, border });
@@ -455,6 +458,8 @@ export class PhaseChoiceScene extends Phaser.Scene {
       if (p.rightButtonDown()) return;
       onClick();
     });
+    // M-3: フッターボタン hover
+    hoverPop(this, bg, { halo: accent });
     this.dyn.push(bg, t);
   }
 

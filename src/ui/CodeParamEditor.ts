@@ -7,6 +7,7 @@ import {
   LOCATION_LABELS,
   type LocationId,
 } from '../program/locations';
+import { hoverPop, popText } from './uiAnim';
 
 const FONT = 'system-ui, "Segoe UI", sans-serif';
 
@@ -109,6 +110,7 @@ export class CodeParamEditor {
       })
       .setOrigin(0.5)
       .setDepth(3);
+    popText(this.scene, value, { from: 0.85, to: 1, duration: 160 });
     const plus = this.makeStepButton(this.x + this.width - 4 - SPIN_BTN_SIZE, cy, '+', () => {
       const next = Math.min(WAIT_SECONDS_MAX, cur + 1);
       if (next === cur) return;
@@ -179,6 +181,7 @@ export class CodeParamEditor {
           })
           .setOrigin(0.5)
           .setDepth(3);
+        popText(this.scene, value, { from: 0.85, to: 1, duration: 160 });
         const plus = this.makeStepButton(this.x + this.width - 4 - SPIN_BTN_SIZE, rowY, '+', () =>
           emit(cur + spec.step)
         );
@@ -231,6 +234,8 @@ export class CodeParamEditor {
                 params: { ...code.params, [spec.key]: opt.value },
               } as Code);
             });
+            // M-3: hover で scale + halo
+            hoverPop(this.scene, bg, { halo: COLORS.ally });
           }
           this.controls.push(bg, label);
           cy += h + 4;
@@ -298,6 +303,8 @@ export class CodeParamEditor {
         if (selected) return;
         onPick(id);
       });
+      // M-3: 未選択チップに hoverPop (選択中は強調済みなので不要)
+      if (!selected) hoverPop(this.scene, bg, { halo: COLORS.ally });
       this.controls.push(bg, label);
       cy += h + 4;
     }
@@ -326,6 +333,7 @@ export class CodeParamEditor {
       })
       .setOrigin(0.5)
       .setDepth(3);
+    popText(this.scene, value, { from: 0.85, to: 1, duration: 160 });
     const plus = this.makeStepButton(this.x + this.width - 4 - SPIN_BTN_SIZE, cy, '+', () => {
       const next = Math.min(REPEAT_TIMES_MAX, code.times + 1);
       if (next === code.times) return;
@@ -396,6 +404,8 @@ export class CodeParamEditor {
       if (p.rightButtonDown()) return;
       onClick();
     });
+    // M-3: スピナー ± ボタン hover で scale + halo
+    hoverPop(this.scene, bg, { halo: COLORS.ally });
     return [bg, t];
   }
 

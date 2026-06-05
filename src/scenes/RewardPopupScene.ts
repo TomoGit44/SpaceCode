@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { GAME_WIDTH, GAME_HEIGHT, COLORS } from '../config';
 import type { Inventory } from '../items/Inventory';
 import { RARITY_COLOR, RARITY_LABEL, RARITY_SHORT, type Rarity, type ItemInstance } from '../items/itemTypes';
+import { hoverPop } from '../ui/uiAnim';
 
 const FONT = 'system-ui, "Segoe UI", sans-serif';
 
@@ -146,6 +147,8 @@ export class RewardPopupScene extends Phaser.Scene {
     bg.on('pointerover', () => bg.setFillStyle(COLORS.panelHover, 1));
     bg.on('pointerout', () => bg.setFillStyle(COLORS.panelBg, 0.98));
     bg.on('pointerdown', () => this.handleTap());
+    // M-3: 報酬カード hover で Rarity 色 halo
+    hoverPop(this, bg, { scaleTo: 1.04, halo: rc, haloAlpha: 0.25, haloPad: 10 });
     container.add(bg);
 
     // 縦アクセント (左端 + 右端)

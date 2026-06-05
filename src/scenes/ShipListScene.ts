@@ -18,6 +18,7 @@ import {
   moduleEffectLines,
   makeRandomModule,
 } from '../items/types/modules';
+import { hoverPop } from '../ui/uiAnim';
 
 const FONT = 'system-ui, "Segoe UI", sans-serif';
 
@@ -1124,6 +1125,8 @@ export class ShipListScene extends Phaser.Scene {
       this.onChanged();
       this.render();
     });
+    // M-3: DEBUG レア度ボタン hover
+    hoverPop(this, bg, { halo: rc, scaleTo: 1.05, haloPad: 4 });
     this.chrome.push(bg, t);
   }
 
@@ -1155,6 +1158,8 @@ export class ShipListScene extends Phaser.Scene {
       if (p.rightButtonDown()) return;
       onClick();
     });
+    // M-3: primary ボタン hover
+    hoverPop(this, bg, { halo: COLORS.accent });
     this.dyn.push(bg, t);
   }
 
@@ -1178,6 +1183,8 @@ export class ShipListScene extends Phaser.Scene {
       if (p.rightButtonDown()) return;
       this.close();
     });
+    // M-3: 閉じるボタン hover (enemy 色 halo で「やめる」感)
+    hoverPop(this, bg, { halo: COLORS.enemy });
     this.chrome.push(bg, t);
   }
 

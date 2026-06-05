@@ -4,6 +4,7 @@ import type { Code } from '../program/Code';
 import { codeChildren } from '../program/Code';
 import { itemCodeLabel } from '../items/types/itemCodes';
 import { LOCATION_LABELS } from '../program/locations';
+import { hoverPop } from './uiAnim';
 
 const FONT = 'system-ui, "Segoe UI", sans-serif';
 const ROW_HEIGHT = 40;       // Phase 7: タッチ操作向けに 36 → 40
@@ -512,6 +513,8 @@ export class ProgramList {
         if (p.rightButtonDown()) return;
         onClick();
       });
+      // M-3: 行内 ▲▼✕ ボタンに hover scale + halo
+      hoverPop(this.scene, bg, { scaleTo: 1.06, halo: COLORS.ally, haloPad: 4 });
     }
     this.rowObjects.push(bg, t);
   }

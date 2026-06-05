@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { GAME_WIDTH, GAME_HEIGHT, COLORS, SHIP } from '../config';
 import type { EconomySystem } from '../systems/EconomySystem';
+import { hoverPop } from './uiAnim';
 
 export type ShopAction = 'buyShip';
 
@@ -108,6 +109,9 @@ export class ShopPanel {
       if (pointer.rightButtonDown()) return;
       this.emitter.emit('request', action);
     });
+
+    // M-3: hover で scale + ally 色 halo
+    hoverPop(this.scene, bg, { halo: COLORS.ally });
 
     return btn;
   }

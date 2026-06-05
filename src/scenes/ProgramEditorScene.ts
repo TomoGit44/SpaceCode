@@ -10,8 +10,10 @@ import { CodePalette, type ItemCodeEntry } from '../ui/CodePalette';
 import { ProgramList } from '../ui/ProgramList';
 import { CodeParamEditor } from '../ui/CodeParamEditor';
 import type { Inventory } from '../items/Inventory';
+import type { SynergySystem } from '../items/synergies';
 import { ALL_RARITIES, RARITY_SHORT, RARITY_COLOR } from '../items/itemTypes';
 import { MODULE_TYPES } from '../items/types/modules';
+import { createSynergyBadge } from '../ui/SynergyBadge';
 import {
   type ItemCodeType,
   ALL_ITEM_CODE_TYPES,
@@ -449,6 +451,7 @@ export class ProgramEditorScene extends Phaser.Scene {
             .setOrigin(0, 0.5)
             .setDepth(2)
         );
+        chipX = maxX; // シナジーバッジも詰まる
         break;
       }
       const bg = this.add
@@ -459,6 +462,50 @@ export class ProgramEditorScene extends Phaser.Scene {
       this.chrome.push(bg, t);
       chipX += chipW + 6;
     }
+    // 2026-06-05: 装着モジュールチップの右側に発動中シナジーバッジを並べる。
+    // 入り切らなければ「…」で省略 (Step 2)。
+    const synergies = this.findSynergySystem();
+    if (synergies) {
+      const active = synergies.activeForShip(this.targetShip.id);
+      // セパレータ + ⚡ ヘッダ
+      if (active.length > 0 && chipX + 28 < maxX) {
+        this.chrome.push(
+          this.add
+            .text(chipX + 4, y, '⚡', {
+              fontFamily: FONT,
+              fontSize: '12px',
+              color: '#3ee0c5',
+            })
+            .setOrigin(0, 0.5)
+            .setDepth(2)
+        );
+        chipX += 22;
+      }
+      for (const def of active) {
+        const r = createSynergyBadge(this, chipX, y, def, 'active');
+        if (chipX + r.width > maxX) {
+          for (const o of r.objects) o.destroy();
+          this.chrome.push(
+            this.add
+              .text(chipX, y, '…', {
+                fontFamily: FONT,
+                fontSize: '11px',
+                color: '#6b7da0',
+              })
+              .setOrigin(0, 0.5)
+              .setDepth(2)
+          );
+          break;
+        }
+        for (const o of r.objects) this.chrome.push(o);
+        chipX += r.width + 6;
+      }
+    }
+  }
+
+  private findSynergySystem(): SynergySystem | null {
+    const gs = this.scene.get('GameScene') as Phaser.Scene & { synergies?: SynergySystem };
+    return gs.synergies ?? null;
   }
 
   // ─── Ship ステータス UI (2026-05-25) ──────────────────────

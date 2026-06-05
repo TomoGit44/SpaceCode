@@ -3,6 +3,8 @@ import { GAME_WIDTH, GAME_HEIGHT, COLORS, SHIP } from '../config';
 import type { Ship } from '../entities/Ship';
 import type { Inventory } from '../items/Inventory';
 import type { EffectSystem } from '../items/effects';
+import type { SynergySystem } from '../items/synergies';
+import { createSynergyBadge } from '../ui/SynergyBadge';
 import {
   type Rarity,
   type ItemInstance,
@@ -625,11 +627,87 @@ export class ShipListScene extends Phaser.Scene {
     // ─── 装着モジュール ─────────────────────────────────────
     this.renderEquippedModules(x, w, top + 156, ship);
 
+    // ─── 発動中シナジー (2026-06-05) ────────────────────────
+    this.renderSynergyPanel(x, w, top + 232, ship);
+
     // ─── 所持モジュール一覧 ─────────────────────────────────
-    this.renderOwnedModulesPanel(x, w, top + 270, ship);
+    this.renderOwnedModulesPanel(x, w, top + 292, ship);
 
     // ─── 「外す」ドロップゾーン ──────────────────────────────
     this.renderDetachZone(x, w);
+  }
+
+  /** 発動中シナジーを横一列で並べる。0 個なら未発動ヒントを表示。 */
+  private renderSynergyPanel(x: number, w: number, y: number, ship: Ship): void {
+    const synergies = this.findSynergySystem();
+    const active = synergies ? synergies.activeForShip(ship.id) : [];
+
+    this.dyn.push(
+      this.add
+        .text(x, y, '⚡ 発動中シナジー', {
+          fontFamily: FONT,
+          fontSize: '13px',
+          color: '#cfd6e6',
+          fontStyle: 'bold',
+        })
+        .setDepth(2),
+      this.add
+        .text(x + 130, y + 3, `${active.length} 個`, {
+          fontFamily: FONT,
+          fontSize: '11px',
+          color: '#6b7da0',
+        })
+        .setDepth(2)
+    );
+
+    if (active.length === 0) {
+      this.dyn.push(
+        this.add
+          .rectangle(x + w / 2, y + 32, w, 38, COLORS.bgAlt, 0.25)
+          .setStrokeStyle(1, COLORS.panelBorder, 0.35)
+          .setDepth(2),
+        this.add
+          .text(x + w / 2, y + 32, 'モジュール / プログラムの組み合わせを試そう (例: ガトリング + ボム / ドリル + 装甲)', {
+            fontFamily: FONT,
+            fontSize: '11px',
+            color: '#6b7da0',
+            fontStyle: 'italic',
+          })
+          .setOrigin(0.5)
+          .setDepth(3)
+      );
+      return;
+    }
+
+    // バッジを横に並べる (改行は省略)
+    let chipX = x;
+    const chipY = y + 32;
+    const maxX = x + w;
+    for (const def of active) {
+      const r = createSynergyBadge(this, chipX, chipY, def, 'active');
+      if (chipX + r.width > maxX) {
+        // 入り切らない場合は「…」省略
+        for (const o of r.objects) o.destroy();
+        this.dyn.push(
+          this.add
+            .text(chipX, chipY, '…', {
+              fontFamily: FONT,
+              fontSize: '11px',
+              color: '#6b7da0',
+            })
+            .setOrigin(0, 0.5)
+            .setDepth(3)
+        );
+        break;
+      }
+      for (const o of r.objects) this.dyn.push(o);
+      chipX += r.width + 6;
+    }
+  }
+
+  private findSynergySystem(): SynergySystem | null {
+    const gs = this.scene.get('GameScene') as Phaser.Scene & { synergies?: SynergySystem };
+    return gs.synergies ?? null;
   }
 
   private renderEquippedModules(x: number, w: number, y: number, ship: Ship): void {

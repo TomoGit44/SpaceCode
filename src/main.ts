@@ -6,6 +6,7 @@ import { GameScene } from './scenes/GameScene';
 import { ProgramEditorScene } from './scenes/ProgramEditorScene';
 import { ShipListScene } from './scenes/ShipListScene';
 import { GachaOpenScene } from './scenes/GachaOpenScene';
+import { PhaseChoiceScene } from './scenes/PhaseChoiceScene';
 import { RewardPopupScene } from './scenes/RewardPopupScene';
 import { GameOverScene } from './scenes/GameOverScene';
 import { VictoryScene } from './scenes/VictoryScene';
@@ -39,6 +40,7 @@ const config: Phaser.Types.Core.GameConfig = {
     ProgramEditorScene,
     ShipListScene,
     GachaOpenScene,
+    PhaseChoiceScene,
     RewardPopupScene,
     GameOverScene,
     VictoryScene,

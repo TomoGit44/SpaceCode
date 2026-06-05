@@ -13,12 +13,9 @@ import { SignalBus } from '../program/SignalBus';
 import { Inventory } from '../items/Inventory';
 import { EffectSystem } from '../items/effects';
 import { SynergySystem, type SynergyDef } from '../items/synergies';
+import type { ItemInstance } from '../items/itemTypes';
 import { OmniCoreStrip } from '../ui/OmniCoreStrip';
-import {
-  rollPhaseRewardRarity,
-  phaseRewardCategory,
-  type GachaCategory,
-} from '../items/gacha';
+import { type GachaCategory } from '../items/gacha';
 import type { RewardPayload } from './RewardPopupScene';
 import { SpawnSystem } from '../systems/SpawnSystem';
 import { WaveSystem } from '../systems/WaveSystem';
@@ -237,8 +234,9 @@ export class GameScene extends Phaser.Scene {
       this.hud.showBanner(`PHASE ${phaseInStage} CLEAR`, 1200);
       // Phase 5: クリア時に薄いカメラフラッシュ (alpha 0.12 / 220ms)
       this.cameras.main.flash(220, 62, 224, 197, true);
-      // Phase 6 Step 6: クリア報酬としてガチャを 1 個付与 (通し Phase 番号 n でカテゴリ交互振り分け)
-      this.grantPhaseClearGacha(n);
+      // 2026-06-05: ローグライト Step 3 — 自動ガチャ付与を廃し、3 択イベントへ。
+      // (gacha 選択時のみ内側で GachaOpenScene が mandatory 起動する)
+      this.enqueuePhaseChoice(n);
     });
 
     // 準備時間 (preparing) に入ったら開始ボタンを出す。
@@ -575,20 +573,38 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * Phase クリア報酬 (2026-05-25 新フロー):
-   * - カテゴリは Phase 番号で交互 (奇数=code / 偶数=module)、レア度は重み付き抽選
-   * - Inventory にガチャ個体を保管せず、RewardPopupScene を直接起動
-   *   (タップ → 即時 GachaOpenScene → 1 つ選択 → アイテムボタンへ飛行)
+   * Phase クリア報酬 (2026-06-05 ローグライト Step 3 新フロー):
+   * - PhaseChoiceScene を mandatory で起動し、3 つから 1 つ選ばせる
+   * - 選択肢: ガチャ確定 / クレジット強化 / 確定モジュール (Step 4 で RunMod / 試練 / ボス前 等を追加)
+   * - gacha 選択時のみ内側で GachaOpenScene を mandatory 起動 → そのフローに合流
    */
-  private grantPhaseClearGacha(phaseNumber: number): void {
-    const category = phaseRewardCategory(phaseNumber);
-    const rarity = rollPhaseRewardRarity(category);
-    this.enqueueReward({
-      kind: 'gacha',
-      category,
-      rarity,
-      heading: `PHASE ${phaseNumber} CLEAR`,
+  private enqueuePhaseChoice(phaseNumber: number): void {
+    this.overlayDepth += 1;
+    this.scene.launch('PhaseChoiceScene', {
+      phaseNumber,
+      inventory: this.inventory,
+      economy: this.economy,
+      onClosed: () => {
+        this.overlayDepth -= 1;
+        this.recomputeShipStats();
+        this.refreshItemButton();
+      },
+      launchGachaOpen: (gachaItem: ItemInstance, onAfter: () => void) => {
+        this.overlayDepth += 1;
+        this.scene.launch('GachaOpenScene', {
+          gacha: gachaItem,
+          inventory: this.inventory,
+          mandatory: true,
+          itemBtnTarget: this.itemBtnCenter,
+          onClosed: () => {
+            this.overlayDepth -= 1;
+            onAfter();
+          },
+        });
+        this.scene.bringToTop('GachaOpenScene');
+      },
     });
+    this.scene.bringToTop('PhaseChoiceScene');
   }
 
   /** 半数ボーナスのクレジット額。 */
